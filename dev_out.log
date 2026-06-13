@@ -1,0 +1,19 @@
+
+> kunals-planner@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.9 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://192.168.0.245:3001
+✓ Ready in 2.8s
+⚠ Slow filesystem detected. The benchmark took 465ms. If E:\Claude Projects\kunals-planner\.next/dev is a network drive, consider moving it to a local folder.
+See more: https://nextjs.org/docs/app/guides/local-development
+
+○ Compiling /dashboard ...
+ GET /tasks 200 in 5.6s (next.js: 5.5s, application-code: 115ms)
+ GET /journal 200 in 137ms (next.js: 65ms, application-code: 73ms)
+ GET /rewards 200 in 108ms (next.js: 37ms, application-code: 71ms)
+ GET /history 200 in 102ms (next.js: 38ms, application-code: 64ms)
+ GET /settings 200 in 118ms (next.js: 37ms, application-code: 81ms)
+ GET /dashboard 200 in 86ms (next.js: 6ms, application-code: 80ms)
+[?25h

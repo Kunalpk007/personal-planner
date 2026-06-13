@@ -1,0 +1,73 @@
+{
+  "history": [],
+  "tasks": [
+    {
+      "id": "ready-1",
+      "title": "Ship feature A",
+      "note": "",
+      "zone": "z1",
+      "priority": "high",
+      "slot": "",
+      "deadline": null,
+      "done": true,
+      "date": "2026-06-12",
+      "createdAt": "2026-06-12T07:00:00.000Z",
+      "completedAt": "2026-06-12T08:00:00.000Z",
+      "subtasks": [],
+      "level": "",
+      "isSpecial": false,
+      "specialPts": 0
+    },
+    {
+      "id": "ready-2",
+      "title": "Ship feature B",
+      "note": "",
+      "zone": "z1",
+      "priority": "high",
+      "slot": "",
+      "deadline": null,
+      "done": true,
+      "date": "2026-06-12",
+      "createdAt": "2026-06-12T07:00:00.000Z",
+      "completedAt": "2026-06-12T08:00:00.000Z",
+      "subtasks": [],
+      "level": "",
+      "isSpecial": false,
+      "specialPts": 0
+    },
+    {
+      "id": "ready-3",
+      "title": "Ship feature C",
+      "note": "",
+      "zone": "z1",
+      "priority": "high",
+      "slot": "",
+      "deadline": null,
+      "done": true,
+      "date": "2026-06-12",
+      "createdAt": "2026-06-12T07:00:00.000Z",
+      "completedAt": "2026-06-12T08:00:00.000Z",
+      "subtasks": [],
+      "level": "",
+      "isSpecial": false,
+      "specialPts": 0
+    },
+    {
+      "id": "ready-4",
+      "title": "Ship feature D",
+      "note": "",
+      "zone": "z1",
+      "priority": "high",
+      "slot": "",
+      "deadline": null,
+      "done": true,
+      "date": "2026-06-12",
+      "createdAt": "2026-06-12T07:00:00.000Z",
+      "completedAt": "2026-06-12T08:00:00.000Z",
+      "subtasks": [],
+      "level": "",
+      "isSpecial": false,
+      "specialPts": 0
+    }
+  ]
+}

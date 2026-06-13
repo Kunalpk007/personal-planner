@@ -1,0 +1,44 @@
+{
+  "zones": [
+    { "id": "z1", "name": "Career Growth", "color": "#185FA5" },
+    { "id": "z2", "name": "Self Project",  "color": "#534AB7" },
+    { "id": "z3", "name": "Client Project","color": "#993C1D" },
+    { "id": "z4", "name": "Fitness",       "color": "#3B6D11" },
+    { "id": "z5", "name": "Personal",      "color": "#5F5E5A" }
+  ],
+  "rewards": [
+    { "id": "r1", "title": "30-min screen-free break",    "cost": 15 },
+    { "id": "r2", "title": "Chai + favourite snack",      "cost": 25 },
+    { "id": "r3", "title": "1-hour Himalayan ride",       "cost": 50 },
+    { "id": "r4", "title": "Watch something guilt-free",  "cost": 40 },
+    { "id": "r5", "title": "Order in favourite meal",     "cost": 60 },
+    { "id": "r6", "title": "Full rest day tomorrow",      "cost": 100 }
+  ],
+  "ranks": [
+    { "min": 0,    "label": "Rookie",            "c": "#5F5E5A", "bg": "#F1EFE8", "bc": "#D3D1C7" },
+    { "min": 280,  "label": "On Track",          "c": "#185FA5", "bg": "#E6F1FB", "bc": "#B5D4F4" },
+    { "min": 840,  "label": "Building Momentum", "c": "#0F6E56", "bg": "#E1F5EE", "bc": "#9FE1CB" },
+    { "min": 1960, "label": "Focused",           "c": "#534AB7", "bg": "#EEEDFE", "bc": "#CECBF6" },
+    { "min": 4200, "label": "Machine",           "c": "#BA7517", "bg": "#FAEEDA", "bc": "#FAC775" },
+    { "min": 8400, "label": "Kunal Elite",       "c": "#A32D2D", "bg": "#FCEBEB", "bc": "#F7C1C1" }
+  ],
+  "freezeSchedule": {
+    "3": 1, "7": 1, "15": 1, "21": 1, "50": 1,
+    "100": 1, "175": 1, "200": 2, "250": 1,
+    "300": 2, "325": 1, "365": 2
+  },
+  "cfg": {
+    "minPts": 70,
+    "weekendPts": 20,
+    "cutoffHour": 1,
+    "tone": "balanced",
+    "managerName": "The Manager",
+    "moodMot": 1.2,
+    "moodSick": 0.5,
+    "pomoDuration": 25,
+    "quoteMorning": true,
+    "quoteEvening": true,
+    "autoExportEnabled": false,
+    "theme": "dark"
+  }
+}

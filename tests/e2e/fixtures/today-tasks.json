@@ -1,0 +1,58 @@
+{
+  "history": [],
+  "rankXP": 20,
+  "rewardWallet": 10,
+  "tasks": [
+    {
+      "id": "task-pending-med",
+      "title": "Morning workout",
+      "note": "",
+      "zone": "z4",
+      "priority": "med",
+      "slot": "",
+      "deadline": null,
+      "done": false,
+      "date": "2026-06-12",
+      "createdAt": "2026-06-12T08:00:00.000Z",
+      "completedAt": null,
+      "subtasks": [],
+      "level": "",
+      "isSpecial": false,
+      "specialPts": 0
+    },
+    {
+      "id": "task-done-high",
+      "title": "Deep work block",
+      "note": "",
+      "zone": "z1",
+      "priority": "high",
+      "slot": "",
+      "deadline": null,
+      "done": true,
+      "date": "2026-06-12",
+      "createdAt": "2026-06-12T07:00:00.000Z",
+      "completedAt": "2026-06-12T08:30:00.000Z",
+      "subtasks": [],
+      "level": "",
+      "isSpecial": false,
+      "specialPts": 0
+    },
+    {
+      "id": "task-to-delete",
+      "title": "Old leftover task",
+      "note": "",
+      "zone": "z5",
+      "priority": "low",
+      "slot": "",
+      "deadline": null,
+      "done": false,
+      "date": "2026-06-12",
+      "createdAt": "2026-06-12T08:00:00.000Z",
+      "completedAt": null,
+      "subtasks": [],
+      "level": "",
+      "isSpecial": false,
+      "specialPts": 0
+    }
+  ]
+}
