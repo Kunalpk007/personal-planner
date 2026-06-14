@@ -26,6 +26,7 @@ export const INITIAL_STATE: AppStateData = {
   submittedDays: {},
   restDays:      {},
   weekRestUsed:  {},
+  retroFixedDays: {},
 
   history:   [],
   bufferLog: [],
@@ -40,6 +41,8 @@ export const INITIAL_STATE: AppStateData = {
   journalPin: null,
   journalPinQuestion:   null,
   journalPinAnswerHash: null,
+  pinFailedAttempts: 0,
+  pinLockoutUntil:   null,
 
   mood:            {},
   moodLockedUntil: {},

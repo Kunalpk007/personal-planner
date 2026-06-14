@@ -5,6 +5,7 @@ import { PinPad } from './PinPad'
 import { PinSetup } from './PinSetup'
 import { sha256 } from '@/lib/crypto/pin'
 import { showToast } from './Toast'
+import { PIN_LENGTH } from '@/constants/points'
 
 interface PinGateProps {
   children: React.ReactNode
@@ -37,10 +38,10 @@ export function PinGate({ children, title = 'Enter PIN' }: PinGateProps) {
         <div className="w-full max-w-sm">
           <div className="text-[15px] font-semibold mb-1 text-center">Set up {title}</div>
           <div className="text-xs text-[var(--text3)] mb-4 text-center">
-            Protect your journal with a 4-digit PIN.
+            Protect your journal with a {PIN_LENGTH}-digit PIN.
           </div>
           <PinSetup
-            title={`Set a 4-digit ${title}`}
+            title={`Set a ${PIN_LENGTH}-digit ${title}`}
             onComplete={(hash, q, aHash) => {
               setJournalSecurity(hash, q, aHash)
               setUnlocked(true)
@@ -125,7 +126,7 @@ export function PinGate({ children, title = 'Enter PIN' }: PinGateProps) {
     <div className="flex justify-center pt-10">
       <div className="w-full max-w-sm text-center">
         <PinPad mode="verify" storedHash={pin} onSuccess={() => setUnlocked(true)} title={title} />
-        <button onClick={() => setStep('forgot-question')} className="text-xs text-[var(--text3)] hover:text-[var(--text)] mt-1">
+        <button onClick={() => setStep('forgot-question')} className="mt-3 w-full py-2.5 rounded-md text-sm font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] hover:bg-[var(--bg3)]">
           Forgot PIN?
         </button>
       </div>

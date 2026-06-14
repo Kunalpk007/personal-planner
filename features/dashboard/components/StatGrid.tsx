@@ -22,7 +22,7 @@ export function StatGrid({ today }: { today: string }) {
       val:   earned,
       sub:   `target: ${target}${mood ? ` (${Math.round(mult * 100)}%)` : ''}`,
     },
-    { label: 'Reward Wallet', val: wallet, sub: '2:1 from task pts' },
+    { label: 'Reward wallet', val: wallet, sub: 'earned via consistency' },
     { label: 'Done today',    val: done.length, sub: `of ${tasks.length}` },
     { label: 'Streak',        val: streak,      sub: 'days', fire: true },
   ]

@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useDayKey }       from '@/hooks/useDayKey'
 import { usePlannerStore } from '@/store'
 import { Modal }           from '@/ui/Modal'
@@ -8,7 +8,7 @@ import { showManagerMessage } from '@/ui/ManagerModal'
 import { uid }             from '@/lib/engine/cutoff'
 import { calcPts, basePts } from '@/lib/engine/scoring'
 import { getTaskCompleteMessage } from '@/lib/engine/manager'
-import type { Task, Priority, Slot, Level } from '@/store/types'
+import type { Task, Priority, Slot, Level, RecurringTemplate } from '@/store/types'
 
 const PRIORITIES: { val: Priority; label: string }[] = [
   { val: 'high',    label: 'High — 20pts' },
@@ -61,6 +61,7 @@ export default function TasksPage() {
   const pinTask       = usePlannerStore(s => s.pinTask)
   const addRecurring  = usePlannerStore(s => s.addRecurring)
   const removeRecurring = usePlannerStore(s => s.removeRecurring)
+  const editRecurring = usePlannerStore(s => s.editRecurring)
 
   // Add form state
   const [title,    setTitle]    = useState('')
@@ -105,10 +106,10 @@ export default function TasksPage() {
   return (
     <div>
       {/* Mode toggle */}
-      <div className="inline-flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5">
-        {[{k:'normal',l:"Today's tasks"},{k:'recur',l:'Recurring templates'}].map(m => (
+      <div className="flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5">
+        {[{k:'normal',l:"Today's Tasks"},{k:'recur',l:'Recurring Templates'}].map(m => (
           <button key={m.k} onClick={() => setMode(m.k as any)}
-            className={`px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${mode === m.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
+            className={`flex-1 text-center px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${mode === m.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
             {m.l}
           </button>
         ))}
@@ -128,23 +129,23 @@ export default function TasksPage() {
           </div>
 
           {/* Add form */}
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">Add task</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">Add Task</div>
           <div className="card mb-4">
             <div className="flex gap-2 flex-wrap mb-2">
               <input value={title} onChange={e => setTitle(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleAdd()}
                 placeholder="Task name..."
-                className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                className="basis-full text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
               <select value={zoneId} onChange={e => setZoneId(e.target.value)}
-                className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+                className="flex-1 min-w-0 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
                 {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
               </select>
               <select value={priority} onChange={e => setPriority(e.target.value as Priority)}
-                className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+                className="flex-1 min-w-0 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
                 {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.label}</option>)}
               </select>
               <select value={level} onChange={e => setLevel(e.target.value as Level)}
-                className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+                className="flex-1 min-w-0 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
                 {LEVELS.map(l => <option key={l.val} value={l.val}>{l.label}</option>)}
               </select>
             </div>
@@ -155,17 +156,19 @@ export default function TasksPage() {
                   className="w-20 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
               </div>
             )}
-            <div className="flex gap-2 flex-wrap items-center">
+            <div className="flex gap-2 flex-wrap items-center mb-2">
               <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)"
-                className="flex-1 min-w-[180px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                className="basis-full text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+            </div>
+            <div className="flex gap-2 flex-wrap items-center">
               <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)} placeholder="Date"
-                className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                className="flex-1 min-w-[140px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
               <select value={slot} onChange={e => setSlot(e.target.value as Slot)}
-                className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+                className="flex-1 min-w-[110px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
                 {SLOTS.map(s => <option key={s.val} value={s.val}>{s.label}</option>)}
               </select>
-              <button onClick={handleAdd} className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
-                + Add
+              <button onClick={handleAdd} className="px-3.5 py-2 rounded-md text-xs font-semibold bg-[var(--green-bg)] text-[var(--green)] border-[1.5px] border-[var(--green-mid)]">
+                + Add Task
               </button>
             </div>
           </div>
@@ -193,20 +196,12 @@ export default function TasksPage() {
           <div className="mb-4">
             {recurring.length === 0 && <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No templates yet.</div>}
             {recurring.map(r => (
-              <div key={r.id} className="flex items-center gap-2.5 p-3 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] mb-2">
-                <div className="flex-1">
-                  <span className="text-[13px] font-medium">{r.title}</span>
-                  <span className={`ml-2 ${priBadgeClass({ isSpecial: r.isSpecial, priority: r.priority } as Task)}`}>
-                    {r.isSpecial ? '⭐' : ({ high: 'H', med: 'M', low: 'L', special: '⭐' } as Record<string,string>)[r.priority]}
-                  </span>
-                  {r.level && <span className="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6]">{r.level}</span>}
-                  {r.note && <div className="text-[11px] text-[var(--text3)] mt-0.5">{r.note}</div>}
-                </div>
-                <button onClick={() => removeRecurring(r.id)} className="btn-icon danger">×</button>
-              </div>
+              <RecurRow key={r.id} r={r} zones={zones}
+                onEdit={(updates) => editRecurring(r.id, updates)}
+                onRemove={() => { removeRecurring(r.id); showToast('Template deleted.') }} />
             ))}
           </div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">Add recurring template</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">Add Recurring Template</div>
           <AddRecurForm zones={zones} onAdd={(r) => { addRecurring(r); showToast('Template added.') }} />
         </>
       )}
@@ -258,12 +253,7 @@ function TaskRow({ task, zones, pinned, locked, onToggle, onPin, onRemove, onEdi
           </div>
         </div>
       </div>
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit task">
-        <div className="text-sm text-[var(--text2)]">Full edit form — priority, note, deadline, slot, subtasks.</div>
-        <div className="flex gap-2 justify-end mt-4">
-          <button onClick={() => setEditOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Close</button>
-        </div>
-      </Modal>
+      <EditTaskModal open={editOpen} onClose={() => setEditOpen(false)} task={task} zones={zones} onSave={onEdit} />
       <Modal open={delOpen} onClose={() => setDelOpen(false)} title="Delete task?">
         <p className="text-sm text-[var(--text2)] mb-3">Why are you deleting &ldquo;{task.title}&rdquo;?</p>
         <div className="flex flex-col gap-1.5 mb-3">
@@ -282,6 +272,248 @@ function TaskRow({ task, zones, pinned, locked, onToggle, onPin, onRemove, onEdi
         </div>
       </Modal>
     </>
+  )
+}
+
+function EditTaskModal({ open, onClose, task, zones, onSave }: {
+  open: boolean; onClose: () => void; task: Task; zones: any[];
+  onSave: (updates: Partial<Task>) => void
+}) {
+  const [title,    setTitle]    = useState(task.title)
+  const [note,     setNote]     = useState(task.note)
+  const [zoneId,   setZoneId]   = useState(task.zone)
+  const [priority, setPriority] = useState<Priority>(task.priority)
+  const [slot,     setSlot]     = useState<Slot>(task.slot)
+  const [level,    setLevel]    = useState<Level>(task.level)
+  const [deadline, setDeadline] = useState(task.deadline ? task.deadline.slice(0, 16) : '')
+  const [specialPts, setSpecialPts] = useState(task.specialPts)
+  const [subInput, setSubInput] = useState('')
+
+  const toggleSubtask = usePlannerStore(s => s.toggleSubtask)
+  const addSubtask    = usePlannerStore(s => s.addSubtask)
+  const removeSubtask = usePlannerStore(s => s.removeSubtask)
+
+  // Re-seed the draft whenever the modal is (re)opened for a task
+  useEffect(() => {
+    if (!open) return
+    setTitle(task.title); setNote(task.note); setZoneId(task.zone)
+    setPriority(task.priority); setSlot(task.slot); setLevel(task.level)
+    setDeadline(task.deadline ? task.deadline.slice(0, 16) : '')
+    setSpecialPts(task.specialPts)
+  }, [open, task])
+
+  function handleSave() {
+    if (!title.trim()) return
+    onSave({
+      title: title.trim(), note: note.trim(), zone: zoneId || zones[0]?.id,
+      priority, slot, level, deadline: deadline || null,
+      isSpecial: priority === 'special', specialPts,
+    })
+    onClose()
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Edit Task">
+      <div className="flex flex-col gap-2.5">
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Task name..."
+          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+
+        <div className="flex gap-2 flex-wrap">
+          <select value={zoneId} onChange={e => setZoneId(e.target.value)}
+            className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+          </select>
+          <select value={priority} onChange={e => setPriority(e.target.value as Priority)}
+            className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.label}</option>)}
+          </select>
+          <select value={level} onChange={e => setLevel(e.target.value as Level)}
+            className="flex-1 min-w-[90px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            {LEVELS.map(l => <option key={l.val} value={l.val}>{l.label}</option>)}
+          </select>
+        </div>
+
+        {priority === 'special' && (
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-xs text-[var(--text2)]">⭐ Pts:</span>
+            <input type="number" value={specialPts} onChange={e => setSpecialPts(+e.target.value)} min={1} max={200}
+              className="w-20 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+          </div>
+        )}
+
+        <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)"
+          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none min-h-[60px] resize-y" />
+
+        <div className="flex gap-2 flex-wrap">
+          <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)}
+            className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+          <select value={slot} onChange={e => setSlot(e.target.value as Slot)}
+            className="flex-1 min-w-[120px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            {SLOTS.map(s => <option key={s.val} value={s.val}>{s.label}</option>)}
+          </select>
+        </div>
+
+        {/* Subtasks */}
+        <div className="border-t border-[var(--border)] pt-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-1.5">Subtasks</div>
+          {task.subtasks.length > 0 && (
+            <div className="flex flex-col gap-1 mb-2">
+              {task.subtasks.map(st => (
+                <div key={st.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)]">
+                  <button
+                    onClick={() => toggleSubtask(task.id, st.id)}
+                    className={`w-[16px] h-[16px] rounded-full border-[1.5px] flex-shrink-0 flex items-center justify-center text-[9px] transition-all ${st.done ? 'bg-[var(--green-mid)] border-[var(--green-mid)] text-white' : 'border-[var(--border2)] text-transparent'}`}
+                  >
+                    {st.done ? '✓' : ''}
+                  </button>
+                  <span className={`text-[12px] flex-1 ${st.done ? 'line-through text-[var(--text3)]' : ''}`}>{st.title}</span>
+                  <button onClick={() => removeSubtask(task.id, st.id)} className="btn-icon danger">×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input value={subInput} onChange={e => setSubInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && subInput.trim()) { addSubtask(task.id, subInput.trim()); setSubInput('') } }}
+              placeholder="Add subtask..."
+              className="flex-1 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+            <button
+              onClick={() => { if (subInput.trim()) { addSubtask(task.id, subInput.trim()); setSubInput('') } }}
+              className="px-3 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]"
+            >
+              + Add
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-2 justify-end mt-4">
+        <button onClick={onClose} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+        <button onClick={handleSave} className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+          Save Changes
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+function RecurRow({ r, zones, onEdit, onRemove }: {
+  r: RecurringTemplate; zones: any[];
+  onEdit: (updates: Partial<RecurringTemplate>) => void; onRemove: () => void
+}) {
+  const [editOpen, setEditOpen] = useState(false)
+  const [delOpen, setDelOpen]   = useState(false)
+
+  return (
+    <>
+      <div className="flex items-center gap-2.5 p-3 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] mb-2">
+        <div className="flex-1">
+          <span className="text-[13px] font-medium">{r.title}</span>
+          <span className={`ml-2 ${priBadgeClass({ isSpecial: r.isSpecial, priority: r.priority } as Task)}`}>
+            {r.isSpecial ? '⭐' : ({ high: 'H', med: 'M', low: 'L', special: '⭐' } as Record<string,string>)[r.priority]}
+          </span>
+          {r.level && <span className="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6]">{r.level}</span>}
+          {r.note && <div className="text-[11px] text-[var(--text3)] mt-0.5">{r.note}</div>}
+        </div>
+        <button onClick={() => setEditOpen(true)} className="btn-icon">✏</button>
+        <button onClick={() => setDelOpen(true)} className="btn-icon danger">×</button>
+      </div>
+      <EditRecurringModal open={editOpen} onClose={() => setEditOpen(false)} template={r} zones={zones} onSave={onEdit} />
+      <Modal open={delOpen} onClose={() => setDelOpen(false)} title="Delete recurring template?">
+        <p className="text-sm text-[var(--text2)] mb-3">Why are you deleting &ldquo;{r.title}&rdquo;?</p>
+        <div className="flex flex-col gap-1.5 mb-3">
+          {DELETE_REASONS.map(reason => (
+            <button
+              key={reason}
+              onClick={() => { onRemove(); setDelOpen(false) }}
+              className="text-left px-3 py-2 rounded-md text-[13px] border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] hover:bg-[var(--bg3)]"
+            >
+              {reason}
+            </button>
+          ))}
+        </div>
+        <div className="flex justify-end">
+          <button onClick={() => setDelOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+        </div>
+      </Modal>
+    </>
+  )
+}
+
+function EditRecurringModal({ open, onClose, template, zones, onSave }: {
+  open: boolean; onClose: () => void; template: RecurringTemplate; zones: any[];
+  onSave: (updates: Partial<RecurringTemplate>) => void
+}) {
+  const [title,    setTitle]    = useState(template.title)
+  const [note,     setNote]     = useState(template.note)
+  const [zoneId,   setZoneId]   = useState(template.zone)
+  const [priority, setPriority] = useState<Priority>(template.priority)
+  const [slot,     setSlot]     = useState<Slot>(template.slot)
+  const [level,    setLevel]    = useState<Level>(template.level)
+  const [specialPts, setSpecialPts] = useState(template.specialPts)
+
+  // Re-seed the draft whenever the modal is (re)opened for a template
+  useEffect(() => {
+    if (!open) return
+    setTitle(template.title); setNote(template.note); setZoneId(template.zone)
+    setPriority(template.priority); setSlot(template.slot); setLevel(template.level)
+    setSpecialPts(template.specialPts)
+  }, [open, template])
+
+  function handleSave() {
+    if (!title.trim()) return
+    onSave({
+      title: title.trim(), note: note.trim(), zone: zoneId || zones[0]?.id,
+      priority, slot, level, isSpecial: priority === 'special', specialPts,
+    })
+    onClose()
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Edit Recurring Template">
+      <div className="flex flex-col gap-2.5">
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Recurring task name..."
+          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+
+        <div className="flex gap-2 flex-wrap">
+          <select value={zoneId} onChange={e => setZoneId(e.target.value)}
+            className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+          </select>
+          <select value={priority} onChange={e => setPriority(e.target.value as Priority)}
+            className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.label}</option>)}
+          </select>
+          <select value={level} onChange={e => setLevel(e.target.value as Level)}
+            className="flex-1 min-w-[90px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            {LEVELS.map(l => <option key={l.val} value={l.val}>{l.label}</option>)}
+          </select>
+        </div>
+
+        {priority === 'special' && (
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-xs text-[var(--text2)]">⭐ Pts:</span>
+            <input type="number" value={specialPts} onChange={e => setSpecialPts(+e.target.value)} min={1} max={200}
+              className="w-20 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+          </div>
+        )}
+
+        <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)"
+          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none min-h-[60px] resize-y" />
+
+        <select value={slot} onChange={e => setSlot(e.target.value as Slot)}
+          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+          {SLOTS.map(s => <option key={s.val} value={s.val}>{s.label}</option>)}
+        </select>
+      </div>
+
+      <div className="flex gap-2 justify-end mt-4">
+        <button onClick={onClose} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+        <button onClick={handleSave} className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+          Save Changes
+        </button>
+      </div>
+    </Modal>
   )
 }
 
@@ -314,8 +546,8 @@ function AddRecurForm({ zones, onAdd }: { zones: any[]; onAdd: (r: any) => void 
           {SLOTS.map(s => <option key={s.val} value={s.val}>{s.label}</option>)}
         </select>
         <button onClick={() => { if (!title.trim()) return; onAdd({ title: title.trim(), note: note.trim(), zone: zoneId, priority, slot, level, isSpecial: priority === 'special', specialPts: 30 }); setTitle(''); setNote('') }}
-          className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
-          + Add
+          className="px-3.5 py-2 rounded-md text-xs font-semibold bg-[var(--green-bg)] text-[var(--green)] border-[1.5px] border-[var(--green-mid)]">
+          + Add Task
         </button>
       </div>
     </div>

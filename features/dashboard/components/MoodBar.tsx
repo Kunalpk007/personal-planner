@@ -1,12 +1,10 @@
 'use client'
-import { useState } from 'react'
 import { usePlannerStore } from '@/store'
 import { MOOD_LABELS }     from '@/constants/points'
 import { showToast }       from '@/ui/Toast'
 import { showManagerMessage } from '@/ui/ManagerModal'
-import { Modal }           from '@/ui/Modal'
 import { getConcernMessage } from '@/lib/engine/manager'
-import { getPrevDayKey, getWeekMonday } from '@/lib/engine/cutoff'
+import { getPrevDayKey }   from '@/lib/engine/cutoff'
 import type { Mood }       from '@/store/types'
 
 export function MoodBar({ today }: { today: string }) {
@@ -15,10 +13,6 @@ export function MoodBar({ today }: { today: string }) {
   const setMood       = usePlannerStore(s => s.setMood)
   const isSubmitted   = usePlannerStore(s => !!s.submittedDays[today])
   const cfg           = usePlannerStore(s => s.cfg)
-  const declareRest   = usePlannerStore(s => s.declareRestDay)
-  const restAvailable = usePlannerStore(s => !s.weekRestUsed[getWeekMonday(today)])
-
-  const [restModalOpen, setRestModal] = useState(false)
 
   const moods: { key: Mood; label: string; style: React.CSSProperties }[] = [
     { key: 'motivated', label: '⚡ Motivated', style: { borderColor: '#639922', color: 'var(--green)' } },
@@ -53,31 +47,6 @@ export function MoodBar({ today }: { today: string }) {
           {m.label}
         </button>
       ))}
-      {/* {mood && <span className="text-[11px] text-[var(--text3)]">(set)</span>} */}
-
-      {!isSubmitted && restAvailable && (
-        <button
-          onClick={() => setRestModal(true)}
-          className="ml-auto px-2.5 py-1 rounded-full text-xs font-medium border transition-all bg-[var(--amber-bg)] text-[var(--amber)] border-[#EF9F27]"
-        >
-          🟡 Rest day
-        </button>
-      )}
-
-      <Modal open={restModalOpen} onClose={() => setRestModal(false)} title="🟡 Declare Rest Day">
-        <p className="text-sm text-[var(--text2)] mb-3">
-          Streak is protected — unchanged. 1 rest day per week, resets Monday.
-        </p>
-        <div className="flex gap-2 justify-end">
-          <button onClick={() => setRestModal(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
-          <button
-            onClick={() => { declareRest(today); setRestModal(false); showToast('🟡 Rest day declared. Streak protected.') }}
-            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]"
-          >
-            Declare Rest Day
-          </button>
-        </div>
-      </Modal>
     </div>
   )
 }

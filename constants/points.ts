@@ -35,3 +35,7 @@ export const DECAY_GRACE  = 3     // days before rank XP decay starts
 export const DECAY_RATE   = 0.98  // 2% per day
 export const MAX_PAUSE_DAYS = 20  // streak pause expiry
 export const MAX_BOUGHT_FREEZES = 2
+
+export const PIN_LENGTH           = 5               // digits
+export const PIN_LOCKOUT_THRESHOLD = 5              // failed attempts before lockout
+export const PIN_LOCKOUT_MS        = 2 * 60 * 60 * 1000 // 2 hours

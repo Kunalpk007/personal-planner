@@ -26,7 +26,11 @@
       "PowerShell(npx eslint tests playwright.config.ts)",
       "PowerShell(npx eslint tests 2>&1)",
       "PowerShell(npm run test:e2e 2>&1)",
-      "PowerShell(npm run test 2>&1)"
+      "PowerShell(npm run test 2>&1)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/dashboard)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3001/dashboard)"
     ]
   }
 }

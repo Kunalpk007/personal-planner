@@ -1,7 +1,7 @@
-import type { AppState, HistoryEntry } from '@/store/types'
-import { getWeekMonday, daysBetween, pad } from './cutoff'
+import type { AppState, HistoryEntry, Task } from '@/store/types'
+import { getWeekMonday, daysBetween, pad, uid } from './cutoff'
 import { todayEarned, getMinPts } from './scoring'
-import { WALLET_RATIO } from '@/constants/points'
+import { WALLET_RATIO, MAX_CARRY } from '@/constants/points'
 import defaults from '@/data/defaults.json'
 
 const FREEZE_SCH: Record<number, number> = defaults.freezeSchedule as unknown as Record<number, number>
@@ -55,6 +55,7 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
     bufferXP:      state.bufferXP,
     badges:        [...state.badges],
     history:       [...state.history],
+    tasks:         [...state.tasks],
   }
 
   let overnightMsg: string | null = null
@@ -77,6 +78,26 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
       date: mk, done: doneTasks.length, total: dayTasks.length, pct,
       mood: state.mood[mk] ?? '', eodMood: '', auto: true, late: false,
       tasks: taskSnap, rewards: [],
+    }
+
+    // Carry forward incomplete tasks to the next day (mirrors carryTask), up
+    // to the max carry-day cap, so auto-submitted days don't silently drop work.
+    const nd = new Date(`${mk}T12:00:00`)
+    nd.setDate(nd.getDate() + 1)
+    const nextKey = `${nd.getFullYear()}-${pad(nd.getMonth() + 1)}-${pad(nd.getDate())}`
+    for (const t of dayTasks.filter(t => !t.done)) {
+      const newCarried = (t.carriedDays ?? 0) + 1
+      if (newCarried <= MAX_CARRY) {
+        patch.tasks!.push({
+          ...t,
+          id:          uid(),
+          date:        nextKey,
+          done:        false,
+          completedAt: null,
+          createdAt:   new Date().toISOString(),
+          carriedDays: newCarried,
+        } as Task)
+      }
     }
 
     if (earned >= minPts) {

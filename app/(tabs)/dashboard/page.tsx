@@ -11,9 +11,10 @@ import { Accordion }       from '@/ui/Accordion'
 import { Modal }           from '@/ui/Modal'
 import { showToast }       from '@/ui/Toast'
 import { todayEarned, todayTarget, calcPts } from '@/lib/engine/scoring'
-import { getPrevDayKey }   from '@/lib/engine/cutoff'
+import { getPrevDayKey, getWeekMonday } from '@/lib/engine/cutoff'
 import { getDailyQuote }   from '@/lib/engine/quotes'
 import { getManagerMessage } from '@/lib/engine/manager'
+import { StreakHistoryModal } from '@/features/dashboard/components/StreakHistoryModal'
 
 const DAYS  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 const MONTHS= ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -34,16 +35,26 @@ export default function DashboardPage() {
   const pinnedTaskId = usePlannerStore(s => s.pinnedTaskId)
   const useFreeze    = usePlannerStore(s => s.useFreeze)
   const useBuffer    = usePlannerStore(s => s.useBuffer)
+  const declareRestDay = usePlannerStore(s => s.declareRestDay)
+  const restAvailable  = usePlannerStore(s => !s.weekRestUsed[getWeekMonday(today)])
   const toggleTaskRetro = usePlannerStore(s => s.toggleTaskRetro)
+  const submitRetroFix  = usePlannerStore(s => s.submitRetroFix)
+  const retroFixedDays  = usePlannerStore(s => s.retroFixedDays)
   const streak       = usePlannerStore(s => s.streak)
   const isSettledToday = usePlannerStore(s => !!s.submittedDays[today])
 
   const [fixDismissed, setFixDismissed] = useState(false)
   const [bufferModalOpen, setBufferModalOpen] = useState(false)
   const [freezeModalOpen, setFreezeModalOpen] = useState(false)
+  const [retroRewardTitle, setRetroRewardTitle] = useState('')
+  const [retroRewardPts, setRetroRewardPts] = useState('')
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const [restConfirmOpen, setRestConfirmOpen] = useState(false)
+  const [streakHistoryOpen, setStreakHistoryOpen] = useState(false)
 
   const prevDay      = getPrevDayKey(today)
   const yesterdayTasks = useMemo(() => allTasks.filter(t => t.date === prevDay), [allTasks, prevDay])
+  const showRetroFix = yesterdayTasks.length > 0 && !fixDismissed && !retroFixedDays[prevDay]
   const bufferUseAmount = Math.min(bufferXP, 50)
 
   const earned  = todayEarned(done, mood, cfg)
@@ -76,9 +87,16 @@ export default function DashboardPage() {
               {DAYS[now.getDay()]}, {now.getDate()} {MONTHS[now.getMonth()]} {now.getFullYear()}
             </p>
           </div>
-          <div className="relative flex items-center justify-center w-14 h-14 flex-shrink-0">
-            <span className="absolute text-[34px] opacity-25 select-none leading-none">🔥</span>
-            <span className="relative text-[20px] font-bold">{streak}</span>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button onClick={() => setActionsOpen(true)} className="btn-icon" title="Day actions">⋯</button>
+            <button
+              onClick={() => setStreakHistoryOpen(true)}
+              className="relative flex items-center justify-center w-14 h-14"
+              title="View streak history"
+            >
+              <span className="absolute text-[34px] opacity-25 select-none leading-none">🔥</span>
+              <span className="relative text-[20px] font-bold">{streak}</span>
+            </button>
           </div>
         </div>
         <p className="text-[11px] italic text-[var(--text3)] mt-2 leading-relaxed">
@@ -87,10 +105,10 @@ export default function DashboardPage() {
       </div>
 
       {/* Yesterday reconciliation — grace window until next cutoff */}
-      {yesterdayTasks.length > 0 && !fixDismissed && (
+      {showRetroFix && (
         <Accordion title={
           <div className="flex items-center justify-between flex-1 gap-2">
-            <span>📝 Yesterday ({prevDay}) — fix missed check-offs</span>
+            <span>📝 Yesterday ({prevDay}) — Fix Missed Check-offs</span>
             <span
               role="button"
               onClick={(e) => { e.stopPropagation(); setFixDismissed(true) }}
@@ -101,7 +119,7 @@ export default function DashboardPage() {
           </div>
         }>
           <p className="text-xs text-[var(--text2)] mb-2.5">
-            Forgot to tick something off before the cutoff? Toggle it here — points and history will update.
+            Forgot to tick something off before the cutoff? Toggle it here, then submit to update yesterday&apos;s history, streak and XP.
           </p>
           {yesterdayTasks.map(t => (
             <div key={t.id} className="flex items-center gap-2.5 p-2.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] mb-1.5">
@@ -119,21 +137,55 @@ export default function DashboardPage() {
               <span className={`text-xs font-semibold ${t.done ? 'text-[var(--green)]' : 'text-[var(--text3)]'}`}>+{calcPts(t)}</span>
             </div>
           ))}
+
+          <div className="border-t border-[var(--border)] mt-2.5 pt-2.5">
+            <div className="text-xs text-[var(--text2)] mb-2">Did you redeem a reward yesterday? (optional)</div>
+            <div className="flex gap-2 flex-wrap items-center mb-3">
+              <input
+                value={retroRewardTitle}
+                onChange={e => setRetroRewardTitle(e.target.value)}
+                placeholder="Reward name..."
+                className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none"
+              />
+              <input
+                type="number"
+                value={retroRewardPts}
+                onChange={e => setRetroRewardPts(e.target.value)}
+                placeholder="Pts redeemed"
+                min={0}
+                className="w-[110px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none"
+              />
+            </div>
+            <button
+              onClick={() => {
+                const cost = +retroRewardPts || 0
+                const reward = retroRewardTitle.trim() && cost > 0 ? { title: retroRewardTitle.trim(), cost } : undefined
+                const result = submitRetroFix(prevDay, reward)
+                if (!result.ok) { showToast('Not enough wallet pts for that reward.'); return }
+                setRetroRewardTitle(''); setRetroRewardPts('')
+                showToast(`Yesterday’s changes saved.${reward ? ` 🎁 ${reward.title} redeemed.` : ''}`)
+              }}
+              className="w-full py-2.5 rounded-[10px] text-sm font-semibold bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]"
+            >
+              ✓ Submit Changes
+            </button>
+          </div>
         </Accordion>
       )}
 
       <MoodBar today={today} />
-      <StatGrid today={today} />
-      <RankProgress />
 
       {/* Day progress */}
-      <div className="mb-3.5">
+      <div className="card mb-3.5">
         <div className="flex justify-between text-xs text-[var(--text2)] mb-1.5">
           <span>Day progress</span>
           <span>{pct}%</span>
         </div>
         <ProgressBar value={pct} />
       </div>
+
+      <StatGrid today={today} />
+      <RankProgress />
 
       {/* Power row */}
       <div className="flex gap-2.5 mb-3.5 flex-wrap">
@@ -188,6 +240,47 @@ export default function DashboardPage() {
           </button>
         </div>
       </Modal>
+
+      {/* Day actions menu */}
+      <Modal open={actionsOpen} onClose={() => setActionsOpen(false)} title="Day Actions">
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => { setActionsOpen(false); setRestConfirmOpen(true) }}
+            disabled={isSettledToday || !restAvailable}
+            className="w-full text-left px-3.5 py-2.5 rounded-md text-sm font-medium border disabled:opacity-35 bg-[var(--amber-bg)] text-[var(--amber)] border-[#EF9F27]"
+          >
+            🟡 Take Rest Day
+            {!restAvailable && <span className="block text-[11px] opacity-80 font-normal">Already used this week</span>}
+          </button>
+          <button
+            onClick={() => { setActionsOpen(false); setFreezeModalOpen(true) }}
+            disabled={isSettledToday || freezeTokens <= 0}
+            className="w-full text-left px-3.5 py-2.5 rounded-md text-sm font-medium border disabled:opacity-35 bg-[var(--amber-bg)] text-[var(--amber)] border-[#EF9F27]"
+          >
+            ❄ Use Freeze
+            {freezeTokens <= 0 && <span className="block text-[11px] opacity-80 font-normal">No freeze tokens available</span>}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Rest day confirmation */}
+      <Modal open={restConfirmOpen} onClose={() => setRestConfirmOpen(false)} title="🟡 Take Rest Day">
+        <p className="text-sm text-[var(--text2)] mb-3">
+          Streak is protected — unchanged. 1 rest day per week, resets Monday.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => setRestConfirmOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button
+            onClick={() => { declareRestDay(today); setRestConfirmOpen(false); showToast('🟡 Rest day taken. Streak protected.') }}
+            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]"
+          >
+            Take Rest Day
+          </button>
+        </div>
+      </Modal>
+
+      {/* Streak history */}
+      <StreakHistoryModal open={streakHistoryOpen} onClose={() => setStreakHistoryOpen(false)} />
 
       {/* Freeze confirmation */}
       <Modal open={freezeModalOpen} onClose={() => setFreezeModalOpen(false)} title="❄ Use Streak Freeze">

@@ -2,12 +2,15 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import { JOURNAL_XP }   from '@/constants/points'
 import { pad }          from '@/lib/engine/cutoff'
+import { PIN_LOCKOUT_THRESHOLD, PIN_LOCKOUT_MS } from '@/constants/points'
 
 export interface JournalSlice {
   saveJournalEntry: (today: string, text: string, editKey?: string) => { isFirst: boolean }
   deleteJournalEntry: (key: string) => void
   setJournalPin:    (hash: string | null) => void
   setJournalSecurity: (hash: string, question: string, answerHash: string) => void
+  recordPinFailure: () => void
+  resetPinFailures: () => void
 }
 
 export const createJournalSlice: StateCreator<AppState, [], [], JournalSlice> = (set, get) => ({
@@ -53,5 +56,17 @@ export const createJournalSlice: StateCreator<AppState, [], [], JournalSlice> = 
 
   setJournalSecurity(hash, question, answerHash) {
     set({ journalPin: hash, journalPinQuestion: question, journalPinAnswerHash: answerHash })
+  },
+
+  recordPinFailure() {
+    set(s => {
+      const attempts = s.pinFailedAttempts + 1
+      const lockout  = attempts >= PIN_LOCKOUT_THRESHOLD ? Date.now() + PIN_LOCKOUT_MS : s.pinLockoutUntil
+      return { pinFailedAttempts: attempts, pinLockoutUntil: lockout }
+    })
+  },
+
+  resetPinFailures() {
+    set({ pinFailedAttempts: 0, pinLockoutUntil: null })
   },
 })

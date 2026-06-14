@@ -7,8 +7,11 @@ import { showToast }       from '@/ui/Toast'
 import { PinPad }          from '@/ui/PinPad'
 import { PinSetup }        from '@/ui/PinSetup'
 import { exportJSON, importJSON } from '@/lib/persistence/export'
+import { pad } from '@/lib/engine/cutoff'
+import { PIN_LENGTH, PIN_LOCKOUT_THRESHOLD } from '@/constants/points'
 import { getBackupFolderName, pickBackupFolder, fsBackupSupported } from '@/lib/persistence/fsBackup'
 import pkg from '@/package.json'
+import type { AppConfig } from '@/store/types'
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<'general' | 'streak' | 'rules' | 'phase2'>('general')
@@ -33,6 +36,16 @@ export default function SettingsPage() {
   const changeLog   = usePlannerStore(s => s.changeLog)
   const taskDeletions = changeLog.filter(c => c.action === 'task-deleted').length
   const state       = usePlannerStore(s => s)
+
+  // Draft copy of cfg — edits apply here until "Save Settings" is pressed
+  const [draft, setDraft] = useState<AppConfig>(cfg)
+  useEffect(() => { setDraft(cfg) }, [cfg])
+  const dirty = JSON.stringify(draft) !== JSON.stringify(cfg)
+
+  function saveSettings() {
+    setConfig(draft)
+    showToast('Settings saved ✓')
+  }
 
   const [zoneName,   setZoneName]  = useState('')
   const [zoneColor,  setZoneColor] = useState('#639922')
@@ -83,7 +96,7 @@ export default function SettingsPage() {
           <SectionLabel>Appearance</SectionLabel>
           <SettingCard>
             <SettingRow label="Theme" sub="System preference syncing is planned for a future update">
-              <select value={cfg.theme ?? 'dark'} onChange={e => setConfig({ theme: e.target.value as any })} className="setting-input">
+              <select value={draft.theme ?? 'dark'} onChange={e => setDraft(d => ({ ...d, theme: e.target.value as any }))} className="setting-input">
                 <option value="dark">Dark</option>
                 <option value="light">Light</option>
               </select>
@@ -93,11 +106,11 @@ export default function SettingsPage() {
           <SectionLabel>Manager</SectionLabel>
           <SettingCard>
             <SettingRow label="Manager name" sub="How your coach is addressed">
-              <input value={cfg.managerName} onChange={e => setConfig({ managerName: e.target.value })}
+              <input value={draft.managerName} onChange={e => setDraft(d => ({ ...d, managerName: e.target.value }))}
                 className="setting-input" style={{ width: 150 }} />
             </SettingRow>
             <SettingRow label="Manager tone">
-              <select value={cfg.tone} onChange={e => setConfig({ tone: e.target.value as any })} className="setting-input">
+              <select value={draft.tone} onChange={e => setDraft(d => ({ ...d, tone: e.target.value as any }))} className="setting-input">
                 <option value="balanced">Balanced</option>
                 <option value="strict">Strict</option>
                 <option value="encouraging">Encouraging</option>
@@ -107,31 +120,41 @@ export default function SettingsPage() {
 
           <SectionLabel>Submission rules</SectionLabel>
           <SettingCard>
-            <SettingRow label="Min points to submit" sub="Default: 70 pts">
-              <input type="number" value={cfg.minPts} onChange={e => setConfig({ minPts: +e.target.value })} min={20} max={200} className="setting-input" />
+            <SettingRow label="Min points to submit" sub={`Currently: ${draft.minPts} pts required to submit a weekday`}>
+              <input type="number" value={draft.minPts} onChange={e => setDraft(d => ({ ...d, minPts: +e.target.value }))} min={20} max={200} className="setting-input" />
             </SettingRow>
-            <SettingRow label="Weekend pulse minimum" sub="Default: 20 pts (Sat/Sun)">
-              <input type="number" value={cfg.weekendPts} onChange={e => setConfig({ weekendPts: +e.target.value })} min={5} max={60} className="setting-input" />
+            <SettingRow label="Week-off Hours (Light Day) minimum" sub={`Currently: ${draft.weekendPts} pts required to submit on Sat/Sun`}>
+              <input type="number" value={draft.weekendPts} onChange={e => setDraft(d => ({ ...d, weekendPts: +e.target.value }))} min={5} max={60} className="setting-input" />
             </SettingRow>
-            <SettingRow label="Day cutoff hour (AM)" sub="1 = 1:00 AM, max 4">
-              <input type="number" value={cfg.cutoffHour} onChange={e => setConfig({ cutoffHour: Math.min(4, Math.max(1, +e.target.value)) })} min={1} max={4} className="setting-input" />
+            <SettingRow label="Day-end time" sub={`Your "day" ends and resets at ${draft.cutoffHour}:00 AM — set this later for night-shift schedules`}>
+              <input
+                type="time"
+                value={`${pad(draft.cutoffHour)}:00`}
+                onChange={e => {
+                  const h = +e.target.value.split(':')[0]
+                  setDraft(d => ({ ...d, cutoffHour: Math.min(4, Math.max(1, h)) }))
+                }}
+                step={3600}
+                min="01:00" max="04:00"
+                className="setting-input"
+              />
             </SettingRow>
           </SettingCard>
 
           <SectionLabel>Mood multipliers</SectionLabel>
           <SettingCard>
             <SettingRow label="⚡ Motivated multiplier" sub="Default: 1.2×">
-              <input type="number" value={cfg.moodMot} onChange={e => setConfig({ moodMot: +e.target.value })} min={1} max={2} step={0.05} className="setting-input" />
+              <input type="number" value={draft.moodMot} onChange={e => setDraft(d => ({ ...d, moodMot: +e.target.value }))} min={1} max={2} step={0.05} className="setting-input" />
             </SettingRow>
             <SettingRow label="🤒 Sick multiplier" sub="Default: 0.5×">
-              <input type="number" value={cfg.moodSick} onChange={e => setConfig({ moodSick: +e.target.value })} min={0.2} max={1} step={0.05} className="setting-input" />
+              <input type="number" value={draft.moodSick} onChange={e => setDraft(d => ({ ...d, moodSick: +e.target.value }))} min={0.2} max={1} step={0.05} className="setting-input" />
             </SettingRow>
           </SettingCard>
 
           <SectionLabel>Pomodoro</SectionLabel>
           <SettingCard>
             <SettingRow label="Focus duration (minutes)" sub="Default: 25, range 5–60">
-              <input type="number" value={cfg.pomoDuration} onChange={e => setConfig({ pomoDuration: +e.target.value })} min={5} max={60} className="setting-input" />
+              <input type="number" value={draft.pomoDuration} onChange={e => setDraft(d => ({ ...d, pomoDuration: +e.target.value }))} min={5} max={60} className="setting-input" />
             </SettingRow>
           </SettingCard>
 
@@ -154,26 +177,43 @@ export default function SettingsPage() {
           <SectionLabel>Auto-export</SectionLabel>
           <SettingCard>
             <SettingRow label="Auto-export on submit" sub="Writes a dated backup JSON to a folder you choose each session (Chrome/Edge only)">
-              <select value={cfg.autoExportEnabled ? '1' : '0'} onChange={e => setConfig({ autoExportEnabled: e.target.value === '1' })} className="setting-input">
+              <select value={draft.autoExportEnabled ? '1' : '0'} onChange={e => setDraft(d => ({ ...d, autoExportEnabled: e.target.value === '1' }))} className="setting-input">
                 <option value="1">On</option><option value="0">Off</option>
               </select>
             </SettingRow>
-            {cfg.autoExportEnabled && <AutoExportFolderRow />}
+            {draft.autoExportEnabled && <AutoExportFolderRow />}
           </SettingCard>
 
           <SectionLabel>Motivational quotes</SectionLabel>
           <SettingCard>
             <SettingRow label="Morning quote" sub="Full-screen overlay on first open after 4 AM">
-              <select value={cfg.quoteMorning ? '1' : '0'} onChange={e => setConfig({ quoteMorning: e.target.value === '1' })} className="setting-input">
+              <select value={draft.quoteMorning ? '1' : '0'} onChange={e => setDraft(d => ({ ...d, quoteMorning: e.target.value === '1' }))} className="setting-input">
                 <option value="1">On</option><option value="0">Off</option>
               </select>
             </SettingRow>
             <SettingRow label="Evening quote" sub="Shown after day submission">
-              <select value={cfg.quoteEvening ? '1' : '0'} onChange={e => setConfig({ quoteEvening: e.target.value === '1' })} className="setting-input">
+              <select value={draft.quoteEvening ? '1' : '0'} onChange={e => setDraft(d => ({ ...d, quoteEvening: e.target.value === '1' }))} className="setting-input">
                 <option value="1">On</option><option value="0">Off</option>
               </select>
             </SettingRow>
           </SettingCard>
+
+          {/* Sticky save bar */}
+          <div className="sticky bottom-[64px] sm:bottom-2 z-10 mt-4">
+            <button
+              onClick={saveSettings}
+              disabled={!dirty}
+              className="w-full py-3 rounded-[10px] text-sm font-semibold border-[1.5px] transition-all disabled:opacity-40"
+              style={{
+                background:  dirty ? 'var(--green-bg)' : 'var(--bg3)',
+                color:       dirty ? 'var(--green)'    : 'var(--text3)',
+                borderColor: dirty ? 'var(--green-mid)': 'var(--border2)',
+                cursor:      dirty ? 'pointer' : 'not-allowed',
+              }}
+            >
+              💾 {dirty ? 'Save Settings' : 'Settings Saved'}
+            </button>
+          </div>
 
           <SectionLabel>Zone management</SectionLabel>
           <div className="mb-3">
@@ -187,7 +227,7 @@ export default function SettingsPage() {
             <div className="flex gap-2 flex-wrap items-center mt-2">
               <input value={zoneName} onChange={e => setZoneName(e.target.value)} placeholder="Zone name..."
                 className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
-              <input type="color" value={zoneColor} onChange={e => setZoneColor(e.target.value)} style={{ width: 44, height: 36 }} className="border-none bg-none cursor-pointer rounded" />
+              <input type="color" value={zoneColor} onChange={e => setZoneColor(e.target.value)} style={{ width: 36, height: 36, padding: 0 }} className="border-2 border-[var(--border2)] bg-none cursor-pointer rounded-full overflow-hidden" />
               <button onClick={() => { if (!zoneName.trim()) return; addZone(zoneName.trim(), zoneColor); setZoneName(''); showToast('Zone added.') }}
                 className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
                 + Add zone
@@ -240,8 +280,8 @@ export default function SettingsPage() {
 
           <SectionLabel>Streak controls</SectionLabel>
           <div className="flex gap-2.5 flex-wrap mb-2">
-            <button onClick={() => setPauseOpen(true)} className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]">⏸ Pause streak</button>
-            <button onClick={() => setInvOpen(true)}   className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">🗑 Invalidate streak</button>
+            <button onClick={() => setPauseOpen(true)} className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]">⏸ Pause Streak</button>
+            <button onClick={() => setInvOpen(true)}   className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">🗑 Invalidate Streak</button>
             <button onClick={() => setRrOpen(true)}    className="px-3.5 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">↺ Reset Rank XP</button>
           </div>
           <p className="text-xs text-[var(--text3)]">Pause for off-grid trips. Invalidate if streak wasn&apos;t honestly earned. Reset rank if you want a fresh start.</p>
@@ -256,6 +296,18 @@ export default function SettingsPage() {
 
       {tab === 'rules' && (
         <div>
+          <Accordion title="📝 Recent changes">
+            <ul className="text-[13px] text-[var(--text2)] leading-relaxed mt-2 pl-4 list-disc space-y-1">
+              <li>Incomplete tasks now automatically carry forward to the next day at cutoff, instead of being dropped</li>
+              <li>"Fix missed check-offs" lets you retroactively mark a past day's tasks done and redeem rewards earned that day — available once per day, then hides itself</li>
+              <li>Redeeming a reward now asks for confirmation before deducting wallet points</li>
+              <li>Journal PIN is now {PIN_LENGTH} digits (was 4), and locks for 2 hours after {PIN_LOCKOUT_THRESHOLD} wrong attempts</li>
+              <li>"Take Rest Day" and "Use Freeze" moved into the ⋯ menu on the dashboard</li>
+              <li>Tap the streak badge to view your month-by-month streak history</li>
+              <li>"Weekend Pulse" renamed to "Week-off Hours / Light Day" — same rule, clearer name</li>
+              <li>Reward wallet was always permanent — clarified in the rules below (no decay, ever)</li>
+            </ul>
+          </Accordion>
           <Accordion title="📌 Points system" defaultOpen>
             <ul className="text-[13px] text-[var(--text2)] leading-relaxed mt-2 pl-4 list-disc space-y-1">
               <li>High = 20pts · Medium = 12pts · Low = 6pts · ⭐ Special = custom</li>
@@ -269,16 +321,15 @@ export default function SettingsPage() {
           <Accordion title="🪙 Reward wallet">
             <ul className="text-[13px] text-[var(--text2)] leading-relaxed mt-2 pl-4 list-disc space-y-1">
               <li>Every 2 task pts earned = 1 wallet pt</li>
-              <li>Wallet is permanent — never resets daily or weekly</li>
-              <li>50% decay on your 1-year app anniversary</li>
+              <li>Wallet is permanent — never resets or decays. Earned via consistency, yours to keep</li>
               <li>Redeem rewards anytime — no need to submit day first</li>
-              <li>Buy freeze: 250 wallet pts = 1 freeze (max 2 held at a time)</li>
+              <li>Buy freeze: 250 wallet pts = 1 freeze. You can hold at most 2 purchased freezes at once — use one before buying another</li>
             </ul>
           </Accordion>
           <Accordion title="🔥 Streak rules">
             <ul className="text-[13px] text-[var(--text2)] leading-relaxed mt-2 pl-4 list-disc space-y-1">
               <li>Full day (min pts met) → streak +1</li>
-              <li>Weekend pulse (20+ pts Sat/Sun) → streak +1</li>
+              <li>Week-off Hours / Light Day (Sat/Sun, lower minimum) → streak +1</li>
               <li>Rest Day → streak unchanged (protected, not incremented)</li>
               <li>Freeze → streak unchanged (protected, not incremented)</li>
               <li>Paused → streak frozen until you restore</li>
@@ -324,7 +375,7 @@ export default function SettingsPage() {
       )}
 
       {/* Modals */}
-      <Modal open={pauseOpen} onClose={() => setPauseOpen(false)} title="⏸ Pause streak">
+      <Modal open={pauseOpen} onClose={() => setPauseOpen(false)} title="⏸ Pause Streak">
         <p className="text-sm text-[var(--text2)] mb-2">For off-grid trips. Streak freezes for up to 20 days.</p>
         <textarea value={pauseReason} onChange={e => setPauseReason(e.target.value)} placeholder="e.g. Spiti trip, no signal..."
           className="w-full text-[13px] p-2.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none mb-3 min-h-[64px] resize-y" />
@@ -332,12 +383,12 @@ export default function SettingsPage() {
           <button onClick={() => setPauseOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
           <button onClick={() => { if (!pauseReason.trim()) { showToast('Describe your situation.'); return }; pauseStreak(pauseReason); setPauseOpen(false); showToast('Streak paused.') }}
             className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]">
-            Pause
+            Pause Streak
           </button>
         </div>
       </Modal>
 
-      <Modal open={invOpen} onClose={() => { setInvOpen(false); setInvPinOk(false); setInvText('') }} title="Invalidate streak">
+      <Modal open={invOpen} onClose={() => { setInvOpen(false); setInvPinOk(false); setInvText('') }} title="Invalidate Streak">
         <p className="text-sm text-[var(--text2)] mb-2">Resets streak to 0. This cannot be undone.</p>
         {journalPin && !invPinOk ? (
           <PinPad mode="verify" storedHash={journalPin} title="Enter App PIN to confirm" onSuccess={() => setInvPinOk(true)} onCancel={() => setInvOpen(false)} />
@@ -384,7 +435,7 @@ export default function SettingsPage() {
                   resetRank(); setRrText(''); setRrPinOk(false); setRrOpen(false); showToast('Rank XP reset.')
                 }}
                 className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">
-                Reset Rank
+                Reset Rank XP
               </button>
             </div>
           </>

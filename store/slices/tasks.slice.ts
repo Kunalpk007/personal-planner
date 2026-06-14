@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { AppState, Task, RecurringTemplate, Subtask } from '../types'
 import { uid }       from '@/lib/engine/cutoff'
-import { calcPts, walletPtsFor } from '@/lib/engine/scoring'
+import { calcPts, walletPtsFor, todayEarned } from '@/lib/engine/scoring'
 
 export interface TasksSlice {
   // Actions
@@ -9,6 +9,7 @@ export interface TasksSlice {
   removeTask:     (id: string) => void
   toggleTask:     (id: string) => { pts: number; walletPts: number } | null
   toggleTaskRetro:(id: string) => { pts: number; walletPts: number } | null
+  submitRetroFix: (dateKey: string, reward?: { title: string; cost: number }) => { ok: boolean; reason?: string }
   editTask:       (id: string, updates: Partial<Task>) => void
   pinTask:        (id: string | null) => void
   toggleSubtask:  (taskId: string, subId: string) => void
@@ -122,6 +123,55 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
     )
 
     return !wasDone ? { pts, walletPts } : null
+  },
+
+  // Persist the result of "Fix missed check-offs" reconciliation: recompute
+  // that day's history entry from the current task state and (optionally)
+  // log a reward redeemed for that day. Marks the day as fixed so the
+  // dashboard prompt no longer appears.
+  submitRetroFix(dateKey, reward) {
+    const state    = get()
+    const dayTasks = state.tasks.filter(t => t.date === dateKey)
+    const doneTasks= dayTasks.filter(t => t.done)
+    const rxp      = todayEarned(doneTasks, state.mood[dateKey], state.cfg)
+    const pct      = dayTasks.length ? Math.round(doneTasks.length / dayTasks.length * 100) : 0
+    const taskSnap = dayTasks.map(t => ({
+      title:       t.title,
+      priority:    t.isSpecial ? 'special' : t.priority,
+      done:        t.done,
+      zone:        t.zone,
+      completedAt: t.completedAt,
+      level:       t.level,
+    }))
+
+    const histIdx = state.history.findIndex(h => h.date === dateKey)
+    let rewardsList = histIdx >= 0 ? [...(state.history[histIdx].rewards ?? [])] : []
+
+    let rewardWallet      = state.rewardWallet
+    let rewardRedemptions = state.rewardRedemptions
+
+    if (reward && reward.title.trim() && reward.cost > 0) {
+      if (rewardWallet < reward.cost) return { ok: false, reason: 'insufficient-wallet' }
+      rewardWallet -= reward.cost
+      rewardRedemptions = [...rewardRedemptions, { date: dateKey, title: reward.title.trim(), cost: reward.cost, at: new Date().toISOString() }]
+      rewardsList = [...rewardsList, reward.title.trim()]
+    }
+
+    const newHistory = [...state.history]
+    if (histIdx >= 0) {
+      newHistory[histIdx] = { ...newHistory[histIdx], done: doneTasks.length, total: dayTasks.length, pct, rxp, tasks: taskSnap, rewards: rewardsList }
+    }
+
+    set({
+      history:        newHistory,
+      rewardWallet,
+      rewardRedemptions,
+      retroFixedDays: { ...state.retroFixedDays, [dateKey]: true },
+    })
+
+    get().logChange('retro-submit', `Saved fix-missed-checkoff changes for ${dateKey}` + (reward?.title ? ` + redeemed "${reward.title.trim()}" (${reward.cost}pts)` : ''))
+
+    return { ok: true }
   },
 
   editTask(id, updates) {

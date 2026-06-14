@@ -18,6 +18,7 @@ export default function RewardsPage() {
   const [buyOpen,  setBuyOpen]  = useState(false)
   const [title,    setTitle]    = useState('')
   const [cost,     setCost]     = useState(15)
+  const [redeemTarget, setRedeemTarget] = useState<{ id: string; title: string; cost: number } | null>(null)
   const today = new Date().toISOString().slice(0, 10)
 
   function handleRedeem(id: string) {
@@ -55,7 +56,7 @@ export default function RewardsPage() {
             <div key={r.id} className={`flex items-center gap-2.5 p-3 rounded-[10px] border mb-2 ${ok ? 'border-[var(--green-mid)]' : 'border-[var(--border)]'} bg-[var(--bg)]`}>
               <span className="flex-1 text-[13px]">{r.title}</span>
               <span className={`text-xs font-semibold whitespace-nowrap ${ok ? 'text-[var(--green)]' : 'text-[var(--text3)]'}`}>{r.cost} pts</span>
-              <button onClick={() => handleRedeem(r.id)} disabled={!ok}
+              <button onClick={() => setRedeemTarget({ id: r.id, title: r.title, cost: r.cost })} disabled={!ok}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium border disabled:opacity-35 ${ok ? 'bg-[var(--green-bg)] text-[var(--green)] border-[var(--green-mid)]' : 'bg-[var(--bg2)] border-[var(--border2)] text-[var(--text2)]'}`}>
                 Redeem
               </button>
@@ -74,11 +75,31 @@ export default function RewardsPage() {
             className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
           <button onClick={() => { if (!title.trim() || cost < 15) { showToast('Min cost: 15 pts.'); return }; addReward({ title: title.trim(), cost }); setTitle(''); setCost(15); showToast('Reward added.') }}
             className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
-            + Add
+            + Add Reward
           </button>
         </div>
         <div className="text-[11px] text-[var(--text3)] mt-1">Min cost: 15 reward pts</div>
       </div>
+
+      {/* Redeem confirmation */}
+      <Modal open={!!redeemTarget} onClose={() => setRedeemTarget(null)} title="🎁 Redeem Reward">
+        {redeemTarget && (
+          <>
+            <p className="text-sm text-[var(--text2)] mb-3">
+              Redeem <strong>{redeemTarget.title}</strong> for <strong>{redeemTarget.cost} pts</strong>? This will be deducted from your wallet.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setRedeemTarget(null)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+              <button
+                onClick={() => { handleRedeem(redeemTarget.id); setRedeemTarget(null) }}
+                className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]"
+              >
+                Redeem
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       <Modal open={buyOpen} onClose={() => setBuyOpen(false)} title="❄ Buy Streak Freeze">
         <p className="text-sm text-[var(--text2)] mb-2">Spend <strong>{FREEZE_COST} reward pts</strong> from your wallet.</p>

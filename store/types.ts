@@ -134,6 +134,7 @@ export interface AppStateData {
   submittedDays: Record<string, boolean>
   restDays:      Record<string, boolean>
   weekRestUsed:  Record<string, boolean>
+  retroFixedDays: Record<string, boolean>
 
   history:   HistoryEntry[]
   bufferLog: Array<{ date: string; note: string; xp: string; type: string }>
@@ -148,6 +149,8 @@ export interface AppStateData {
   journalPin: string | null
   journalPinQuestion:   string | null
   journalPinAnswerHash: string | null
+  pinFailedAttempts: number
+  pinLockoutUntil:   number | null
 
   mood:            Record<string, Mood>
   moodLockedUntil: Record<string, string>
@@ -180,6 +183,7 @@ export interface AppActions {
   removeTask:            (id: string) => void
   toggleTask:            (id: string) => { pts: number; walletPts: number } | null
   toggleTaskRetro:       (id: string) => { pts: number; walletPts: number } | null
+  submitRetroFix:        (dateKey: string, reward?: { title: string; cost: number }) => { ok: boolean; reason?: string }
   editTask:              (id: string, updates: Partial<Task>) => void
   pinTask:               (id: string | null) => void
   toggleSubtask:         (taskId: string, subId: string) => void
@@ -216,6 +220,8 @@ export interface AppActions {
   deleteJournalEntry: (key: string) => void
   setJournalPin:      (hash: string | null) => void
   setJournalSecurity: (hash: string, question: string, answerHash: string) => void
+  recordPinFailure:   () => void
+  resetPinFailures:   () => void
 
   // Config
   setConfig:    (updates: Partial<AppConfig>) => void
