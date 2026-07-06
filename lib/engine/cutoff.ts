@@ -44,6 +44,15 @@ export function isWeekend(dateStr: string): boolean {
   return d.getDay() === 0 || d.getDay() === 6
 }
 
+const DAY_ABBR   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+/** Formats a YYYY-MM-DD string as "Sat, 13 Jun 2026" */
+export function formatDate(dateStr: string): string {
+  const d = new Date(`${dateStr}T12:00:00`)
+  return `${DAY_ABBR[d.getDay()]}, ${d.getDate()} ${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`
+}
+
 export function daysBetween(fromStr: string, toStr: string): number {
   const from = new Date(`${fromStr}T12:00:00`)
   const to   = new Date(`${toStr}T12:00:00`)

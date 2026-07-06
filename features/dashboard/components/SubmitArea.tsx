@@ -3,17 +3,21 @@ import { useMemo, useState } from 'react'
 import { usePlannerStore }  from '@/store'
 import { Modal }            from '@/ui/Modal'
 import { showToast }        from '@/ui/Toast'
-import { todayEarned, getMinPts } from '@/lib/engine/scoring'
-import { isWeekend }        from '@/lib/engine/cutoff'
+import { todayEarned, getMoodAdjustedMinPts } from '@/lib/engine/scoring'
 import { getDayKey }        from '@/lib/engine/cutoff'
+import { getDailyQuote }    from '@/lib/engine/quotes'
 import { writeBackupFile }  from '@/lib/persistence/fsBackup'
 import type { HistoryEntry, EodMood } from '@/store/types'
 
 const EOD_MOODS = [
-  { key: 'motivated', label: '⚡ Motivated', style: { borderColor: '#639922', color: 'var(--green)' } },
-  { key: 'neutral',   label: '😐 Neutral',   style: { borderColor: 'var(--border2)', color: 'var(--text2)' } },
-  { key: 'tired',     label: '😤 Tired',     style: { borderColor: '#E24B4A', color: 'var(--red)' } },
-  { key: 'content',   label: '😌 Content',   style: { borderColor: '#534AB7', color: 'var(--purple)' } },
+  { key: 'motivated',  label: '⚡ Motivated',  style: { borderColor: '#639922', color: 'var(--green)' } },
+  { key: 'proud',      label: '💪 Proud',      style: { borderColor: '#2563eb', color: '#2563eb' } },
+  { key: 'content',    label: '😌 Content',    style: { borderColor: '#534AB7', color: 'var(--purple)' } },
+  { key: 'neutral',    label: '😐 Neutral',    style: { borderColor: 'var(--border2)', color: 'var(--text2)' } },
+  { key: 'tired',      label: '😴 Tired',      style: { borderColor: '#E24B4A', color: 'var(--red)' } },
+  { key: 'frustrated', label: '😤 Frustrated', style: { borderColor: '#dc2626', color: '#dc2626' } },
+  { key: 'anxious',    label: '😰 Anxious',    style: { borderColor: '#d97706', color: '#d97706' } },
+  { key: 'sad',        label: '😢 Sad',        style: { borderColor: '#6b7280', color: '#6b7280' } },
 ]
 
 export function SubmitArea({ today }: { today: string }) {
@@ -33,9 +37,10 @@ export function SubmitArea({ today }: { today: string }) {
 
   const [modalOpen, setModalOpen]     = useState(false)
   const [eodMood, setEodMoodLocal]    = useState<EodMood | ''>('')
+  const [eveningQuote, setEveningQuote] = useState(false)
 
   const earned = todayEarned(done, mood, cfg)
-  const minPts = getMinPts(today, cfg)
+  const minPts = getMoodAdjustedMinPts(today, mood, cfg)
   const diff   = minPts - earned
   const canSubmit = diff <= 0
 
@@ -66,6 +71,7 @@ export function SubmitArea({ today }: { today: string }) {
     const { freezeBonus, milestoneStreak } = submitDay(entry)
     setModalOpen(false)
     if (eodMood) setEodMood(today, eodMood)
+    if (cfg.quoteEvening) setEveningQuote(true)
     if (milestoneStreak) {
       showToast(`🎉 You've earned a Streak Freeze ❄ — ${milestoneStreak}-day streak! +${freezeBonus} freeze${freezeBonus > 1 ? 's' : ''}!`)
     } else {
@@ -108,6 +114,30 @@ export function SubmitArea({ today }: { today: string }) {
       >
         ✓ Submit My Day
       </button>
+      {/* Evening quote overlay */}
+      {eveningQuote && (() => {
+        const q = getDailyQuote(today, 'evening')
+        return (
+          <div
+            style={{ position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.82)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
+            onClick={() => setEveningQuote(false)}
+          >
+            <div
+              style={{ maxWidth:440, width:'100%', background:'var(--bg)', borderRadius:16, border:'1px solid var(--border)', padding:'36px 32px', textAlign:'center' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ fontSize:36, marginBottom:16 }}>🌙</div>
+              <p style={{ fontSize:13, color:'var(--text3)', marginBottom:8 }}>Day submitted · Great work!</p>
+              <p style={{ fontSize:18, fontWeight:600, lineHeight:1.5, color:'var(--text)', marginBottom:12 }}>&ldquo;{q.t}&rdquo;</p>
+              <p style={{ fontSize:13, color:'var(--text3)', marginBottom:28 }}>— {q.a}</p>
+              <button onClick={() => setEveningQuote(false)} style={{ padding:'10px 28px', borderRadius:10, fontSize:13, fontWeight:600, background:'var(--green-bg)', color:'var(--green)', border:'1.5px solid var(--green-mid)', cursor:'pointer' }}>
+                Rest well ✓
+              </button>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Submit modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Submit your day">
         <p className="text-sm text-[var(--text2)] mb-3">

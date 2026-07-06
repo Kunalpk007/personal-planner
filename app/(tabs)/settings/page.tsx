@@ -95,11 +95,23 @@ export default function SettingsPage() {
         <div>
           <SectionLabel>Appearance</SectionLabel>
           <SettingCard>
-            <SettingRow label="Theme" sub="System preference syncing is planned for a future update">
-              <select value={draft.theme ?? 'dark'} onChange={e => setDraft(d => ({ ...d, theme: e.target.value as any }))} className="setting-input">
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-              </select>
+            <SettingRow label="Theme" sub="Takes effect immediately">
+              <div className="flex gap-1.5">
+                {(['dark', 'light', 'system'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => { setConfig({ theme: t }); setDraft(d => ({ ...d, theme: t })) }}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium border transition-all"
+                    style={{
+                      background:  (cfg.theme ?? 'dark') === t ? 'var(--green-bg)' : 'var(--bg2)',
+                      color:       (cfg.theme ?? 'dark') === t ? 'var(--green)'    : 'var(--text2)',
+                      borderColor: (cfg.theme ?? 'dark') === t ? 'var(--green-mid)': 'var(--border2)',
+                    }}
+                  >
+                    {t === 'dark' ? '🌙 Dark' : t === 'light' ? '☀️ Light' : '🖥 System'}
+                  </button>
+                ))}
+              </div>
             </SettingRow>
           </SettingCard>
 

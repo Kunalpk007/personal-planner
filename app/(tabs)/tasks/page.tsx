@@ -59,9 +59,10 @@ export default function TasksPage() {
   const toggleTask    = usePlannerStore(s => s.toggleTask)
   const editTask      = usePlannerStore(s => s.editTask)
   const pinTask       = usePlannerStore(s => s.pinTask)
-  const addRecurring  = usePlannerStore(s => s.addRecurring)
+  const addRecurring    = usePlannerStore(s => s.addRecurring)
   const removeRecurring = usePlannerStore(s => s.removeRecurring)
-  const editRecurring = usePlannerStore(s => s.editRecurring)
+  const editRecurring   = usePlannerStore(s => s.editRecurring)
+  const injectRecurring = usePlannerStore(s => s.injectRecurring)
 
   // Add form state
   const [title,    setTitle]    = useState('')
@@ -202,7 +203,7 @@ export default function TasksPage() {
             ))}
           </div>
           <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">Add Recurring Template</div>
-          <AddRecurForm zones={zones} onAdd={(r) => { addRecurring(r); showToast('Template added.') }} />
+          <AddRecurForm zones={zones} onAdd={(r) => { addRecurring(r); injectRecurring(today); showToast('Template added — added to today.') }} />
         </>
       )}
     </div>
@@ -239,7 +240,11 @@ function TaskRow({ task, zones, pinned, locked, onToggle, onPin, onRemove, onEdi
             {task.note && <span>{task.note}</span>}
             {task.deadline && <span className="px-1.5 py-0.5 rounded-full bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]">⏰ {new Date(task.deadline).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
             {task.slot && <span>📍{task.slot}</span>}
-            {task.carriedDays ? <span className="text-[var(--amber)] font-semibold">↩ carried {task.carriedDays}d (-{task.carriedDays * 2}pts)</span> : null}
+            {task.carriedDays ? (
+              task.blocked
+                ? <span className="text-[#6b7280] font-semibold">🚫 blocked · no penalty</span>
+                : <span className="text-[var(--amber)] font-semibold">↩ carried {task.carriedDays}d (-{task.carriedDays * 2}pts)</span>
+            ) : null}
             {task.completedAt && <span className="text-[var(--green)]">✓ {new Date(task.completedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
           </div>
         </div>
@@ -247,6 +252,20 @@ function TaskRow({ task, zones, pinned, locked, onToggle, onPin, onRemove, onEdi
           <span className="zpill" style={{ background: `${zone.color}22`, color: zone.color, borderColor: `${zone.color}88` }}>{zone.name}</span>
           <div className="flex items-center gap-0.5">
             <span className={`text-xs font-semibold whitespace-nowrap mr-0.5 ${task.done ? 'text-[var(--green)]' : 'text-[var(--text3)]'}`}>+{pts}</span>
+            {!locked && task.carriedDays ? (
+              <button
+                onClick={() => onEdit({ blocked: !task.blocked })}
+                className="px-1.5 py-0.5 rounded text-[10px] font-medium border transition-all"
+                title={task.blocked ? 'Mark unblocked' : 'Mark as blocked (carries forward with no penalty)'}
+                style={{
+                  background:  task.blocked ? '#6b728022' : 'var(--bg)',
+                  color:       task.blocked ? '#6b7280'   : 'var(--text3)',
+                  borderColor: task.blocked ? '#6b7280'   : 'var(--border2)',
+                }}
+              >
+                🚫
+              </button>
+            ) : null}
             {!locked && <button onClick={onPin} className={`btn-icon ${pinned ? 'active' : ''}`} title={pinned ? 'Remove focus' : 'Select to focus this task'}>{pinned ? '★' : '☆'}</button>}
             {!locked && <button onClick={() => setEditOpen(true)} className="btn-icon">✏</button>}
             {!locked && <button onClick={() => setDelOpen(true)} className="btn-icon danger">×</button>}

@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
-import { JOURNAL_XP }   from '@/constants/points'
+import { JOURNAL_XP, WALLET_RATIO } from '@/constants/points'
 import { pad }          from '@/lib/engine/cutoff'
 import { PIN_LOCKOUT_THRESHOLD, PIN_LOCKOUT_MS } from '@/constants/points'
 
@@ -30,9 +30,11 @@ export const createJournalSlice: StateCreator<AppState, [], [], JournalSlice> = 
     let key       = `${today} ${timeStr}`
     if (s.journal[key]) key = `${today} ${timeStr}:${pad(now.getSeconds())}`
 
+    const walletBonus = Math.floor(JOURNAL_XP / WALLET_RATIO)
     set(s2 => ({
-      journal: { ...s2.journal, [key]: text },
-      rankXP:  isFirst ? s2.rankXP + JOURNAL_XP : s2.rankXP,
+      journal:      { ...s2.journal, [key]: text },
+      rankXP:       isFirst ? s2.rankXP + JOURNAL_XP : s2.rankXP,
+      rewardWallet: isFirst ? s2.rewardWallet + walletBonus : s2.rewardWallet,
     }))
 
     return { isFirst }

@@ -39,6 +39,6 @@
     "quoteMorning": true,
     "quoteEvening": true,
     "autoExportEnabled": false,
-    "theme": "dark"
+    "theme": "system"
   }
 }

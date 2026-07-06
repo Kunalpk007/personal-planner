@@ -29,6 +29,10 @@ describe('basePts', () => {
   it('returns specialPts for special tasks', () => {
     expect(basePts(makeTask({ isSpecial: true, specialPts: 35 }))).toBe(35)
   })
+
+  it('falls back to 10 when priority is not a known key', () => {
+    expect(basePts(makeTask({ priority: 'unknown' as any }))).toBe(10)
+  })
 })
 
 describe('calcPts', () => {

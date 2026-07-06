@@ -1,6 +1,7 @@
 'use client'
 import { usePlannerStore } from '@/store'
 import { Accordion }       from '@/ui/Accordion'
+import { formatDate }      from '@/lib/engine/cutoff'
 
 const MOOD_LABELS: Record<string, string> = {
   motivated: '⚡ Motivated', neutral: '😐 Neutral', sick: '🤒 Sick',
@@ -31,8 +32,8 @@ export default function HistoryPage() {
           key={e.date}
           title={
             <div className="flex items-center gap-2 flex-wrap flex-1">
-              <span className="font-semibold min-w-[95px]">
-                {e.date}
+              <span className="font-semibold min-w-[160px]">
+                {formatDate(e.date)}
                 {e.auto && <span className="ml-1.5 text-[10px] text-[var(--amber)] bg-[var(--amber-bg)] px-1.5 py-0.5 rounded">Auto</span>}
                 {e.late && <span className="ml-1.5 text-[10px] text-[var(--red)] bg-[var(--red-bg)] px-1.5 py-0.5 rounded">Late</span>}
               </span>
