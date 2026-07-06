@@ -160,13 +160,27 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
     const newHistory = [...state.history]
     if (histIdx >= 0) {
       newHistory[histIdx] = { ...newHistory[histIdx], done: doneTasks.length, total: dayTasks.length, pct, rxp, tasks: taskSnap, rewards: rewardsList }
+    } else {
+      // No prior history entry (new user or day not processed by overnight logic yet).
+      // Create one so the fix is persisted and shows up in streak history.
+      newHistory.push({
+        date: dateKey, done: doneTasks.length, total: dayTasks.length, pct, rxp,
+        mood: state.mood[dateKey] ?? '', eodMood: '',
+        frozen: false, rest: false, auto: false, late: false,
+        tasks: taskSnap, rewards: rewardsList,
+      })
     }
+
+    // Mark as submitted so the retro panel doesn't re-appear and the day
+    // registers in submittedDays for streak/history purposes.
+    const updatedSubmittedDays = { ...state.submittedDays, [dateKey]: true }
 
     set({
       history:        newHistory,
       rewardWallet,
       rewardRedemptions,
-      retroFixedDays: { ...state.retroFixedDays, [dateKey]: true },
+      retroFixedDays:  { ...state.retroFixedDays, [dateKey]: true },
+      submittedDays:   updatedSubmittedDays,
     })
 
     get().logChange('retro-submit', `Saved fix-missed-checkoff changes for ${dateKey}` + (reward?.title ? ` + redeemed "${reward.title.trim()}" (${reward.cost}pts)` : ''))

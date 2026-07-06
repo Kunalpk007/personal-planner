@@ -2,7 +2,7 @@
 
 export type Priority  = 'high' | 'med' | 'low' | 'special'
 export type Mood      = 'motivated' | 'neutral' | 'sick'
-export type EodMood   = 'motivated' | 'neutral' | 'tired' | 'content'
+export type EodMood   = 'motivated' | 'neutral' | 'tired' | 'content' | 'sad' | 'anxious' | 'proud' | 'frustrated'
 export type Slot      = 'morning' | 'afternoon' | 'evening' | 'night' | ''
 export type Tone      = 'balanced' | 'strict' | 'encouraging'
 export type Level     = 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | ''
@@ -32,6 +32,7 @@ export interface Task {
   specialPts:  number
   specialCat?: Priority
   carriedDays?: number
+  blocked?:    boolean
 }
 
 export interface RecurringTemplate {
@@ -94,7 +95,7 @@ export interface PausedStreak {
   streakAtPause: number
 }
 
-export type ThemeMode = 'light' | 'dark'
+export type ThemeMode = 'light' | 'dark' | 'system'
 
 export interface AppConfig {
   minPts:       number

@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useDayKey }       from '@/hooks/useDayKey'
 import { usePlannerStore } from '@/store'
 import { MoodBar }         from '@/features/dashboard/components/MoodBar'
@@ -11,17 +11,28 @@ import { Accordion }       from '@/ui/Accordion'
 import { Modal }           from '@/ui/Modal'
 import { showToast }       from '@/ui/Toast'
 import { todayEarned, todayTarget, calcPts } from '@/lib/engine/scoring'
-import { getPrevDayKey, getWeekMonday } from '@/lib/engine/cutoff'
+import { getPrevDayKey } from '@/lib/engine/cutoff'
 import { getDailyQuote }   from '@/lib/engine/quotes'
 import { getManagerMessage } from '@/lib/engine/manager'
 import { StreakHistoryModal } from '@/features/dashboard/components/StreakHistoryModal'
+import { MorningQuoteOverlay } from '@/features/dashboard/components/MorningQuoteOverlay'
 
 const DAYS  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 const MONTHS= ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
+function useDisplayName(): string {
+  const [name, setName] = useState('')
+  useEffect(() => {
+    const m = document.cookie.match(/(?:^|;\s*)kp_display=([^;]+)/)
+    if (m) setName(decodeURIComponent(m[1]))
+  }, [])
+  return name
+}
+
 export default function DashboardPage() {
-  const { today } = useDayKey()
-  const now       = new Date()
+  const { today }     = useDayKey()
+  const now           = new Date()
+  const displayName   = useDisplayName()
 
   const overnightMsg = usePlannerStore(s => s.overnightMsg)
   const clearMsg     = usePlannerStore(s => s.clearOvernightMsg)
@@ -35,8 +46,6 @@ export default function DashboardPage() {
   const pinnedTaskId = usePlannerStore(s => s.pinnedTaskId)
   const useFreeze    = usePlannerStore(s => s.useFreeze)
   const useBuffer    = usePlannerStore(s => s.useBuffer)
-  const declareRestDay = usePlannerStore(s => s.declareRestDay)
-  const restAvailable  = usePlannerStore(s => !s.weekRestUsed[getWeekMonday(today)])
   const toggleTaskRetro = usePlannerStore(s => s.toggleTaskRetro)
   const submitRetroFix  = usePlannerStore(s => s.submitRetroFix)
   const retroFixedDays  = usePlannerStore(s => s.retroFixedDays)
@@ -48,13 +57,16 @@ export default function DashboardPage() {
   const [freezeModalOpen, setFreezeModalOpen] = useState(false)
   const [retroRewardTitle, setRetroRewardTitle] = useState('')
   const [retroRewardPts, setRetroRewardPts] = useState('')
-  const [actionsOpen, setActionsOpen] = useState(false)
-  const [restConfirmOpen, setRestConfirmOpen] = useState(false)
   const [streakHistoryOpen, setStreakHistoryOpen] = useState(false)
 
   const prevDay      = getPrevDayKey(today)
   const yesterdayTasks = useMemo(() => allTasks.filter(t => t.date === prevDay), [allTasks, prevDay])
-  const showRetroFix = yesterdayTasks.length > 0 && !fixDismissed && !retroFixedDays[prevDay]
+  // Show even when auto-submitted — user may still have missed checkoffs.
+  // Only hide once they've explicitly submitted the retro panel (retroFixedDays) or dismissed it.
+  const showRetroFix = yesterdayTasks.length > 0
+    && !fixDismissed
+    && !retroFixedDays[prevDay]
+    && now.getHours() < cfg.cutoffHour
   const bufferUseAmount = Math.min(bufferXP, 50)
 
   const earned  = todayEarned(done, mood, cfg)
@@ -70,6 +82,7 @@ export default function DashboardPage() {
 
   return (
     <div>
+      <MorningQuoteOverlay today={today} />
       {/* Overnight banner */}
       {overnightMsg && (
         <div className="bg-[var(--blue-bg)] border border-[var(--blue)] rounded-[10px] p-3 mb-3.5 text-xs text-[var(--blue)] flex justify-between items-center">
@@ -82,13 +95,12 @@ export default function DashboardPage() {
       <div className="mb-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-[19px] font-semibold">Kunal&apos;s Planner</h1>
+            <h1 className="text-[19px] font-semibold">{displayName ? `${displayName}'s Planner` : 'My Planner'}</h1>
             <p className="text-xs text-[var(--text2)] mt-0.5">
               {DAYS[now.getDay()]}, {now.getDate()} {MONTHS[now.getMonth()]} {now.getFullYear()}
             </p>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <button onClick={() => setActionsOpen(true)} className="btn-icon" title="Day actions">⋯</button>
             <button
               onClick={() => setStreakHistoryOpen(true)}
               className="relative flex items-center justify-center w-14 h-14"
@@ -237,44 +249,6 @@ export default function DashboardPage() {
             className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]"
           >
             Use {bufferUseAmount} pts
-          </button>
-        </div>
-      </Modal>
-
-      {/* Day actions menu */}
-      <Modal open={actionsOpen} onClose={() => setActionsOpen(false)} title="Day Actions">
-        <div className="flex flex-col gap-2">
-          <button
-            onClick={() => { setActionsOpen(false); setRestConfirmOpen(true) }}
-            disabled={isSettledToday || !restAvailable}
-            className="w-full text-left px-3.5 py-2.5 rounded-md text-sm font-medium border disabled:opacity-35 bg-[var(--amber-bg)] text-[var(--amber)] border-[#EF9F27]"
-          >
-            🟡 Take Rest Day
-            {!restAvailable && <span className="block text-[11px] opacity-80 font-normal">Already used this week</span>}
-          </button>
-          <button
-            onClick={() => { setActionsOpen(false); setFreezeModalOpen(true) }}
-            disabled={isSettledToday || freezeTokens <= 0}
-            className="w-full text-left px-3.5 py-2.5 rounded-md text-sm font-medium border disabled:opacity-35 bg-[var(--amber-bg)] text-[var(--amber)] border-[#EF9F27]"
-          >
-            ❄ Use Freeze
-            {freezeTokens <= 0 && <span className="block text-[11px] opacity-80 font-normal">No freeze tokens available</span>}
-          </button>
-        </div>
-      </Modal>
-
-      {/* Rest day confirmation */}
-      <Modal open={restConfirmOpen} onClose={() => setRestConfirmOpen(false)} title="🟡 Take Rest Day">
-        <p className="text-sm text-[var(--text2)] mb-3">
-          Streak is protected — unchanged. 1 rest day per week, resets Monday.
-        </p>
-        <div className="flex gap-2 justify-end">
-          <button onClick={() => setRestConfirmOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
-          <button
-            onClick={() => { declareRestDay(today); setRestConfirmOpen(false); showToast('🟡 Rest day taken. Streak protected.') }}
-            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]"
-          >
-            Take Rest Day
           </button>
         </div>
       </Modal>

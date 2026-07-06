@@ -30,7 +30,13 @@
       "Bash(npx tsc *)",
       "Bash(npm run *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/dashboard)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3001/dashboard)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3001/dashboard)",
+      "PowerShell(cd \"e:\\\\Claude Projects\\\\kunals-planner\"; \\(Get-Content package.json | ConvertFrom-Json\\).dependencies | Get-Member -MemberType NoteProperty | Select-Object Name | Where-Object { $_.Name -match \"argon|bcrypt|argon2\" })",
+      "Bash(netstat -ano)",
+      "Bash(grep -q \"Ready\" /tmp/dev.log)",
+      "Bash(break)",
+      "Read(//tmp/**)",
+      "Bash(time curl -s -o /tmp/login.html -w \"HTTP %{http_code} - %{time_total}s\\\\n\" http://localhost:3000/login)"
     ]
   }
 }

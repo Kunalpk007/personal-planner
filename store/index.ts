@@ -9,36 +9,47 @@ import { createJournalSlice } from './slices/journal.slice'
 import { createConfigSlice }  from './slices/config.slice'
 import { createUISlice }      from './slices/ui.slice'
 import { STORAGE_KEY, INITIAL_STATE } from './defaults'
+import { scopedStorageKey } from './userScope'
 
 const BACKUP_SUFFIX = '_backup'
 
 /**
- * Wraps localStorage so every write keeps a rolling one-generation backup
- * under `<key>_backup`, and reads fall back to that backup if the primary
- * key is missing or unreadable (e.g. corrupted by a partial write).
+ * User-scoped recovering storage.
+ *
+ * All reads/writes are namespaced to the active user:
+ *   localStorage["kunals_planner_v2:{userId}"]
+ *
+ * This means two users on the same browser have completely separate data.
+ *
+ * Firebase migration path: replace localStorage calls here with
+ * Firestore reads/writes using getUserScope() as the document ID.
+ * The key structure maps directly to Firestore["/users/{userId}/data"].
  */
 const recoveringStorage: StateStorage = {
   getItem: (name) => {
+    const key = scopedStorageKey(name)
     try {
-      const v = localStorage.getItem(name)
+      const v = localStorage.getItem(key)
       if (v) return v
     } catch {}
     try {
-      return localStorage.getItem(name + BACKUP_SUFFIX)
+      return localStorage.getItem(key + BACKUP_SUFFIX)
     } catch {
       return null
     }
   },
   setItem: (name, value) => {
+    const key = scopedStorageKey(name)
     try {
-      const prev = localStorage.getItem(name)
-      if (prev) localStorage.setItem(name + BACKUP_SUFFIX, prev)
+      const prev = localStorage.getItem(key)
+      if (prev) localStorage.setItem(key + BACKUP_SUFFIX, prev)
     } catch {}
-    localStorage.setItem(name, value)
+    localStorage.setItem(key, value)
   },
   removeItem: (name) => {
-    localStorage.removeItem(name)
-    localStorage.removeItem(name + BACKUP_SUFFIX)
+    const key = scopedStorageKey(name)
+    localStorage.removeItem(key)
+    localStorage.removeItem(key + BACKUP_SUFFIX)
   },
 }
 

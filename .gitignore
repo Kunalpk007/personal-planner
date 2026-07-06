@@ -22,6 +22,9 @@ yarn-debug.log*
 android/
 ios/
 
+# User data — never commit (contains hashed passwords)
+data/users.json
+
 # Misc
 *.tsbuildinfo
 .vercel

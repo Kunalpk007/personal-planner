@@ -37,6 +37,35 @@ describe('redeemReward', () => {
   })
 })
 
+describe('addZone / removeZone', () => {
+  it('addZone appends a zone with a generated id', () => {
+    const before = usePlannerStore.getState().zones.length
+    usePlannerStore.getState().addZone('Work', '#ff0000')
+    const zones = usePlannerStore.getState().zones
+    expect(zones).toHaveLength(before + 1)
+    expect(zones.at(-1)).toMatchObject({ name: 'Work', color: '#ff0000' })
+    expect(zones.at(-1)?.id).toBeTruthy()
+  })
+
+  it('removeZone removes a zone by id when multiple zones exist', () => {
+    usePlannerStore.getState().addZone('Zone A', '#aaa')
+    usePlannerStore.getState().addZone('Zone B', '#bbb')
+    const zones = usePlannerStore.getState().zones
+    const idToRemove = zones.at(-1)!.id
+
+    usePlannerStore.getState().removeZone(idToRemove)
+
+    expect(usePlannerStore.getState().zones.find(z => z.id === idToRemove)).toBeUndefined()
+  })
+
+  it('removeZone does nothing when only one zone remains', () => {
+    // Reset to exactly one zone
+    usePlannerStore.setState({ zones: [{ id: 'only', name: 'Only', color: '#000' }] })
+    usePlannerStore.getState().removeZone('only')
+    expect(usePlannerStore.getState().zones).toHaveLength(1)
+  })
+})
+
 describe('addReward / removeReward', () => {
   it('adds a reward with a generated id', () => {
     const before = usePlannerStore.getState().rewards.length

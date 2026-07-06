@@ -34,7 +34,19 @@ function snapshotTasks(state: AppState, dateKey: string) {
  */
 export function runOvernightLogic(state: AppState, today: string): Partial<AppState> & { overnightMsg: string | null } {
   const sorted = [...state.history].sort((a, b) => a.date.localeCompare(b.date))
-  const lastDate = sorted[sorted.length - 1]?.date
+  const lastHistoryDate = sorted[sorted.length - 1]?.date
+
+  // For new users with no history, anchor to the day before the earliest past task
+  // so the overnight loop processes that task day and carries incomplete tasks forward.
+  let lastDate = lastHistoryDate
+  if (!lastDate) {
+    const earliest = state.tasks.map(t => t.date).filter(d => d < today).sort()[0]
+    if (earliest) {
+      const d = new Date(`${earliest}T12:00:00`)
+      d.setDate(d.getDate() - 1)
+      lastDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    }
+  }
   if (!lastDate) return { overnightMsg: null }
 
   const gap = daysBetween(lastDate, today)
@@ -86,8 +98,9 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
     nd.setDate(nd.getDate() + 1)
     const nextKey = `${nd.getFullYear()}-${pad(nd.getMonth() + 1)}-${pad(nd.getDate())}`
     for (const t of dayTasks.filter(t => !t.done)) {
-      const newCarried = (t.carriedDays ?? 0) + 1
-      if (newCarried <= MAX_CARRY) {
+      // Blocked tasks carry forward without incrementing the penalty counter
+      const newCarried = t.blocked ? (t.carriedDays ?? 0) : (t.carriedDays ?? 0) + 1
+      if (t.blocked || newCarried <= MAX_CARRY) {
         patch.tasks!.push({
           ...t,
           id:          uid(),
@@ -143,6 +156,33 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
       patch.streak = 0
       patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: false })
       overnightMsg = `😔 Streak broke on ${mk} (${earned}/${minPts} pts). No protection available. Start fresh!`
+    }
+  }
+
+  // The main loop processes days strictly BETWEEN lastDate and today (exclusive).
+  // When gap=1 (lastDate = yesterday — the normal daily login), the loop
+  // condition `d < 1` is false immediately, so carry-forward never runs.
+  // We handle that case explicitly here.
+  if (gap === 1) {
+    const prevDay = lastDate // yesterday in the typical case
+    for (const t of state.tasks.filter(t => t.date === prevDay && !t.done)) {
+      // Blocked tasks carry without penalty; unblocked tasks respect MAX_CARRY
+      const newCarried = t.blocked ? (t.carriedDays ?? 0) : (t.carriedDays ?? 0) + 1
+      if (!t.blocked && newCarried > MAX_CARRY) continue
+      // Dedup: skip if a carry of this task already exists in today's list
+      const alreadyCarried = patch.tasks!.some(
+        ct => ct.date === today && ct.title === t.title && ct.zone === t.zone
+      )
+      if (alreadyCarried) continue
+      patch.tasks!.push({
+        ...t,
+        id:          uid(),
+        date:        today,
+        done:        false,
+        completedAt: null,
+        createdAt:   new Date().toISOString(),
+        carriedDays: newCarried,
+      } as Task)
     }
   }
 

@@ -1,8 +1,10 @@
 'use client'
 import { useState }        from 'react'
 import { useDayKey }       from '@/hooks/useDayKey'
+import { formatDate }      from '@/lib/engine/cutoff'
 import { usePlannerStore } from '@/store'
 import { Accordion }       from '@/ui/Accordion'
+import { Modal }           from '@/ui/Modal'
 import { showToast }       from '@/ui/Toast'
 import { PinGate }         from '@/ui/PinGate'
 
@@ -11,6 +13,7 @@ export default function JournalPage() {
   const [mode, setMode] = useState<'write' | 'history'>('write')
   const [text, setText] = useState('')
   const [editKey, setEditKey]   = useState<string | null>(null)
+  const [deleteKey, setDeleteKey] = useState<string | null>(null)
 
   const journal     = usePlannerStore(s => s.journal)
   const saveEntry   = usePlannerStore(s => s.saveJournalEntry)
@@ -23,13 +26,24 @@ export default function JournalPage() {
     const { isFirst } = saveEntry(today, text.trim(), editKey ?? undefined)
     setText('')
     setEditKey(null)
-    showToast(editKey ? 'Entry updated.' : isFirst ? '+5 Rank XP for journaling!' : 'Entry saved.')
+    showToast(editKey ? 'Entry updated.' : isFirst ? '+5 Rank XP + 2 wallet pts for journaling!' : 'Entry saved.')
   }
 
   function handleEdit(key: string) {
     setText(journal[key] ?? '')
     setEditKey(key)
     setMode('write')
+  }
+
+  function confirmDelete(key: string) {
+    setDeleteKey(key)
+  }
+
+  function handleDelete() {
+    if (!deleteKey) return
+    deleteEntry(deleteKey)
+    setDeleteKey(null)
+    showToast('Entry deleted.')
   }
 
   // Group by day prefix
@@ -57,7 +71,7 @@ export default function JournalPage() {
       {mode === 'write' && (
         <>
           <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">
-            {editKey ? `Editing: ${editKey.slice(0, 10)} at ${editKey.slice(11)}` : `Today's entry — ${today}`}
+            {editKey ? `Editing: ${formatDate(editKey.slice(0, 10))} at ${editKey.slice(11)}` : `Today's entry — ${formatDate(today)}`}
           </div>
           <textarea
             value={text}
@@ -89,14 +103,14 @@ export default function JournalPage() {
           <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">All journal entries</div>
           {dayOrder.length === 0 && <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No entries yet.</div>}
           {dayOrder.map(day => (
-            <Accordion key={day} title={<span className="font-semibold">{day} <span className="text-[11px] text-[var(--text3)] font-normal ml-2">{byDay[day].length} entr{byDay[day].length === 1 ? 'y' : 'ies'}</span></span>}>
+            <Accordion key={day} title={<span className="font-semibold">{formatDate(day)} <span className="text-[11px] text-[var(--text3)] font-normal ml-2">{byDay[day].length} entr{byDay[day].length === 1 ? 'y' : 'ies'}</span></span>}>
               {byDay[day].map(key => (
                 <div key={key} className="border-t border-[var(--border)] py-2.5">
                   <div className="flex justify-between items-center mb-1.5">
                     <span className="text-[11px] text-[var(--text3)] font-semibold">{key.slice(11) || key}</span>
                     <div className="flex gap-1.5">
                       <button onClick={() => handleEdit(key)} className="btn-icon">✏</button>
-                      <button onClick={() => { deleteEntry(key); showToast('Entry deleted.') }} className="btn-icon danger">🗑</button>
+                      <button onClick={() => confirmDelete(key)} className="btn-icon danger">🗑</button>
                     </div>
                   </div>
                   <p className="text-[13px] text-[var(--text2)] leading-relaxed whitespace-pre-wrap">{journal[key]}</p>
@@ -106,6 +120,21 @@ export default function JournalPage() {
           ))}
         </>
       )}
+
+      <Modal open={!!deleteKey} onClose={() => setDeleteKey(null)} title="Delete entry?">
+        <p className="text-sm text-[var(--text2)] mb-4">
+          This journal entry will be permanently deleted. This cannot be undone.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => setDeleteKey(null)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button
+            onClick={handleDelete}
+            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-red-500/10 text-red-500 border border-red-500/30"
+          >
+            Delete
+          </button>
+        </div>
+      </Modal>
     </div>
     </PinGate>
   )

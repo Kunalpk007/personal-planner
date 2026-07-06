@@ -41,16 +41,94 @@ describe('checkStreakMilestone', () => {
     expect(checkStreakMilestone(200)).toBe(2)
   })
 
-  it('returns 0 for non-milestone streaks', () => {
+  it('returns 0 for non-milestone streaks and 0', () => {
     expect(checkStreakMilestone(4)).toBe(0)
     expect(checkStreakMilestone(0)).toBe(0)
+    expect(checkStreakMilestone(999)).toBe(0)  // not in schedule
   })
 })
 
 describe('runOvernightLogic', () => {
-  it('returns null overnightMsg when there is no history', () => {
-    const state = makeState({ history: [] })
+  it('returns null overnightMsg when there is no history and no past tasks', () => {
+    const state = makeState({ history: [], tasks: [] })
     expect(runOvernightLogic(state, '2024-01-10')).toEqual({ overnightMsg: null })
+  })
+
+  it('carries forward incomplete tasks to today when there is no history but tasks exist for yesterday', () => {
+    const tasks = [
+      makeTask({ id: 'x1', date: '2024-01-09', done: false }),
+      makeTask({ id: 'x2', date: '2024-01-09', done: true }),
+    ]
+    const state = makeState({ history: [], tasks })
+
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    // The undone task should be carried forward to today
+    const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
+    expect(carried).toHaveLength(1)
+    expect(carried[0].carriedDays).toBe(1)
+    expect(carried[0].done).toBe(false)
+  })
+
+  it('carries forward incomplete tasks when gap=1 (history entry for yesterday, normal daily login)', () => {
+    // This is the most common case: user has a history entry for yesterday (gap=1).
+    // The main loop does not run when gap=1, so the gap=1 carry path must handle it.
+    const tasks = [
+      makeTask({ id: 'c1', date: '2024-01-09', done: false }),
+      makeTask({ id: 'c2', date: '2024-01-09', done: true }),
+    ]
+    const state = makeState({ history: [makeHistoryEntry('2024-01-09')], tasks })
+
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
+    expect(carried).toHaveLength(1)
+    expect(carried[0].carriedDays).toBe(1)
+    expect(carried[0].title).toBe(tasks[0].title)
+  })
+
+  it('does not create duplicate carries on reload when gap=1', () => {
+    // Simulate: carry was already created (from a previous run) and is in state.tasks.
+    // Running overnight logic again should not add a second copy.
+    const original = makeTask({ id: 'c3', date: '2024-01-09', done: false })
+    const existingCarry = makeTask({
+      id: 'c3-carry', date: '2024-01-10', done: false,
+      title: original.title, zone: original.zone, carriedDays: 1,
+    })
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-09')],
+      tasks: [original, existingCarry],
+    })
+
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
+    expect(carried).toHaveLength(1) // no duplicate
+  })
+
+  it('does NOT carry a task at MAX_CARRY via the gap=1 path', () => {
+    const tasks = [
+      makeTask({ id: 'maxed-gap1', date: '2024-01-09', done: false, carriedDays: 3 }),
+    ]
+    const state = makeState({ history: [makeHistoryEntry('2024-01-09')], tasks })
+
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
+    expect(carried).toHaveLength(0)
+  })
+
+  it('does NOT carry a task that has already been carried MAX_CARRY times', () => {
+    const tasks = [
+      makeTask({ id: 'maxed', date: '2024-01-09', done: false, carriedDays: 3 }),
+    ]
+    const state = makeState({ history: [makeHistoryEntry('2024-01-08')], tasks })
+
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    // maxed-out carry should be skipped
+    const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
+    expect(carried).toHaveLength(0)
   })
 
   it('returns null overnightMsg when there is no gap since the last history entry', () => {
@@ -159,6 +237,22 @@ describe('runOvernightLogic', () => {
     const entry = result.history?.[1]
     expect(entry).toMatchObject({ date: '2024-01-09', rxp: 20, frozen: false, rest: false })
     expect(result.overnightMsg).toMatch(/^😔/)
+  })
+
+  it('records "special" priority in the task snapshot for special tasks', () => {
+    const tasks = [
+      makeTask({ id: 'sp', date: '2024-01-09', isSpecial: true, specialPts: 50 }),
+    ]
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-08')],
+      tasks,
+      streak: 1,
+    })
+    const result = runOvernightLogic(state, '2024-01-10')
+    // 50 pts (no mood) >= minPts 70 is false, so it's rest/freeze/break
+    // Either way, the history entry should record the task snapshot
+    const entry = result.history?.find(h => h.date === '2024-01-09')
+    expect(entry?.tasks[0]?.priority).toBe('special')
   })
 
   it('skips days that were already submitted, rested, or frozen', () => {

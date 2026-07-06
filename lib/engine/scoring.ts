@@ -27,8 +27,8 @@ export function calcPts(task: Task): number {
     }
   }
 
-  // Carry penalty
-  if (task.carriedDays && task.carriedDays > 0) {
+  // Carry penalty — waived for blocked tasks (blocked = not the person's fault)
+  if (task.carriedDays && task.carriedDays > 0 && !task.blocked) {
     pts = Math.max(1, pts - task.carriedDays * CARRY_PENALTY)
   }
 
@@ -58,4 +58,11 @@ export function getMinPts(dateStr: string, cfg: AppConfig): number {
   const d = new Date(`${dateStr}T12:00:00`)
   const isWknd = d.getDay() === 0 || d.getDay() === 6
   return isWknd ? (cfg.weekendPts ?? 20) : (cfg.minPts ?? 70)
+}
+
+/** Returns the mood-adjusted minimum pts threshold for a given day.
+ *  Motivated raises the bar (you earn more, so the target is higher).
+ *  Sick lowers it (allowance for low-energy days). */
+export function getMoodAdjustedMinPts(dateStr: string, mood: string | undefined, cfg: AppConfig): number {
+  return Math.round(getMinPts(dateStr, cfg) * getMoodMult(mood, cfg))
 }
