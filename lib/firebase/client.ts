@@ -33,6 +33,19 @@ export function getClientDb(): Firestore {
   return _db
 }
 
+/** Wait for Firebase Auth to finish restoring session from persistence (IndexedDB). */
+export async function waitForAuth(): Promise<boolean> {
+  if (typeof window === 'undefined') return false
+  try {
+    const auth = getClientAuth()
+    await auth.authStateReady()
+    return auth.currentUser !== null
+  } catch (e) {
+    console.error('waitForAuth error:', e)
+    return false
+  }
+}
+
 // Convenience aliases used by auth pages — same lazy init
 export const clientAuth = { get instance() { return getClientAuth() } }
 export const clientDb   = { get instance() { return getClientDb() } }

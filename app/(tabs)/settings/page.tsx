@@ -10,6 +10,11 @@ import { exportJSON, importJSON } from '@/lib/persistence/export'
 import { pad } from '@/lib/engine/cutoff'
 import { PIN_LENGTH, PIN_LOCKOUT_THRESHOLD } from '@/constants/points'
 import { getBackupFolderName, pickBackupFolder, fsBackupSupported } from '@/lib/persistence/fsBackup'
+import { deleteAllUserData } from '@/lib/firebase/firestore'
+import { getClientAuth } from '@/lib/firebase/client'
+import { deleteUser } from 'firebase/auth'
+import { setUserScope } from '@/store/userScope'
+import { STORAGE_KEY, INITIAL_STATE } from '@/store/defaults'
 import pkg from '@/package.json'
 import type { AppConfig } from '@/store/types'
 
@@ -60,9 +65,54 @@ export default function SettingsPage() {
   const [importOpen, setImportOpen] = useState(false)
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
 
+  // Account management
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteText, setDeleteText] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [disableOpen, setDisableOpen] = useState(false)
+
   // App PIN management modal
   const [pinModalOpen, setPinModalOpen] = useState(false)
   const [pinStep, setPinStep] = useState<'verify-old' | 'set-new' | 'remove-verify'>('set-new')
+
+  function readCookie(name: string): string | null {
+    if (typeof document === 'undefined') return null
+    const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))
+    return m ? decodeURIComponent(m[1]) : null
+  }
+
+  /** Clear all local data and sign out. Firestore data is preserved. */
+  async function handleDisable() {
+    try { await fetch('/api/auth/signout', { method: 'POST' }) } catch {}
+    try { await deleteUser(getClientAuth().currentUser!) } catch {}
+    setUserScope(null)
+    localStorage.removeItem(`${STORAGE_KEY}:${readCookie('kp_uid')}`)
+    usePlannerStore.setState({ ...INITIAL_STATE })
+    setDisableOpen(false)
+    showToast('Local data cleared. You can sign in again to restore from cloud.')
+    window.location.href = '/login'
+  }
+
+  /** Permanently delete Firestore data + Auth user + local data. */
+  async function handleDelete() {
+    setDeleteBusy(true)
+    try {
+      const uid = readCookie('kp_uid')
+      if (uid) {
+        try { await deleteAllUserData(uid) } catch {}
+      }
+      try { await fetch('/api/auth/signout', { method: 'POST' }) } catch {}
+      try { await deleteUser(getClientAuth().currentUser!) } catch {}
+      setUserScope(null)
+      localStorage.removeItem(`${STORAGE_KEY}:${uid}`)
+      usePlannerStore.setState({ ...INITIAL_STATE })
+      showToast('Account deleted. All data permanently removed.')
+      window.location.href = '/login'
+    } catch (e) {
+      showToast('Deletion failed. Try again.')
+    }
+    setDeleteBusy(false)
+  }
 
   function openPinModal(action: 'set-or-change' | 'remove') {
     if (action === 'remove') {
@@ -260,11 +310,58 @@ export default function SettingsPage() {
             </label>
           </div>
 
+          <SectionLabel>Account</SectionLabel>
+          <SettingCard>
+            <SettingRow label="Disable account" sub="Clears local data. Cloud data is preserved — sign in again to restore.">
+              <button onClick={() => setDisableOpen(true)}
+                className="px-3.5 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+                Disable
+              </button>
+            </SettingRow>
+            <SettingRow label="Delete account" sub="Permanently removes all data from cloud and this device. Irreversible.">
+              <button onClick={() => setDeleteOpen(true)}
+                className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">
+                Delete
+              </button>
+            </SettingRow>
+          </SettingCard>
+
           <div className="text-[11px] text-[var(--text3)] mt-4 text-center">
             Kunal&apos;s Planner v{pkg.version}
           </div>
         </div>
       )}
+
+      {/* Disable confirmation */}
+      <Modal open={disableOpen} onClose={() => setDisableOpen(false)} title="Disable account?">
+        <p className="text-sm text-[var(--text2)] mb-4">
+          Your planner data will be cleared from this device. Your cloud backup in Firestore will be preserved
+          so you can restore everything by signing in again.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => setDisableOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={handleDisable}
+            className="px-3.5 py-1.5 rounded-md text-sm font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+            Disable
+          </button>
+        </div>
+      </Modal>
+
+      {/* Delete confirmation — type DELETE to proceed */}
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete account?">
+        <p className="text-sm text-[var(--red)] mb-2 font-medium">This permanently removes all data — tasks, streaks, XP, journal entries, everything.</p>
+        <p className="text-sm text-[var(--text2)] mb-3">Your Firebase Authentication account will also be deleted. This cannot be undone.</p>
+        <p className="text-sm text-[var(--text2)] mb-2">Type <strong>DELETE</strong> to confirm.</p>
+        <input value={deleteText} onChange={e => setDeleteText(e.target.value)} placeholder="Type DELETE..."
+          className="w-full text-[13px] p-2.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none mb-3" />
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => { setDeleteOpen(false); setDeleteText('') }} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={handleDelete} disabled={deleteText !== 'DELETE' || deleteBusy}
+            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A] disabled:opacity-40">
+            {deleteBusy ? 'Deleting…' : 'Permanently Delete'}
+          </button>
+        </div>
+      </Modal>
 
       {tab === 'streak' && (
         <div>

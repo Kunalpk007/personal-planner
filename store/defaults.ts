@@ -43,6 +43,7 @@ export const INITIAL_STATE: AppStateData = {
   journalPinAnswerHash: null,
   pinFailedAttempts: 0,
   pinLockoutUntil:   null,
+  journalEncryptionToken: null,
 
   mood:            {},
   moodLockedUntil: {},

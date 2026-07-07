@@ -1,0 +1,6 @@
+[build]
+  command = "npm run build"
+
+# Use esbuild bundler for Netlify Functions to handle ESM/CJS interop
+[functions]
+  node_bundler = "esbuild"

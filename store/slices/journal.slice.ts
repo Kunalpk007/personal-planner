@@ -11,6 +11,7 @@ export interface JournalSlice {
   setJournalSecurity: (hash: string, question: string, answerHash: string) => void
   recordPinFailure: () => void
   resetPinFailures: () => void
+  setJournalEncryptionToken: (token: string | null) => void
 }
 
 export const createJournalSlice: StateCreator<AppState, [], [], JournalSlice> = (set, get) => ({
@@ -70,5 +71,9 @@ export const createJournalSlice: StateCreator<AppState, [], [], JournalSlice> = 
 
   resetPinFailures() {
     set({ pinFailedAttempts: 0, pinLockoutUntil: null })
+  },
+
+  setJournalEncryptionToken(token) {
+    set({ journalEncryptionToken: token })
   },
 })

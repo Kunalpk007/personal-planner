@@ -3,9 +3,10 @@ import { useState, useEffect } from 'react'
 import { subscribeSyncStatus, getSyncStatus, type SyncStatus } from '@/lib/sync-status'
 
 const STATUS_MAP: Record<Exclude<SyncStatus, 'idle'>, { text: string; color: string }> = {
-  saving: { text: 'Saving…',  color: 'var(--amber)' },
-  saved:  { text: 'Saved ✓',  color: 'var(--green)' },
-  error:  { text: 'Offline ⚠', color: 'var(--red)'  },
+  waiting: { text: 'Waiting…', color: 'var(--amber)' },
+  saving:  { text: 'Saving…',  color: 'var(--amber)' },
+  saved:   { text: 'Saved ✓',  color: 'var(--green)' },
+  error:   { text: 'Offline ⚠', color: 'var(--red)'  },
 }
 
 export function SyncStatusBadge() {
