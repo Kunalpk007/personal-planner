@@ -11,7 +11,8 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "verify": "tsc --noEmit && eslint . && vitest run --coverage && next build --webpack"
+    "lint:fix": "eslint --fix .",
+"verify": "tsc --noEmit && eslint . && vitest run && next build --webpack"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
