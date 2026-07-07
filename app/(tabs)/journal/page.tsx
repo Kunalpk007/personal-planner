@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useDayKey }       from '@/hooks/useDayKey'
 import { formatDate }      from '@/lib/engine/cutoff'
 import { usePlannerStore } from '@/store'
@@ -22,7 +22,6 @@ export default function JournalPage() {
   const encToken    = usePlannerStore(s => s.journalEncryptionToken)
   const saveEntry   = usePlannerStore(s => s.saveJournalEntry)
   const deleteEntry = usePlannerStore(s => s.deleteJournalEntry)
-  const setEncToken = usePlannerStore(s => s.setJournalEncryptionToken)
 
   // ── Encryption gate ──────────────────────────────────────────────────────
 
@@ -37,10 +36,9 @@ export default function JournalPage() {
   const [disableError, setDisableError]        = useState('')
   const [disableBusy, setDisableBusy]          = useState(false)
   const [showDisable, setShowDisable]          = useState(false)
-  const [decrypted, setDecrypted]   = useState<Record<string, string> | null>(null)
-  const [decrypting, setDecrypting] = useState(false)
+  const [decrypted, setDecrypted] = useState<Record<string, string> | null>(null)
 
-  const needsPassphrase = !!encToken && !hasJournalKey() && !decrypting
+  const needsPassphrase = !!encToken && !hasJournalKey() && decrypted === null
   const waitingDecrypt  = !!encToken && hasJournalKey() && decrypted === null
   const showJournal     = !encToken || (hasJournalKey() && decrypted !== null)
 
@@ -52,15 +50,14 @@ export default function JournalPage() {
     return map
   }
 
-  // Decrypt on mount if key is already in memory (SPA re-entry) or when journal changes
+  // Decrypt on mount (SPA re-entry) or when journal changes after save/delete
   useEffect(() => {
     if (!hasJournalKey()) return
     const key = getJournalKey()!
-    setDecrypting(true)
     ;(async () => {
       setDecrypted(await decryptAllEntries(key))
-      setDecrypting(false)
     })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [journal])
 
   async function handleEncUnlock() {
