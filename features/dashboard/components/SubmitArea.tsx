@@ -7,6 +7,7 @@ import { todayEarned, getMoodAdjustedMinPts } from '@/lib/engine/scoring'
 import { getDayKey }        from '@/lib/engine/cutoff'
 import { getDailyQuote }    from '@/lib/engine/quotes'
 import { writeBackupFile }  from '@/lib/persistence/fsBackup'
+import { syncNow }          from '@/lib/sync/sync'
 import type { HistoryEntry, EodMood } from '@/store/types'
 
 const EOD_MOODS = [
@@ -80,6 +81,7 @@ export function SubmitArea({ today }: { today: string }) {
     if (cfg.autoExportEnabled) {
       writeBackupFile(usePlannerStore.getState())
     }
+    syncNow()
   }
 
   if (isSubmitted) {

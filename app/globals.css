@@ -302,6 +302,9 @@
   }
 }
 
+/* Banner scroll — hide scrollbar */
+.banner-scroll::-webkit-scrollbar { display: none; }
+
 /* ── Legacy utility classes (still referenced by existing components) ─────── */
 .btn-icon {
   background: none; border: none; cursor: pointer;

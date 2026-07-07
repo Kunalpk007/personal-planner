@@ -57,8 +57,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
         background: 'var(--nav-bg)', backdropFilter: 'blur(12px)',
         borderBottom: '0.5px solid var(--color-border)',
         padding: '0 var(--spacing-page)',
-      }}>
-        <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', alignItems: 'center', height: 56, gap: 32 }}>
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+      }} className="banner-scroll">
+        <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', alignItems: 'center', height: 56, gap: 32, flexShrink: 0 }}>
           <button
             onClick={() => router.push('/dashboard')}
             style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', color: 'var(--color-text-primary)', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}

@@ -152,6 +152,7 @@ export interface AppStateData {
   journalPinAnswerHash: string | null
   pinFailedAttempts: number
   pinLockoutUntil:   number | null
+  journalEncryptionToken: string | null
 
   mood:            Record<string, Mood>
   moodLockedUntil: Record<string, string>
@@ -223,6 +224,7 @@ export interface AppActions {
   setJournalSecurity: (hash: string, question: string, answerHash: string) => void
   recordPinFailure:   () => void
   resetPinFailures:   () => void
+  setJournalEncryptionToken: (token: string | null) => void
 
   // Config
   setConfig:    (updates: Partial<AppConfig>) => void
