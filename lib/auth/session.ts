@@ -67,7 +67,8 @@ export async function createSession(userId: string, email: string, displayName?:
   jar.set('kp_uid', userId, { httpOnly: false, secure, expires: expiresAt, sameSite: 'lax', path: '/' })
 
   // Readable by JS — user's display name for the UI (not a secret)
-  const name = displayName || displayNameFromEmail(email)
+  let name = displayName || displayNameFromEmail(email)
+  try { name = decodeURIComponent(name) } catch {} // guard against double-encoding from OAuth providers
   jar.set('kp_display', encodeURIComponent(name), { httpOnly: false, secure, expires: expiresAt, sameSite: 'lax', path: '/' })
 }
 
