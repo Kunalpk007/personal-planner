@@ -12,10 +12,22 @@ async function firebaseLogin(email: string, password: string): Promise<string> {
   return cred.user.getIdToken()
 }
 
-async function firebaseGoogleLogin(): Promise<string> {
-  const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth')
-  const { getClientAuth }                       = await import('@/lib/firebase/client')
-  const cred = await signInWithPopup(getClientAuth(), new GoogleAuthProvider())
+function isMobile() {
+  return typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+}
+
+async function firebaseGoogleLogin(useRedirect: boolean): Promise<string> {
+  const { signInWithPopup, signInWithRedirect, GoogleAuthProvider } = await import('firebase/auth')
+  const { getClientAuth }                                           = await import('@/lib/firebase/client')
+  const auth     = getClientAuth()
+  const provider = new GoogleAuthProvider()
+
+  if (useRedirect) {
+    await signInWithRedirect(auth, provider)
+    return ''
+  }
+
+  const cred = await signInWithPopup(auth, provider)
   return cred.user.getIdToken()
 }
 
@@ -40,6 +52,12 @@ function firebaseError(err: unknown): string {
     return 'Too many failed attempts. Try again later or reset your password.'
   if (code === 'auth/user-disabled')
     return 'This account has been disabled.'
+  if (code === 'auth/popup-blocked')        return 'Sign-in popup was blocked. Please allow popups or try again.'
+  if (code === 'auth/operation-not-allowed') return 'Google sign-in is not enabled. Contact the app owner.'
+  if (code === 'auth/unauthorized-domain')  return 'This domain is not authorized for sign-in in Firebase Console.'
+  if (code === 'auth/network-request-failed') return 'Network error. Check your internet connection.'
+  if (code === 'auth/account-exists-with-different-credential')
+    return 'An account already exists with this email using a different sign-in method.'
   return 'Sign-in failed. Please try again.'
 }
 
@@ -54,7 +72,25 @@ function LoginForm() {
   const mounted  = useRef(true)
   const ssoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  useEffect(() => { return () => { mounted.current = false; clearTimeout(ssoTimer.current) } }, [])
+  useEffect(() => {
+    async function checkRedirectResult() {
+      try {
+        const { getRedirectResult } = await import('firebase/auth')
+        const { getClientAuth }     = await import('@/lib/firebase/client')
+        const cred = await getRedirectResult(getClientAuth())
+        if (cred) {
+          const idToken = await cred.user.getIdToken()
+          await exchangeToken(idToken)
+          router.push(from)
+        }
+      } catch (err) {
+        const code = (err as { code?: string }).code ?? ''
+        if (code !== 'auth/popup-closed-by-user') setError(firebaseError(err))
+      }
+    }
+    checkRedirectResult()
+    return () => { mounted.current = false; clearTimeout(ssoTimer.current) }
+  }, [])
 
   const firebaseEnabled = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY
 
@@ -90,12 +126,15 @@ function LoginForm() {
   async function handleGoogle() {
     setError('')
     setSsoLoad(true)
+    const redirect = isMobile()
     ssoTimer.current = setTimeout(() => { if (mounted.current) setSsoLoad(false) }, 30000)
     try {
-      const idToken = await firebaseGoogleLogin()
+      const idToken = await firebaseGoogleLogin(redirect)
       clearTimeout(ssoTimer.current)
-      await exchangeToken(idToken)
-      router.push(from)
+      if (!redirect) {
+        await exchangeToken(idToken)
+        router.push(from)
+      }
     } catch (err) {
       clearTimeout(ssoTimer.current)
       const code = (err as { code?: string }).code ?? ''
