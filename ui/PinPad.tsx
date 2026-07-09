@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { sha256, verifyPin } from '@/lib/crypto/pin'
+import { hashPin, verifyPinCompat as verifyPin } from '@/lib/crypto/pin'
 import { usePlannerStore } from '@/store'
 import { PIN_LENGTH } from '@/constants/points'
 
@@ -48,7 +48,7 @@ export function PinPad({ mode, storedHash, onSuccess, onCancel, title = 'Journal
 
     setBuf('')
     if (mode === 'set') {
-      const hash = await sha256(next)
+      const hash = await hashPin(next)
       onSuccess(hash)
     } else {
       const ok = storedHash ? await verifyPin(next, storedHash) : true

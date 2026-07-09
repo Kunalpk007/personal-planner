@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  basePts, calcPts, getMoodMult, todayEarned, todayTarget, walletPtsFor, getMinPts,
+  basePts, calcPts, getMoodMult, todayEarned, todayTarget, walletPtsFor, getMinPts, getMoodAdjustedMinPts,
 } from '@/lib/engine/scoring'
 import type { Task, AppConfig } from '@/store/types'
 
@@ -145,6 +145,24 @@ describe('walletPtsFor', () => {
     expect(walletPtsFor(8)).toBe(4)
     expect(walletPtsFor(7)).toBe(3)
     expect(walletPtsFor(1)).toBe(0)
+  })
+})
+
+describe('getMoodAdjustedMinPts', () => {
+  it('returns minPts * moodMot when motivated', () => {
+    expect(getMoodAdjustedMinPts('2024-01-08', 'motivated', CFG)).toBe(84) // round(70 * 1.2)
+  })
+
+  it('returns minPts * moodSick when sick', () => {
+    expect(getMoodAdjustedMinPts('2024-01-08', 'sick', CFG)).toBe(35) // round(70 * 0.5)
+  })
+
+  it('returns minPts unchanged for neutral mood', () => {
+    expect(getMoodAdjustedMinPts('2024-01-08', 'neutral', CFG)).toBe(70)
+  })
+
+  it('adjusts weekendPts for mood', () => {
+    expect(getMoodAdjustedMinPts('2024-01-06', 'motivated', CFG)).toBe(24) // round(20 * 1.2)
   })
 })
 

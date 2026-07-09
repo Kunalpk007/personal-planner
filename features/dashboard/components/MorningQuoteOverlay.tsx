@@ -11,7 +11,7 @@ export function MorningQuoteOverlay({ today }: { today: string }) {
 
   useEffect(() => {
     const hours = new Date().getHours()
-    if (cfg.quoteMorning && hours >= 4 && !morningQuoteShown[today]) {
+    if (cfg.quoteMorning && hours >= 4 && hours < 12 && !morningQuoteShown[today]) {
       setVisible(true)
     }
   }, [today, cfg.quoteMorning, morningQuoteShown])
