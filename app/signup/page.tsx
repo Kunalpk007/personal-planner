@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { signupAction } from '@/app/actions/auth'
-import { signInWithPopup, signInWithRedirect, GoogleAuthProvider, getRedirectResult, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { signInWithPopup, signInWithRedirect, GoogleAuthProvider, createUserWithEmailAndPassword, updateProfile, onAuthStateChanged } from 'firebase/auth'
 import { getClientAuth } from '@/lib/firebase/client'
 
 function isMobile() {
@@ -66,21 +66,32 @@ export default function SignupPage() {
   const ssoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
-    const auth = getClientAuth()
-
-    getRedirectResult(auth).then(cred => {
-      if (!cred || !mounted.current) return
-      cred.user.getIdToken().then(idToken => exchangeToken(idToken)).then(() => {
-        window.location.href = '/dashboard'
-      }).catch(err => {
-        const code = (err as { code?: string }).code ?? ''
-        if (code !== 'auth/popup-closed-by-user') setError(firebaseError(err))
-      })
-    }).catch(err => {
-      const code = (err as { code?: string }).code ?? ''
-      if (code !== 'auth/popup-closed-by-user') setError(firebaseError(err))
-    })
-
+    const pending = sessionStorage.getItem('kp_oauth_pending')
+    if (pending) {
+      sessionStorage.removeItem('kp_oauth_pending')
+      setSso(true)
+      const auth = getClientAuth()
+      const user = auth.currentUser
+      if (user) {
+        user.getIdToken().then(idToken => exchangeToken(idToken)).then(() => {
+          window.location.href = '/dashboard'
+        }).catch(err => {
+          if (mounted.current) { setSso(false); setError(firebaseError(err)) }
+        })
+      } else {
+        const unsubscribe = onAuthStateChanged(auth, (u) => {
+          if (!u) return
+          unsubscribe()
+          if (!mounted.current) return
+          u.getIdToken().then(idToken => exchangeToken(idToken)).then(() => {
+            window.location.href = '/dashboard'
+          }).catch(err => {
+            if (mounted.current) { setSso(false); setError(firebaseError(err)) }
+          })
+        })
+        return () => { unsubscribe(); mounted.current = false; clearTimeout(ssoTimer.current) }
+      }
+    }
     return () => { mounted.current = false; clearTimeout(ssoTimer.current) }
   }, [])
 
@@ -124,6 +135,7 @@ export default function SignupPage() {
     const redirect = isMobile()
     ssoTimer.current = setTimeout(() => { if (mounted.current) setSso(false) }, 30000)
     try {
+      if (redirect) sessionStorage.setItem('kp_oauth_pending', 'true')
       const idToken = await firebaseGoogleSignup(redirect)
       clearTimeout(ssoTimer.current)
       if (!redirect) {
