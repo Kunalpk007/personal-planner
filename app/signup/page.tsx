@@ -3,23 +3,20 @@ import { useState, useRef, useEffect, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { signupAction } from '@/app/actions/auth'
-
-// Firebase sign-up — only invoked in the browser when Firebase is configured
-async function firebaseSignup(email: string, password: string, name: string): Promise<string> {
-  const { createUserWithEmailAndPassword, updateProfile } = await import('firebase/auth')
-  const { getClientAuth }                                 = await import('@/lib/firebase/client')
-  const cred = await createUserWithEmailAndPassword(getClientAuth(), email, password)
-  if (name.trim()) await updateProfile(cred.user, { displayName: name.trim() })
-  return cred.user.getIdToken()
-}
+import { signInWithPopup, signInWithRedirect, GoogleAuthProvider, getRedirectResult, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { getClientAuth } from '@/lib/firebase/client'
 
 function isMobile() {
   return typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
 }
 
+async function firebaseSignup(email: string, password: string, name: string): Promise<string> {
+  const cred = await createUserWithEmailAndPassword(getClientAuth(), email, password)
+  if (name.trim()) await updateProfile(cred.user, { displayName: name.trim() })
+  return cred.user.getIdToken()
+}
+
 async function firebaseGoogleSignup(useRedirect: boolean): Promise<string> {
-  const { signInWithPopup, signInWithRedirect, GoogleAuthProvider } = await import('firebase/auth')
-  const { getClientAuth }                                           = await import('@/lib/firebase/client')
   const auth     = getClientAuth()
   const provider = new GoogleAuthProvider()
 
@@ -69,22 +66,21 @@ export default function SignupPage() {
   const ssoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
-    async function checkRedirectResult() {
-      try {
-        const { getRedirectResult } = await import('firebase/auth')
-        const { getClientAuth }     = await import('@/lib/firebase/client')
-        const cred = await getRedirectResult(getClientAuth())
-        if (cred) {
-          const idToken = await cred.user.getIdToken()
-          await exchangeToken(idToken)
-          router.push('/dashboard')
-        }
-      } catch (err) {
+    const auth = getClientAuth()
+
+    getRedirectResult(auth).then(cred => {
+      if (!cred || !mounted.current) return
+      cred.user.getIdToken().then(idToken => exchangeToken(idToken)).then(() => {
+        window.location.href = '/dashboard'
+      }).catch(err => {
         const code = (err as { code?: string }).code ?? ''
         if (code !== 'auth/popup-closed-by-user') setError(firebaseError(err))
-      }
-    }
-    checkRedirectResult()
+      })
+    }).catch(err => {
+      const code = (err as { code?: string }).code ?? ''
+      if (code !== 'auth/popup-closed-by-user') setError(firebaseError(err))
+    })
+
     return () => { mounted.current = false; clearTimeout(ssoTimer.current) }
   }, [])
 

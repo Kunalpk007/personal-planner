@@ -12,7 +12,8 @@ import { PIN_LENGTH, PIN_LOCKOUT_THRESHOLD } from '@/constants/points'
 import { getBackupFolderName, pickBackupFolder, fsBackupSupported } from '@/lib/persistence/fsBackup'
 import { deleteAllUserData } from '@/lib/firebase/firestore'
 import { getClientAuth } from '@/lib/firebase/client'
-import { deleteUser } from 'firebase/auth'
+import { signOut, deleteUser } from 'firebase/auth'
+import { destroySync } from '@/lib/sync/sync'
 import { setUserScope } from '@/store/userScope'
 import { STORAGE_KEY, INITIAL_STATE } from '@/store/defaults'
 import pkg from '@/package.json'
@@ -112,6 +113,15 @@ export default function SettingsPage() {
       showToast('Deletion failed. Try again.')
     }
     setDeleteBusy(false)
+  }
+
+  async function handleSignOut() {
+    try { await fetch('/api/auth/signout', { method: 'POST' }) } catch {}
+    try { await signOut(getClientAuth()) } catch {}
+    destroySync()
+    setUserScope(null)
+    usePlannerStore.setState({ ...INITIAL_STATE })
+    window.location.replace('/login')
   }
 
   function openPinModal(action: 'set-or-change' | 'remove') {
@@ -282,6 +292,12 @@ export default function SettingsPage() {
 
           <SectionLabel>Account</SectionLabel>
           <SettingCard>
+            <SettingRow label="Sign out" sub="End your current session">
+              <button onClick={handleSignOut}
+                className="px-3.5 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+                Sign out
+              </button>
+            </SettingRow>
             <SettingRow label="Disable account" sub="Clears local data. Cloud data is preserved — sign in again to restore.">
               <button onClick={() => setDisableOpen(true)}
                 className="px-3.5 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">

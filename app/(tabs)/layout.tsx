@@ -8,12 +8,6 @@ import { useOvernightCheck } from '@/hooks/useOvernightCheck'
 import { StoreBootstrap }   from '@/features/auth/StoreBootstrap'
 import { PwaBootstrap }     from '@/features/pwa/PwaBootstrap'
 import { AppShellErrorBoundary } from './AppShellErrorBoundary'
-import { signOut }          from 'firebase/auth'
-import { getClientAuth }    from '@/lib/firebase/client'
-import { usePlannerStore }  from '@/store'
-import { setUserScope }     from '@/store/userScope'
-import { INITIAL_STATE }    from '@/store/defaults'
-import { destroySync }      from '@/lib/sync/sync'
 import { SyncStatusBadge }  from '@/ui/SyncStatusBadge'
 
 function DashboardIcon() {
@@ -87,34 +81,6 @@ const TABS = [
   { href: '/settings',  label: 'Settings' },
 ]
 
-/**
- * Deletes auth cookies directly from the client as a fallback so the user
- * is never stuck in a logged-in state if the server signout API is unreachable.
- */
-function clearClientCookies() {
-  const domain = window.location.hostname
-  const secure = window.location.protocol === 'https:'
-  ;['kp_session', 'kp_uid', 'kp_display'].forEach(name => {
-    document.cookie = `${name}=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:00 GMT${secure ? '; Secure' : ''}; SameSite=Strict`
-    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT${secure ? '; Secure' : ''}; SameSite=Strict`
-  })
-}
-
-async function handleSignOut() {
-  try {
-    await fetch('/api/auth/signout', { method: 'POST' })
-  } catch {
-    clearClientCookies()
-  }
-  try {
-    await signOut(getClientAuth())
-  } catch { /* ignore if Firebase client not initialized */ }
-  destroySync()
-  setUserScope(null)
-  usePlannerStore.setState({ ...INITIAL_STATE })
-  window.location.replace('/login')
-}
-
 function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router   = useRouter()
@@ -153,10 +119,6 @@ function AppShell({ children }: { children: React.ReactNode }) {
             })}
           </div>
           <SyncStatusBadge />
-          <button onClick={() => handleSignOut()} title="Sign out"
-            style={{ fontSize: 12, color: 'var(--color-text-muted)', background: 'none', border: '0.5px solid var(--color-border)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', flexShrink: 0 }}>
-            Sign out
-          </button>
         </div>
       </nav>
 
