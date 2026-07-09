@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { usePlannerStore } from '@/store'
 import { PinPad } from './PinPad'
 import { PinSetup } from './PinSetup'
-import { sha256 } from '@/lib/crypto/pin'
+import { hashPin } from '@/lib/crypto/pin'
 import { showToast } from './Toast'
 import { PIN_LENGTH } from '@/constants/points'
 
@@ -74,7 +74,7 @@ export function PinGate({ children, title = 'Enter PIN' }: PinGateProps) {
                 </button>
                 <button
                   onClick={async () => {
-                    const hash = await sha256(answerInput.trim().toLowerCase())
+                    const hash = await hashPin(answerInput.trim().toLowerCase())
                     if (answerHash && hash === answerHash) {
                       setStep('forgot-reset')
                       setAnswerInput('')

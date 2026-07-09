@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { seedStore } from './helpers'
+import { setupAuthenticatedPage } from './auth'
 import wallet from './fixtures/wallet.json'
 
-test.beforeEach(async ({ page }) => {
-  await seedStore(page, wallet)
+test.beforeEach(async ({ page, context }) => {
+  await setupAuthenticatedPage(page, context, wallet)
   await page.goto('/rewards')
 })
 
@@ -21,6 +21,7 @@ test('redeems a reward from the wallet', async ({ page }) => {
     `xpath=//span[normalize-space(text())="30-min screen-free break"]/ancestor::div[contains(@class,"rounded-")][1]`
   )
   await row.getByRole('button', { name: 'Redeem' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Redeem' }).click()
 
   await expect(page.getByText('🎁 Reward redeemed!')).toBeVisible()
 })

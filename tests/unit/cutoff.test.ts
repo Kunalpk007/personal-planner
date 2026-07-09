@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pad, getDayKey, getPrevDayKey, getWeekMonday, isWeekend, daysBetween } from '@/lib/engine/cutoff'
+import { pad, getDayKey, getPrevDayKey, getWeekMonday, isWeekend, daysBetween, formatDate } from '@/lib/engine/cutoff'
 import type { AppConfig } from '@/store/types'
 
 describe('pad', () => {
@@ -75,6 +75,14 @@ describe('isWeekend', () => {
 
   it('returns false for weekdays', () => {
     expect(isWeekend('2024-01-08')).toBe(false)
+  })
+})
+
+describe('formatDate', () => {
+  it('formats a date string as "Day, DD Mon YYYY"', () => {
+    expect(formatDate('2024-01-01')).toBe('Mon, 1 Jan 2024')
+    expect(formatDate('2024-06-15')).toBe('Sat, 15 Jun 2024')
+    expect(formatDate('2024-12-25')).toBe('Wed, 25 Dec 2024')
   })
 })
 

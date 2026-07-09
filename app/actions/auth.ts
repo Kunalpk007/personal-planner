@@ -3,8 +3,6 @@ import { redirect } from 'next/navigation'
 import { hashPassword, verifyPassword } from '@/lib/auth/password'
 import { createSession, deleteSession }  from '@/lib/auth/session'
 import { findUserByEmail, createUser, updatePassword } from '@/lib/auth/users'
-import { sha256 } from '@/lib/crypto/pin'
-
 export type AuthState = { error?: string; step?: string; question?: string; email?: string } | undefined
 
 // ─── Login ────────────────────────────────────────────────────────────────────
@@ -54,7 +52,7 @@ export async function signupAction(
   if (existing) return { error: 'An account with this email already exists.' }
 
   const passwordHash       = await hashPassword(password)
-  const securityAnswerHash = await sha256(answer.toLowerCase())
+  const securityAnswerHash = await hashPassword(answer.toLowerCase())
 
   const user = await createUser(email, passwordHash, question, securityAnswerHash)
   await createSession(user.id, user.email, name || undefined)
@@ -103,7 +101,7 @@ export async function resetPasswordAction(
   const user = await findUserByEmail(email)
   if (!user) return { error: 'Account not found.' }
 
-  const answerHash = await sha256(answer.toLowerCase())
+  const answerHash = await hashPassword(answer.toLowerCase())
   if (answerHash !== user.securityAnswerHash) {
     return { error: 'Incorrect answer. Try again.' }
   }

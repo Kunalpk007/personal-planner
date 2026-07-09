@@ -1,47 +1,118 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Toast }            from '@/ui/Toast'
 import { ManagerModal }     from '@/ui/ManagerModal'
 import { ThemeApplier }     from '@/ui/ThemeApplier'
 import { useOvernightCheck } from '@/hooks/useOvernightCheck'
 import { StoreBootstrap }   from '@/features/auth/StoreBootstrap'
+import { PwaBootstrap }     from '@/features/pwa/PwaBootstrap'
+import { AppShellErrorBoundary } from './AppShellErrorBoundary'
 import { signOut }          from 'firebase/auth'
 import { getClientAuth }    from '@/lib/firebase/client'
 import { usePlannerStore }  from '@/store'
 import { setUserScope }     from '@/store/userScope'
 import { INITIAL_STATE }    from '@/store/defaults'
+import { destroySync }      from '@/lib/sync/sync'
 import { SyncStatusBadge }  from '@/ui/SyncStatusBadge'
 
+function DashboardIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  )
+}
+function TasksIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  )
+}
+function JournalIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      <line x1="8" y1="7" x2="16" y2="7" />
+      <line x1="8" y1="11" x2="14" y2="11" />
+    </svg>
+  )
+}
+function RewardsIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M8 12l2 2 4-4" />
+    </svg>
+  )
+}
+function HistoryIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  )
+}
+function SettingsIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  )
+}
+
+const TAB_ICONS: Record<string, React.ComponentType> = {
+  '/dashboard': DashboardIcon,
+  '/tasks': TasksIcon,
+  '/journal': JournalIcon,
+  '/rewards': RewardsIcon,
+  '/history': HistoryIcon,
+  '/settings': SettingsIcon,
+}
+
 const TABS = [
-  { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { href: '/tasks',     label: 'Tasks',     icon: '✅' },
-  { href: '/journal',   label: 'Journal',   icon: '📓' },
-  { href: '/rewards',   label: 'Rewards',   icon: '🎁' },
-  { href: '/history',   label: 'History',   icon: '📅' },
-  { href: '/settings',  label: 'Settings',  icon: '⚙️' },
+  { href: '/dashboard', label: 'Home' },
+  { href: '/tasks',     label: 'Tasks' },
+  { href: '/journal',   label: 'Journal' },
+  { href: '/rewards',   label: 'Rewards' },
+  { href: '/history',   label: 'History' },
+  { href: '/settings',  label: 'Settings' },
 ]
 
 /**
- * Rendered only after the store is hydrated with the correct user's data.
- * Keeps useOvernightCheck away from the empty-store initial render.
+ * Deletes auth cookies directly from the client as a fallback so the user
+ * is never stuck in a logged-in state if the server signout API is unreachable.
  */
+function clearClientCookies() {
+  const domain = window.location.hostname
+  const secure = window.location.protocol === 'https:'
+  ;['kp_session', 'kp_uid', 'kp_display'].forEach(name => {
+    document.cookie = `${name}=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:00 GMT${secure ? '; Secure' : ''}; SameSite=Strict`
+    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT${secure ? '; Secure' : ''}; SameSite=Strict`
+  })
+}
+
 async function handleSignOut() {
   try {
     await fetch('/api/auth/signout', { method: 'POST' })
-  } catch { /* ignore network errors — cookie will still be deleted */ }
+  } catch {
+    clearClientCookies()
+  }
   try {
     await signOut(getClientAuth())
   } catch { /* ignore if Firebase client not initialized */ }
-  // Scope → null so the persist write goes to the __anon__ key,
-  // leaving this user's scoped localStorage data untouched for their next login.
+  destroySync()
   setUserScope(null)
   usePlannerStore.setState({ ...INITIAL_STATE })
-  // Full page reload instead of router.push — Next.js 16 client-side navigation
-  // keeps the JS bundle alive (Zustand module stays in memory), so router.push
-  // cannot guarantee isolation between users.  A hard reload re-initialises all
-  // modules and the new user's StoreBootstrap starts from a clean slate.
-  window.location.href = '/login'
+  window.location.replace('/login')
 }
 
 function AppShell({ children }: { children: React.ReactNode }) {
@@ -68,15 +139,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
             Personal Planner
           </button>
           <div className="tab-group desktop-tabs" style={{ border: 'none', marginBottom: 0, flex: 1 }}>
-            {TABS.map(tab => (
-              <button
-                key={tab.href}
-                onClick={() => router.push(tab.href)}
-                className={`tab-item ${pathname === tab.href ? 'active' : ''}`}
-              >
-                <span className="mr-1.5">{tab.icon}</span>{tab.label}
-              </button>
-            ))}
+            {TABS.map(tab => {
+              const emojiMap: Record<string, string> = { '/dashboard': '🏠', '/tasks': '✅', '/journal': '📓', '/rewards': '🎁', '/history': '📅', '/settings': '⚙️' }
+              return (
+                <button
+                  key={tab.href}
+                  onClick={() => router.push(tab.href)}
+                  className={`tab-item ${pathname === tab.href ? 'active' : ''}`}
+                >
+                  <span className="mr-1.5">{emojiMap[tab.href]}</span>{tab.label}
+                </button>
+              )
+            })}
           </div>
           <SyncStatusBadge />
           <button onClick={() => handleSignOut()} title="Sign out"
@@ -86,31 +160,43 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      <div className="page-container">
+      <main className="page-container">
         {children}
-      </div>
+      </main>
 
       <nav className="bottom-nav">
-        {TABS.map(tab => (
-          <button
-            key={tab.href}
-            onClick={() => router.push(tab.href)}
-            className={`bottom-tab ${pathname === tab.href ? 'active' : ''}`}
-          >
-            <span className="bottom-tab__icon">{tab.icon}</span>
-          </button>
-        ))}
+        {TABS.map(tab => {
+          const Icon = TAB_ICONS[tab.href]
+          const active = pathname === tab.href
+          return (
+            <button
+              key={tab.href}
+              onClick={() => router.push(tab.href)}
+              className={`bottom-tab ${active ? 'active' : ''}`}
+            >
+              <Icon />
+              <span className="bottom-tab__label">{tab.label}</span>
+            </button>
+          )
+        })}
       </nav>
 
       <Toast />
       <ManagerModal />
+      <PwaBootstrap />
     </>
   )
 }
 
 export default function TabsLayout({ children }: { children: React.ReactNode }) {
   const [storeReady, setStoreReady] = useState(false)
+  const [timedOut, setTimedOut] = useState(false)
   const onReady = useCallback(() => setStoreReady(true), [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => setTimedOut(true), 10000)
+    return () => clearTimeout(timer)
+  }, [])
 
   return (
     <>
@@ -118,7 +204,28 @@ export default function TabsLayout({ children }: { children: React.ReactNode }) 
       <StoreBootstrap onReady={onReady} />
 
       {storeReady ? (
-        <AppShell>{children}</AppShell>
+        <AppShellErrorBoundary>
+          <AppShell>{children}</AppShell>
+        </AppShellErrorBoundary>
+      ) : timedOut ? (
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+          padding: 40,
+          color: 'var(--color-text-muted)',
+          fontSize: 13,
+          textAlign: 'center',
+        }}>
+          <p>Loading is taking longer than expected.</p>
+          <button onClick={() => window.location.href = '/login'}
+            className="btn-secondary" style={{ fontSize: 13 }}>
+            Back to login
+          </button>
+        </div>
       ) : (
         <div style={{
           minHeight: '100vh',

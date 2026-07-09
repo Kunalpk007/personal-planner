@@ -1,9 +1,26 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { setUserScope, getUserScope, scopedStorageKey } from '@/store/userScope'
+import { setUserScope, getUserScope, scopedStorageKey, readUidFromCookieSync } from '@/store/userScope'
 
 beforeEach(() => {
   // Reset to null between tests
   setUserScope(null)
+})
+
+describe('readUidFromCookieSync', () => {
+  it('returns null when no kp_uid cookie exists', () => {
+    globalThis.document.cookie = ''
+    expect(readUidFromCookieSync()).toBeNull()
+  })
+
+  it('returns the uid when kp_uid cookie is set', () => {
+    globalThis.document.cookie = 'some=val; kp_uid=test-user-789; other=thing'
+    expect(readUidFromCookieSync()).toBe('test-user-789')
+  })
+
+  it('decodes URI-encoded cookie values', () => {
+    globalThis.document.cookie = 'kp_uid=user%40example.com'
+    expect(readUidFromCookieSync()).toBe('user@example.com')
+  })
 })
 
 describe('setUserScope / getUserScope', () => {

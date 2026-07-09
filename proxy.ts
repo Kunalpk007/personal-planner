@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { decrypt } from '@/lib/auth/session'
+import { rejectCrossOrigin } from '@/lib/security/csrf'
 
 const PUBLIC_PATHS = ['/login', '/signup', '/reset-password']
 
@@ -18,6 +19,13 @@ export default async function proxy(req: NextRequest) {
   const isPublic = PUBLIC_PATHS.some(p => pathname.startsWith(p))
   const isApi    = pathname.startsWith('/api')
 
+  // ── CSRF check for state-changing requests ──────────────────────────────────
+  const unsafeMethods = new Set(['POST', 'PUT', 'DELETE', 'PATCH'])
+  if (isApi && unsafeMethods.has(req.method.toUpperCase())) {
+    const csrfResp = rejectCrossOrigin(req)
+    if (csrfResp) return csrfResp
+  }
+
   const uid = await resolveUid(req)
 
   if (uid && uid !== 'expired' && isPublic) {
@@ -35,5 +43,5 @@ export default async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|ico|webp|jpg|jpeg)$).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|sw.js|manifest\\.(?:json|webmanifest)|.*\\.(?:png|svg|ico|webp|jpg|jpeg)$).*)'],
 }

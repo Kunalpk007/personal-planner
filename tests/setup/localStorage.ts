@@ -14,3 +14,21 @@ class MemoryStorage implements Storage {
 if (typeof globalThis.localStorage === 'undefined') {
   globalThis.localStorage = new MemoryStorage()
 }
+
+// Mock document.cookie for userScope cookie sync tests
+if (typeof globalThis.document === 'undefined') {
+  let cookieStr = ''
+  Object.defineProperty(globalThis, 'document', {
+    value: {
+      cookie: cookieStr,
+    },
+    writable: false,
+    configurable: true,
+  })
+  // Allow tests to set document.cookie by redefining it
+  Object.defineProperty(globalThis.document, 'cookie', {
+    get() { return cookieStr },
+    set(v: string) { cookieStr = v },
+    configurable: true,
+  })
+}

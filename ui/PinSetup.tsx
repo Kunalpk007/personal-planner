@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { sha256 } from '@/lib/crypto/pin'
+import { hashPin } from '@/lib/crypto/pin'
 import { PinPad } from './PinPad'
 
 interface PinSetupProps {
@@ -28,7 +28,7 @@ export function PinSetup({ onComplete, onCancel, title = 'Set up PIN' }: PinSetu
       setError('Both fields are required.')
       return
     }
-    const answerHash = await sha256(answer.trim().toLowerCase())
+    const answerHash = await hashPin(answer.trim().toLowerCase())
     onComplete(pinHash!, question.trim(), answerHash)
   }
 

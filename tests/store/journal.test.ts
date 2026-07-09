@@ -73,6 +73,19 @@ describe('deleteJournalEntry', () => {
   })
 })
 
+describe('setJournalEncryptionToken', () => {
+  it('stores the encryption token', () => {
+    usePlannerStore.getState().setJournalEncryptionToken('token-xyz')
+    expect(usePlannerStore.getState().journalEncryptionToken).toBe('token-xyz')
+  })
+
+  it('clears the encryption token when null is passed', () => {
+    usePlannerStore.getState().setJournalEncryptionToken('token-xyz')
+    usePlannerStore.getState().setJournalEncryptionToken(null)
+    expect(usePlannerStore.getState().journalEncryptionToken).toBeNull()
+  })
+})
+
 describe('setJournalPin / setJournalSecurity / recordPinFailure / resetPinFailures', () => {
   it('sets a journal PIN hash', () => {
     usePlannerStore.getState().setJournalPin('abc123')

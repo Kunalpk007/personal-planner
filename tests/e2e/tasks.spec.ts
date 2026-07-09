@@ -1,14 +1,13 @@
 import { test, expect, type Page } from '@playwright/test'
-import { seedStore } from './helpers'
+import { setupAuthenticatedPage } from './auth'
 import fixture from './fixtures/today-tasks.json'
 
-/** Locates a task row by its visible title text. */
 function taskRow(page: Page, title: string) {
   return page.locator(`xpath=//span[normalize-space(text())="${title}"]/ancestor::div[contains(@class,"rounded-")][1]`)
 }
 
-test.beforeEach(async ({ page }) => {
-  await seedStore(page, fixture)
+test.beforeEach(async ({ page, context }) => {
+  await setupAuthenticatedPage(page, context, fixture)
   await page.goto('/tasks')
 })
 

@@ -142,7 +142,7 @@ export default function SettingsPage() {
       </div>
 
       {tab === 'general' && (
-        <div>
+        <div className="pb-20">
           <SectionLabel>Appearance</SectionLabel>
           <SettingCard>
             <SettingRow label="Theme" sub="Takes effect immediately">
@@ -260,23 +260,6 @@ export default function SettingsPage() {
             </SettingRow>
           </SettingCard>
 
-          {/* Sticky save bar */}
-          <div className="sticky bottom-[64px] sm:bottom-2 z-10 mt-4">
-            <button
-              onClick={saveSettings}
-              disabled={!dirty}
-              className="w-full py-3 rounded-[10px] text-sm font-semibold border-[1.5px] transition-all disabled:opacity-40"
-              style={{
-                background:  dirty ? 'var(--green-bg)' : 'var(--bg3)',
-                color:       dirty ? 'var(--green)'    : 'var(--text3)',
-                borderColor: dirty ? 'var(--green-mid)': 'var(--border2)',
-                cursor:      dirty ? 'pointer' : 'not-allowed',
-              }}
-            >
-              💾 {dirty ? 'Save Settings' : 'Settings Saved'}
-            </button>
-          </div>
-
           <SectionLabel>Zone management</SectionLabel>
           <div className="mb-3">
             {zones.map(z => (
@@ -297,19 +280,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="mt-4 pt-3.5 border-t border-[var(--border)] flex gap-2.5 flex-wrap">
-            <button onClick={() => exportJSON(state)} className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--blue-bg)] text-[var(--blue)] border border-[#4A9EE0]">⬇ Export backup</button>
-            <label className="px-3.5 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] cursor-pointer">
-              ⬆ Import backup
-              <input type="file" accept=".json" className="hidden" onChange={e => {
-                const f = e.target.files?.[0]; if (!f) return
-                setPendingImportFile(f)
-                setImportOpen(true)
-                e.target.value = ''
-              }} />
-            </label>
-          </div>
-
           <SectionLabel>Account</SectionLabel>
           <SettingCard>
             <SettingRow label="Disable account" sub="Clears local data. Cloud data is preserved — sign in again to restore.">
@@ -326,9 +296,26 @@ export default function SettingsPage() {
             </SettingRow>
           </SettingCard>
 
-          <div className="text-[11px] text-[var(--text3)] mt-4 text-center">
-            Kunal&apos;s Planner v{pkg.version}
-          </div>
+          <div className="pb-24"></div>
+        </div>
+      )}
+
+      {/* Fixed bottom bar */}
+      {tab === 'general' && (
+        <div className="fixed bottom-[64px] sm:bottom-2 z-10" style={{ left: '50%', transform: 'translateX(-50%)', width: 'min(860px, calc(100vw - 2rem))' }}>
+          <button
+            onClick={saveSettings}
+            disabled={!dirty}
+            className="w-full py-3 rounded-[10px] text-sm font-semibold border-[1.5px] transition-all disabled:opacity-40"
+            style={{
+              background:  dirty ? 'var(--green-bg)' : 'var(--bg3)',
+              color:       dirty ? 'var(--green)'    : 'var(--text3)',
+              borderColor: dirty ? 'var(--green-mid)': 'var(--border2)',
+              cursor:      dirty ? 'pointer' : 'not-allowed',
+            }}
+          >
+            💾 {dirty ? 'Save Settings' : 'Saved'}
+          </button>
         </div>
       )}
 

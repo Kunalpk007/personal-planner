@@ -5,9 +5,14 @@ import { cookies } from 'next/headers'
 const COOKIE_NAME = 'kp_session'
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
+const MIN_SECRET_LENGTH = 32
+
 function getKey() {
   const secret = process.env.SESSION_SECRET
   if (!secret) throw new Error('SESSION_SECRET env var is not set')
+  if (secret.length < MIN_SECRET_LENGTH) {
+    throw new Error(`SESSION_SECRET must be at least ${MIN_SECRET_LENGTH} characters (got ${secret.length})`)
+  }
   return new TextEncoder().encode(secret)
 }
 
@@ -54,7 +59,9 @@ export async function createSession(userId: string, email: string, displayName?:
   const secure = process.env.NODE_ENV === 'production'
 
   // httpOnly JWT — the real auth token, JS cannot read this
-  jar.set(COOKIE_NAME, token, { httpOnly: true, secure, expires: expiresAt, sameSite: 'lax', path: '/' })
+  // sameSite: 'strict' prevents the browser from sending the cookie on
+  // cross-site requests, mitigating CSRF on state-changing API calls.
+  jar.set(COOKIE_NAME, token, { httpOnly: true, secure, expires: expiresAt, sameSite: 'strict', path: '/' })
 
   // Readable by JS — used to namespace localStorage per user (not a secret)
   jar.set('kp_uid', userId, { httpOnly: false, secure, expires: expiresAt, sameSite: 'lax', path: '/' })

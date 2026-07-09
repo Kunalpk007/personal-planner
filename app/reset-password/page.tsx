@@ -221,7 +221,7 @@ export default function ResetPasswordPage() {
 
   // ── Custom auth: Step 2 - Answer question + set password ──
   return (
-    <div className="auth-shell">
+    <main className="auth-shell">
       <div className="auth-card">
         <div className="auth-logo">K</div>
         <h1 className="auth-title">Security question</h1>
@@ -285,6 +285,6 @@ export default function ResetPasswordPage() {
           <Link href="/login" className="auth-link">← Back to sign in</Link>
         </p>
       </div>
-    </div>
+    </main>
   )
 }

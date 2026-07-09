@@ -87,14 +87,19 @@ export function StoreBootstrap({ onReady }: Props) {
     const uid: string | null = readCookie('kp_uid')
 
     if (!uid) {
-      const legacyRaw = localStorage.getItem(STORAGE_KEY)
-      if (legacyRaw) {
-        const anonKey = `${STORAGE_KEY}:__anon__`
-        if (!hasMeaningfulData(localStorage.getItem(anonKey))) {
-          localStorage.setItem(anonKey, legacyRaw)
+      try {
+        const legacyRaw = localStorage.getItem(STORAGE_KEY)
+        if (legacyRaw) {
+          const anonKey = `${STORAGE_KEY}:__anon__`
+          if (!hasMeaningfulData(localStorage.getItem(anonKey))) {
+            localStorage.setItem(anonKey, legacyRaw)
+          }
         }
+        usePlannerStore.persist.rehydrate()
+      } catch (e) {
+        console.error('[bootstrap] anonymous init error:', e)
+        usePlannerStore.setState({ ...INITIAL_STATE })
       }
-      usePlannerStore.persist.rehydrate()
       onReady()
       return
     }
@@ -102,67 +107,76 @@ export function StoreBootstrap({ onReady }: Props) {
     const safeUid: string = uid
 
     async function init() {
-      setUserScope(safeUid)
-      ensureScopedKey(safeUid)
-
-      let savedState: Record<string, unknown> | null = null
       try {
-        const raw = localStorage.getItem(scopedStorageKey(STORAGE_KEY))
-        if (raw) {
-          const parsed = JSON.parse(raw)
-          savedState = parsed?.state ?? parsed
-        }
-      } catch {}
+        setUserScope(safeUid)
+        ensureScopedKey(safeUid)
 
-      const firebaseEnabled = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY
-      let cloudData: Record<string, unknown> | null = null
-      let journalEntries: Record<string, string> = {}
-
-      if (firebaseEnabled) {
-        const authReady = await waitForAuth()
-        if (!authReady) {
-          console.warn('[bootstrap] Firebase Auth not ready — skipping cloud load')
-        } else {
-          try {
-            cloudData = await loadFromFirestore(safeUid)
-            const hasEmbeddedJournal = cloudData && (cloudData as Record<string, unknown>)['journal']
-            if (hasEmbeddedJournal) {
-              await migrateJournalFromState(safeUid, cloudData!)
-              delete (cloudData as Record<string, unknown>)['journal']
-            }
-            journalEntries = await loadJournalEntries(safeUid)
-          } catch (e) {
-            console.error('[bootstrap] Firestore load error:', e)
+        let savedState: Record<string, unknown> | null = null
+        try {
+          const raw = localStorage.getItem(scopedStorageKey(STORAGE_KEY))
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            savedState = parsed?.state ?? parsed
           }
-        }
-      }
+        } catch {}
 
-      if (cloudData) {
-        usePlannerStore.setState({ ...INITIAL_STATE, ...cloudData, journal: journalEntries })
-      } else {
-        usePlannerStore.setState({ ...INITIAL_STATE, ...(savedState ?? {}) })
-      }
+        const firebaseEnabled = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY
+        let cloudData: Record<string, unknown> | null = null
+        let journalEntries: Record<string, string> = {}
 
-      if (firebaseEnabled && !cloudData) {
-        const snap = usePlannerStore.getState()
-        if (snap.history?.length || snap.tasks?.length) {
+        if (firebaseEnabled) {
           const authReady = await waitForAuth()
-          if (authReady) {
+          if (!authReady) {
+            console.warn('[bootstrap] Firebase Auth not ready — skipping cloud load')
+          } else {
             try {
-              const { journal: _j, ...rest } = snap as unknown as Record<string, unknown>
-              await saveToFirestore(safeUid, rest)
+              cloudData = await loadFromFirestore(safeUid)
+              const hasEmbeddedJournal = cloudData && (cloudData as Record<string, unknown>)['journal']
+              if (hasEmbeddedJournal) {
+                await migrateJournalFromState(safeUid, cloudData!)
+                delete (cloudData as Record<string, unknown>)['journal']
+              }
+              journalEntries = await loadJournalEntries(safeUid)
             } catch (e) {
-              console.error('[bootstrap] initial Firestore push error:', e)
+              console.error('[bootstrap] Firestore load error:', e)
             }
           }
         }
-      }
 
-      if (firebaseEnabled) {
-        initSync(safeUid)
-      }
+        if (cloudData) {
+          usePlannerStore.setState({ ...INITIAL_STATE, ...cloudData, journal: journalEntries })
+        } else {
+          usePlannerStore.setState({ ...INITIAL_STATE, ...(savedState ?? {}) })
+        }
 
-      onReady()
+        if (firebaseEnabled && !cloudData) {
+          const snap = usePlannerStore.getState()
+          if (snap.history?.length || snap.tasks?.length) {
+            const authReady = await waitForAuth()
+            if (authReady) {
+              try {
+                const { journal: _j, ...rest } = snap as unknown as Record<string, unknown>
+                await saveToFirestore(safeUid, rest)
+              } catch (e) {
+                console.error('[bootstrap] initial Firestore push error:', e)
+              }
+            }
+          }
+        }
+
+        if (firebaseEnabled) {
+          try {
+            initSync(safeUid)
+          } catch (e) {
+            console.error('[bootstrap] sync init error:', e)
+          }
+        }
+      } catch (e) {
+        console.error('[bootstrap] init failed — falling back to partial state:', e)
+        usePlannerStore.setState({ ...INITIAL_STATE })
+      } finally {
+        onReady()
+      }
     }
 
     init()

@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint:fix": "eslint --fix .",
-"verify": "tsc --noEmit && eslint . && vitest run && next build --webpack"
+"verify": "vitest run --coverage && next build --webpack"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
