@@ -13,10 +13,22 @@ async function firebaseSignup(email: string, password: string, name: string): Pr
   return cred.user.getIdToken()
 }
 
-async function firebaseGoogleSignup(): Promise<string> {
-  const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth')
-  const { getClientAuth }                       = await import('@/lib/firebase/client')
-  const cred = await signInWithPopup(getClientAuth(), new GoogleAuthProvider())
+function isMobile() {
+  return typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+}
+
+async function firebaseGoogleSignup(useRedirect: boolean): Promise<string> {
+  const { signInWithPopup, signInWithRedirect, GoogleAuthProvider } = await import('firebase/auth')
+  const { getClientAuth }                                           = await import('@/lib/firebase/client')
+  const auth     = getClientAuth()
+  const provider = new GoogleAuthProvider()
+
+  if (useRedirect) {
+    await signInWithRedirect(auth, provider)
+    return ''
+  }
+
+  const cred = await signInWithPopup(auth, provider)
   return cred.user.getIdToken()
 }
 
@@ -26,7 +38,10 @@ async function exchangeToken(idToken: string): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ idToken }),
   })
-  if (!res.ok) throw new Error('Session creation failed')
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.error || 'Session creation failed')
+  }
 }
 
 function firebaseError(err: unknown): string {
@@ -36,7 +51,13 @@ function firebaseError(err: unknown): string {
   if (code === 'auth/invalid-email')        return 'Please enter a valid email address.'
   if (code === 'auth/invalid-api-key' || code === 'auth/app-not-authorized')
     return 'Firebase is not configured. Ask the app owner to set up authentication.'
-  return `Sign-up failed (${code || 'unknown error'}). Please try again.`
+  if (code === 'auth/popup-blocked')        return 'Sign-in popup was blocked. Please allow popups or try signing in with email.'
+  if (code === 'auth/operation-not-allowed') return 'Google sign-in is not enabled. Contact the app owner.'
+  if (code === 'auth/unauthorized-domain')  return 'This domain is not authorized for sign-in in Firebase Console.'
+  if (code === 'auth/network-request-failed') return 'Network error. Check your internet connection.'
+  if (code === 'auth/account-exists-with-different-credential')
+    return 'An account already exists with this email using a different sign-in method.'
+  return `Sign-up failed. Please try again.`
 }
 
 export default function SignupPage() {
@@ -47,7 +68,25 @@ export default function SignupPage() {
   const mounted  = useRef(true)
   const ssoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  useEffect(() => { return () => { mounted.current = false; clearTimeout(ssoTimer.current) } }, [])
+  useEffect(() => {
+    async function checkRedirectResult() {
+      try {
+        const { getRedirectResult } = await import('firebase/auth')
+        const { getClientAuth }     = await import('@/lib/firebase/client')
+        const cred = await getRedirectResult(getClientAuth())
+        if (cred) {
+          const idToken = await cred.user.getIdToken()
+          await exchangeToken(idToken)
+          router.push('/dashboard')
+        }
+      } catch (err) {
+        const code = (err as { code?: string }).code ?? ''
+        if (code !== 'auth/popup-closed-by-user') setError(firebaseError(err))
+      }
+    }
+    checkRedirectResult()
+    return () => { mounted.current = false; clearTimeout(ssoTimer.current) }
+  }, [])
 
   const firebaseEnabled = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY
 
@@ -86,12 +125,16 @@ export default function SignupPage() {
   async function handleGoogle() {
     setError('')
     setSso(true)
+    const redirect = isMobile()
     ssoTimer.current = setTimeout(() => { if (mounted.current) setSso(false) }, 30000)
     try {
-      const idToken = await firebaseGoogleSignup()
+      const idToken = await firebaseGoogleSignup(redirect)
       clearTimeout(ssoTimer.current)
-      await exchangeToken(idToken)
-      router.push('/dashboard')
+      if (!redirect) {
+        await exchangeToken(idToken)
+        router.push('/dashboard')
+      }
+      // redirect mode: page will navigate away, no further action needed
     } catch (err) {
       clearTimeout(ssoTimer.current)
       const code = (err as { code?: string }).code ?? ''
