@@ -13,7 +13,7 @@ import { getBackupFolderName, pickBackupFolder, fsBackupSupported } from '@/lib/
 import { deleteAllUserData } from '@/lib/firebase/firestore'
 import { getClientAuth } from '@/lib/firebase/client'
 import { signOut, deleteUser } from 'firebase/auth'
-import { destroySync } from '@/lib/sync/sync'
+import { syncNow, destroySync } from '@/lib/sync/sync'
 import { setUserScope } from '@/store/userScope'
 import { STORAGE_KEY, INITIAL_STATE } from '@/store/defaults'
 import pkg from '@/package.json'
@@ -116,9 +116,10 @@ export default function SettingsPage() {
   }
 
   async function handleSignOut() {
+    try { await syncNow() } catch {}
+    destroySync()
     try { await fetch('/api/auth/signout', { method: 'POST' }) } catch {}
     try { await signOut(getClientAuth()) } catch {}
-    destroySync()
     setUserScope(null)
     usePlannerStore.setState({ ...INITIAL_STATE })
     window.location.replace('/login')

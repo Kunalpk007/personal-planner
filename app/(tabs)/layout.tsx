@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Toast }            from '@/ui/Toast'
 import { ManagerModal }     from '@/ui/ManagerModal'
@@ -82,58 +82,107 @@ const TABS = [
 ]
 
 function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
-  const router   = useRouter()
+  const pathname  = usePathname()
+  const router    = useRouter()
+  const prevPath  = useRef(pathname)
+  const touchX    = useRef(0)
+  const touchY    = useRef(0)
+  const [navigating, setNavigating] = useState(false)
+  const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
+  const [animKey, setAnimKey] = useState(0)
+  const [optimisticTab, setOptimisticTab] = useState<string | null>(null)
 
   useOvernightCheck()
 
+  // Detect route change → play slide animation + clear loading state
+  useEffect(() => {
+    if (prevPath.current === pathname) return
+    const prevIdx = TABS.findIndex(t => t.href === prevPath.current)
+    const currIdx = TABS.findIndex(t => t.href === pathname)
+    if (prevIdx >= 0 && currIdx >= 0) {
+      setSlideDir(currIdx > prevIdx ? 'right' : 'left')
+      setAnimKey(k => k + 1)
+    }
+    setNavigating(false)
+    setOptimisticTab(null)
+    prevPath.current = pathname
+  }, [pathname])
+
+  const navigateTab = useCallback((href: string) => {
+    if (href === pathname) return
+    setNavigating(true)
+    setOptimisticTab(href)
+    const currIdx = TABS.findIndex(t => t.href === href)
+    const prevIdx = TABS.findIndex(t => t.href === pathname)
+    if (prevIdx >= 0 && currIdx >= 0) {
+      setSlideDir(currIdx > prevIdx ? 'right' : 'left')
+    }
+    router.push(href)
+  }, [pathname, router])
+
+  // Touch swipe handlers
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    touchX.current = e.touches[0].clientX
+    touchY.current = e.touches[0].clientY
+  }, [])
+  const onTouchEnd = useCallback((e: React.TouchEvent) => {
+    const dx = e.changedTouches[0].clientX - touchX.current
+    const dy = e.changedTouches[0].clientY - touchY.current
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+    const idx = TABS.findIndex(t => t.href === pathname)
+    if (dx < 0 && idx < TABS.length - 1) navigateTab(TABS[idx + 1].href)
+    else if (dx > 0 && idx > 0) navigateTab(TABS[idx - 1].href)
+  }, [pathname, navigateTab])
+
   return (
     <>
-      <nav style={{
-        position: 'sticky', top: 0, zIndex: 50,
-        background: 'var(--nav-bg)', backdropFilter: 'blur(12px)',
-        borderBottom: '0.5px solid var(--color-border)',
-        padding: '0 var(--spacing-page)',
-        overflowX: 'auto',
-        scrollbarWidth: 'none',
-      }} className="banner-scroll">
-        <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', alignItems: 'center', height: 56, gap: 32, flexShrink: 0 }}>
+      {/* Top navigation bar */}
+      <nav className="nav-top">
+        <div className="nav-top-inner">
           <button
-            onClick={() => router.push('/dashboard')}
-            style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', color: 'var(--color-text-primary)', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            onClick={() => navigateTab('/dashboard')}
+            className="nav-brand"
           >
             Personal Planner
           </button>
-          <div className="tab-group desktop-tabs" style={{ border: 'none', marginBottom: 0, flex: 1 }}>
-            {TABS.map(tab => {
-              const emojiMap: Record<string, string> = { '/dashboard': '🏠', '/tasks': '✅', '/journal': '📓', '/rewards': '🎁', '/history': '📅', '/settings': '⚙️' }
-              return (
-                <button
-                  key={tab.href}
-                  onClick={() => router.push(tab.href)}
-                  className={`tab-item ${pathname === tab.href ? 'active' : ''}`}
-                >
-                  <span className="mr-1.5">{emojiMap[tab.href]}</span>{tab.label}
-                </button>
-              )
-            })}
+          <div className="tab-bar-scroll">
+            {TABS.map(tab => (
+              <button
+                key={tab.href}
+                onClick={() => navigateTab(tab.href)}
+                className={`tab-item ${(optimisticTab ?? pathname) === tab.href ? 'active' : ''}`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
           <SyncStatusBadge />
         </div>
       </nav>
 
-      <main className="page-container">
-        {children}
+      {/* Loading bar shown during tab transitions */}
+      {navigating && <div className="nav-loading-bar" />}
+
+      {/* Page content with swipe + animation */}
+      <main
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        style={{ position: 'relative' }}
+      >
+        <div key={animKey ? `${pathname}-${animKey}` : pathname} className={`page-container page-enter-${slideDir}`}>
+          {children}
+        </div>
       </main>
 
+      {/* Bottom mobile nav */}
       <nav className="bottom-nav">
         {TABS.map(tab => {
           const Icon = TAB_ICONS[tab.href]
-          const active = pathname === tab.href
+          const active = (optimisticTab ?? pathname) === tab.href
           return (
             <button
               key={tab.href}
-              onClick={() => router.push(tab.href)}
+              onClick={() => navigateTab(tab.href)}
               className={`bottom-tab ${active ? 'active' : ''}`}
             >
               <Icon />

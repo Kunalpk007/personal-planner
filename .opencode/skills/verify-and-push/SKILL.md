@@ -21,11 +21,27 @@ Use this skill whenever the user wants to verify their code and push it to GitHu
 5. Ensure **100% coverage (statements, functions, lines)** for the changed files. The coverage thresholds in `vitest.config.mts` are: 99% statements, 85% branches, 99% functions, 99% lines.
 6. Run `npm run test:coverage` and verify coverage meets thresholds. If not, add more test cases.
 
-### 2. Stage all changes
+### 2. Check for secrets
+
+Before staging, scan the diff for potential secrets (Netlify builds fail if secrets are committed):
+
+1. Run `git diff --cached` (or `git diff` if nothing staged) and pipe through a secrets grep:
+   ```
+   git diff --cached 2>$null; if ($?) { $diff = git diff --cached } else { $diff = git diff }
+   ```
+2. Check for patterns like:
+   - Firebase service account private keys (`private_key`, `client_secret`, `client_email`)
+   - API keys / tokens (`sk-`, `pk-`, `AKIA`, `ghp_`, `gho_`)
+   - Hardcoded secrets instead of `process.env.*` or `env()` references
+   - `.env` or `.env.local` files being tracked
+3. If secrets are detected, **ask the user**: "Secrets detected in the diff. Netlify will fail. Do you want me to remove them?" If yes → use `git restore --staged <file>` to unstage the file, or edit the file to use environment variables instead. Do NOT commit secrets.
+4. If the user confirms no secrets or they've been removed, proceed.
+
+### 3. Stage all changes
 
 `git add -A`
 
-### 3. Run `npm run verify`
+### 4. Run `npm run verify`
 
 This runs:
 - `tsc --noEmit` — TypeScript type check
@@ -33,7 +49,7 @@ This runs:
 - `vitest run` — unit tests
 - `next build --webpack` — production build
 
-### 4. Fix errors
+### 5. Fix errors
 
 If errors are found, fix them before proceeding:
 - Run `npm run lint:fix` to auto-fix lint issues
@@ -41,19 +57,19 @@ If errors are found, fix them before proceeding:
 - Fix test failures from `vitest run`
 - Fix build errors from `next build --webpack`
 
-### 5. Repeat step 3 until `npm run verify` passes cleanly
+### 6. Repeat step 4 until `npm run verify` passes cleanly
 
-### 6. Commit
+### 7. Commit
 
 `git commit -m "<type>: <short description>"`
 
 Use conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `chore:`, `docs:`.
 
-### 7. Push
+### 8. Push
 
 `git push origin <current-branch>`
 
-### 8. Create PR into master
+### 9. Create PR into master
 
 `gh pr create --base master --head <current-branch> --title "<descriptive title>" --body "<detailed summary of changes>"`
 
@@ -61,13 +77,13 @@ The title and body must be meaningful:
 - **Title**: `<type>: <what changed>` (e.g., `feat: add PWA support with service worker and install prompt`)
 - **Body**: Bullet points of what was changed and why
 
-### 9. Wait for PR checks to pass
+### 10. Wait for PR checks to pass
 
 Run `gh pr view <pr-number> --json statusCheckRollup --jq '.statusCheckRollup[] | "\(.name): \(.conclusion)"'` repeatedly until all checks complete.
 
 If all checks pass → Report success to the user.
 
-### 10. If checks fail
+### 11. If checks fail
 
 1. Report which checks failed and the failure details to the user.
 2. Ask the user: "Some checks failed. Do you want me to fix the issues?"

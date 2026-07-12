@@ -3,12 +3,8 @@ import { useState, useRef, useEffect, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { signupAction } from '@/app/actions/auth'
-import { signInWithPopup, signInWithRedirect, GoogleAuthProvider, createUserWithEmailAndPassword, updateProfile, onAuthStateChanged } from 'firebase/auth'
+import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
 import { getClientAuth } from '@/lib/firebase/client'
-
-function isMobile() {
-  return typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
-}
 
 async function firebaseSignup(email: string, password: string, name: string): Promise<string> {
   const cred = await createUserWithEmailAndPassword(getClientAuth(), email, password)
@@ -16,16 +12,8 @@ async function firebaseSignup(email: string, password: string, name: string): Pr
   return cred.user.getIdToken()
 }
 
-async function firebaseGoogleSignup(useRedirect: boolean): Promise<string> {
-  const auth     = getClientAuth()
-  const provider = new GoogleAuthProvider()
-
-  if (useRedirect) {
-    await signInWithRedirect(auth, provider)
-    return ''
-  }
-
-  const cred = await signInWithPopup(auth, provider)
+async function firebaseGoogleSignup(): Promise<string> {
+  const cred = await signInWithPopup(getClientAuth(), new GoogleAuthProvider())
   return cred.user.getIdToken()
 }
 
@@ -54,7 +42,7 @@ function firebaseError(err: unknown): string {
   if (code === 'auth/network-request-failed') return 'Network error. Check your internet connection.'
   if (code === 'auth/account-exists-with-different-credential')
     return 'An account already exists with this email using a different sign-in method.'
-  return `Sign-up failed. Please try again.`
+  return 'Sign-up failed. Please try again.'
 }
 
 export default function SignupPage() {
@@ -63,36 +51,22 @@ export default function SignupPage() {
   const [loading, setLoad] = useState(false)
   const [ssoLoad, setSso]  = useState(false)
   const mounted  = useRef(true)
-  const ssoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
+  // Safety net: if the user lands on signup while Firebase has them
+  // authenticated (e.g. stale redirect), exchange the token and forward.
   useEffect(() => {
-    const pending = sessionStorage.getItem('kp_oauth_pending')
-    if (pending) {
-      sessionStorage.removeItem('kp_oauth_pending')
+    getClientAuth().authStateReady().then(() => {
+      if (!mounted.current) return
+      const user = getClientAuth().currentUser
+      if (!user) return
       setSso(true)
-      const auth = getClientAuth()
-      const user = auth.currentUser
-      if (user) {
-        user.getIdToken().then(idToken => exchangeToken(idToken)).then(() => {
-          window.location.href = '/dashboard'
-        }).catch(err => {
-          if (mounted.current) { setSso(false); setError(firebaseError(err)) }
-        })
-      } else {
-        const unsubscribe = onAuthStateChanged(auth, (u) => {
-          if (!u) return
-          unsubscribe()
-          if (!mounted.current) return
-          u.getIdToken().then(idToken => exchangeToken(idToken)).then(() => {
-            window.location.href = '/dashboard'
-          }).catch(err => {
-            if (mounted.current) { setSso(false); setError(firebaseError(err)) }
-          })
-        })
-        return () => { unsubscribe(); mounted.current = false; clearTimeout(ssoTimer.current) }
-      }
-    }
-    return () => { mounted.current = false; clearTimeout(ssoTimer.current) }
+      user.getIdToken().then(exchangeToken).then(() => {
+        window.location.href = '/dashboard'
+      }).catch(err => {
+        if (mounted.current) { setSso(false); setError(firebaseError(err)) }
+      })
+    })
+    return () => { mounted.current = false }
   }, [])
 
   const firebaseEnabled = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY
@@ -116,10 +90,8 @@ export default function SignupPage() {
         await exchangeToken(idToken)
         router.push('/dashboard')
       } else {
-        // Fallback: custom Argon2id auth (works without Firebase)
         const result = await signupAction(undefined, data)
         if (result?.error) setError(result.error)
-        // signupAction redirects on success
       }
     } catch (err) {
       if ((err as { digest?: string })?.digest?.startsWith?.('NEXT_REDIRECT')) throw err
@@ -132,19 +104,14 @@ export default function SignupPage() {
   async function handleGoogle() {
     setError('')
     setSso(true)
-    const redirect = isMobile()
-    ssoTimer.current = setTimeout(() => { if (mounted.current) setSso(false) }, 30000)
+    const timer = setTimeout(() => { if (mounted.current) setSso(false) }, 30000)
     try {
-      if (redirect) sessionStorage.setItem('kp_oauth_pending', 'true')
-      const idToken = await firebaseGoogleSignup(redirect)
-      clearTimeout(ssoTimer.current)
-      if (!redirect) {
-        await exchangeToken(idToken)
-        router.push('/dashboard')
-      }
-      // redirect mode: page will navigate away, no further action needed
+      const idToken = await firebaseGoogleSignup()
+      clearTimeout(timer)
+      await exchangeToken(idToken)
+      router.push('/dashboard')
     } catch (err) {
-      clearTimeout(ssoTimer.current)
+      clearTimeout(timer)
       const code = (err as { code?: string }).code ?? ''
       if (code !== 'auth/popup-closed-by-user') setError(firebaseError(err))
     } finally {

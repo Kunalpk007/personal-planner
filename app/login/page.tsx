@@ -3,28 +3,16 @@ import { useState, useRef, useEffect, Suspense, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { loginAction } from '@/app/actions/auth'
-import { signInWithPopup, signInWithRedirect, GoogleAuthProvider, signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth'
+import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword } from 'firebase/auth'
 import { getClientAuth } from '@/lib/firebase/client'
-
-function isMobile() {
-  return typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
-}
 
 async function firebaseLogin(email: string, password: string): Promise<string> {
   const cred = await signInWithEmailAndPassword(getClientAuth(), email, password)
   return cred.user.getIdToken()
 }
 
-async function firebaseGoogleLogin(useRedirect: boolean): Promise<string> {
-  const auth     = getClientAuth()
-  const provider = new GoogleAuthProvider()
-
-  if (useRedirect) {
-    await signInWithRedirect(auth, provider)
-    return ''
-  }
-
-  const cred = await signInWithPopup(auth, provider)
+async function firebaseGoogleLogin(): Promise<string> {
+  const cred = await signInWithPopup(getClientAuth(), new GoogleAuthProvider())
   return cred.user.getIdToken()
 }
 
@@ -67,37 +55,24 @@ function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [ssoLoad, setSsoLoad] = useState(false)
   const mounted  = useRef(true)
-  const ssoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
+  // Safety net: if the user lands on login while Firebase has them
+  // authenticated (e.g. stale redirect from a previous session attempt),
+  // exchange the token and forward them to the dashboard.
   useEffect(() => {
-    const pending = sessionStorage.getItem('kp_oauth_pending')
-    if (pending) {
-      sessionStorage.removeItem('kp_oauth_pending')
+    getClientAuth().authStateReady().then(() => {
+      if (!mounted.current) return
+      const user = getClientAuth().currentUser
+      if (!user) return
       setSsoLoad(true)
-      const auth = getClientAuth()
-      const user = auth.currentUser
-      if (user) {
-        user.getIdToken().then(idToken => exchangeToken(idToken)).then(() => {
-          window.location.href = from
-        }).catch(err => {
-          if (mounted.current) { setSsoLoad(false); setError(firebaseError(err)) }
-        })
-      } else {
-        const unsubscribe = onAuthStateChanged(auth, (u) => {
-          if (!u) return
-          unsubscribe()
-          if (!mounted.current) return
-          u.getIdToken().then(idToken => exchangeToken(idToken)).then(() => {
-            window.location.href = from
-          }).catch(err => {
-            if (mounted.current) { setSsoLoad(false); setError(firebaseError(err)) }
-          })
-        })
-        return () => { unsubscribe(); mounted.current = false; clearTimeout(ssoTimer.current) }
-      }
-    }
-    return () => { mounted.current = false; clearTimeout(ssoTimer.current) }
-  }, [])
+      user.getIdToken().then(exchangeToken).then(() => {
+        window.location.href = from
+      }).catch(err => {
+        if (mounted.current) { setSsoLoad(false); setError(firebaseError(err)) }
+      })
+    })
+    return () => { mounted.current = false }
+  }, [from])
 
   const firebaseEnabled = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY
 
@@ -116,13 +91,10 @@ function LoginForm() {
         await exchangeToken(idToken)
         router.push(from)
       } else {
-        // Fallback: custom Argon2id auth (works without Firebase)
         const result = await loginAction(undefined, data)
         if (result?.error) setError(result.error)
-        // loginAction redirects on success — no router.push needed
       }
     } catch (err) {
-      // NEXT_REDIRECT is thrown by redirect() in server actions — re-throw so Next.js handles the navigation
       if ((err as { digest?: string })?.digest?.startsWith?.('NEXT_REDIRECT')) throw err
       setError(firebaseEnabled ? firebaseError(err) : 'Sign-in failed. Please try again.')
     } finally {
@@ -133,18 +105,14 @@ function LoginForm() {
   async function handleGoogle() {
     setError('')
     setSsoLoad(true)
-    const redirect = isMobile()
-    ssoTimer.current = setTimeout(() => { if (mounted.current) setSsoLoad(false) }, 30000)
+    const timer = setTimeout(() => { if (mounted.current) setSsoLoad(false) }, 30000)
     try {
-      if (redirect) sessionStorage.setItem('kp_oauth_pending', 'true')
-      const idToken = await firebaseGoogleLogin(redirect)
-      clearTimeout(ssoTimer.current)
-      if (!redirect) {
-        await exchangeToken(idToken)
-        router.push(from)
-      }
+      const idToken = await firebaseGoogleLogin()
+      clearTimeout(timer)
+      await exchangeToken(idToken)
+      router.push(from)
     } catch (err) {
-      clearTimeout(ssoTimer.current)
+      clearTimeout(timer)
       const code = (err as { code?: string }).code ?? ''
       if (code !== 'auth/popup-closed-by-user') setError(firebaseError(err))
     } finally {

@@ -15,6 +15,11 @@ self.addEventListener('activate', (event) => {
   self.clients.claim()
 })
 
+function isSameOrigin(req) {
+  const url = new URL(req.url)
+  return url.origin === self.location.origin
+}
+
 function isNav(req) {
   return req.mode === 'navigate'
 }
@@ -27,17 +32,21 @@ function isAsset(req) {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return
 
+  // Never intercept cross-origin requests (e.g. Google APIs for sign-in)
+  if (!isSameOrigin(event.request)) {
+    event.respondWith(fetch(event.request))
+    return
+  }
+
   if (isAsset(event.request)) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        return cached || fetch(event.request).then((res) => {
-          if (res.status === 200) {
-            const clone = res.clone()
-            caches.open(CACHE).then((cache) => cache.put(event.request, clone))
-          }
-          return res
-        })
-      })
+      fetch(event.request).then((res) => {
+        if (res.status === 200) {
+          const clone = res.clone()
+          caches.open(CACHE).then((cache) => cache.put(event.request, clone))
+        }
+        return res
+      }).catch(() => caches.match(event.request))
     )
     return
   }
