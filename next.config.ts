@@ -25,7 +25,7 @@ const CSP = [
   `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
   `img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com`,
   `font-src 'self' https://fonts.gstatic.com`,
-  `connect-src 'self' https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.googleapis.com wss://*.firebaseio.com`,
+  `connect-src 'self' https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.googleapis.com https://apis.google.com wss://*.firebaseio.com`,
   `frame-src ${frameSrc}`,
   `base-uri 'self'`,
   `form-action 'self'`,

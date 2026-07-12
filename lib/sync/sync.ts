@@ -3,10 +3,8 @@ import { saveToFirestore, saveJournalEntryToSubcollection, deleteJournalEntryFro
 import { waitForAuth } from '@/lib/firebase/client'
 import { setSyncStatus } from '@/lib/sync-status'
 
-const BRAIN_SYNC_MS = 5 * 60 * 1000
-
 let _uid: string | null = null
-let _brainTimer: ReturnType<typeof setInterval> | null = null
+let _debounceTimer: ReturnType<typeof setTimeout> | null = null
 let _prevJournal: Record<string, string> = {}
 let _unsubscribe: (() => void) | null = null
 let _authReady = false
@@ -85,8 +83,16 @@ async function flushJournalChanges(): Promise<void> {
   if (_uid) _prevJournal = { ...current }
 }
 
+function debouncedSyncPlannerState(): void {
+  if (_debounceTimer) clearTimeout(_debounceTimer)
+  _debounceTimer = setTimeout(() => {
+    _debounceTimer = null
+    syncPlannerState()
+  }, 2000)
+}
+
 export function initSync(uid: string): void {
-  if (_uid === uid && _brainTimer) return
+  if (_uid === uid && _unsubscribe) return
   destroySync()
 
   _uid = uid
@@ -97,11 +103,8 @@ export function initSync(uid: string): void {
     if (hasJournalChanged(current).length > 0) {
       flushJournalChanges()
     }
+    debouncedSyncPlannerState()
   })
-
-  _brainTimer = setInterval(() => {
-    syncPlannerState()
-  }, BRAIN_SYNC_MS)
 }
 
 export async function syncNow(): Promise<void> {
@@ -110,9 +113,9 @@ export async function syncNow(): Promise<void> {
 }
 
 export function destroySync(): void {
-  if (_brainTimer) {
-    clearInterval(_brainTimer)
-    _brainTimer = null
+  if (_debounceTimer) {
+    clearTimeout(_debounceTimer)
+    _debounceTimer = null
   }
   if (_unsubscribe) {
     _unsubscribe()

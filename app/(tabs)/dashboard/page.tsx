@@ -24,7 +24,13 @@ function useDisplayName(): string {
   const [name, setName] = useState('')
   useEffect(() => {
     const m = document.cookie.match(/(?:^|;\s*)kp_display=([^;]+)/)
-    if (m) setName(decodeURIComponent(m[1]))
+    if (m) {
+      let v = m[1]
+      for (let i = 0; i < 4; i++) {
+        try { const prev = v; v = decodeURIComponent(v); if (v === prev) break } catch { break }
+      }
+      setName(v)
+    }
   }, [])
   return name
 }

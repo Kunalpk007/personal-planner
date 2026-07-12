@@ -196,26 +196,6 @@
     border-bottom: 0.5px solid var(--color-border-subtle);
   }
 
-  /* Tab group */
-  .tab-group {
-    display: flex; gap: 0;
-    border-bottom: 0.5px solid var(--color-border);
-    margin-bottom: 1.5rem;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .tab-group::-webkit-scrollbar { display: none; }
-  .tab-item {
-    padding: 0.625rem 1rem; font-size: 0.875rem;
-    color: var(--color-text-secondary);
-    cursor: pointer; background: none; border: none;
-    border-bottom: 2px solid transparent;
-    transition: color 0.15s, border-color 0.15s;
-    white-space: nowrap;
-  }
-  .tab-item:hover { color: var(--color-text-primary); }
-  .tab-item.active { color: var(--color-accent); border-bottom-color: var(--color-accent); }
-
   /* Stat card */
   .stat-card  { background: var(--color-bg-secondary); border-radius: var(--radius-md); padding: 1rem 1.25rem; }
   .stat-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 0.375rem; }
@@ -306,15 +286,107 @@
   }
 
   @media (max-width: 639px) {
-    .desktop-tabs { display: none; }
     .bottom-nav { display: flex; }
     .page-container { padding-bottom: 5.5rem; }
   }
   @media (min-width: 640px) and (max-width: 1024px) {
-    .desktop-tabs { display: none; }
     .bottom-nav { display: flex; }
     .page-container { padding-bottom: 5.5rem; }
   }
+}
+
+/* ── Top tab bar ──────────────────────────────────────────────────────────── */
+.nav-top {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--nav-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 0.5px solid var(--color-border);
+  padding: 0 var(--spacing-page);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.nav-top::-webkit-scrollbar { display: none; }
+.nav-top-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  height: 56px;
+  gap: 24px;
+  flex-shrink: 0;
+}
+.nav-brand {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+.tab-bar-scroll {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tab-bar-scroll::-webkit-scrollbar { display: none; }
+.tab-bar-scroll .tab-item {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+.tab-bar-scroll .tab-item:hover { background: var(--color-bg-elevated); color: var(--color-text-primary); }
+.tab-bar-scroll .tab-item.active { background: var(--color-accent-dim); color: var(--color-accent); }
+.tab-bar-scroll .tab-item:active { transform: scale(0.96); }
+
+@media (max-width: 1024px) {
+  .nav-top { display: none; }
+}
+@media (min-width: 1025px) {
+  .nav-top { display: block; }
+}
+
+/* ── Loading bar for tab transitions ──────────────────────────────────────── */
+.nav-loading-bar {
+  position: fixed;
+  top: 0; left: 0;
+  z-index: 100;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, var(--color-accent) 50%, transparent 100%);
+  animation: loadingSlide 0.8s ease infinite;
+}
+@keyframes loadingSlide {
+  0%   { width: 0; left: 0; }
+  50%  { width: 60%; left: 20%; }
+  100% { width: 0; left: 100%; }
+}
+
+/* ── Page enter animations ────────────────────────────────────────────────── */
+.page-enter-left  { animation: slideInLeft  0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+.page-enter-right { animation: slideInRight 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes slideInLeft {
+  from { opacity: 0.5; transform: translateX(-24px); }
+  to   { opacity: 1;   transform: translateX(0); }
+}
+@keyframes slideInRight {
+  from { opacity: 0.5; transform: translateX(24px); }
+  to   { opacity: 1;   transform: translateX(0); }
 }
 
 /* Banner scroll — hide scrollbar */

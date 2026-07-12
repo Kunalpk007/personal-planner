@@ -144,7 +144,7 @@ export function StoreBootstrap({ onReady }: Props) {
         }
 
         if (cloudData) {
-          usePlannerStore.setState({ ...INITIAL_STATE, ...cloudData, journal: journalEntries })
+          usePlannerStore.setState({ ...INITIAL_STATE, ...cloudData, ...(savedState ?? {}), journal: journalEntries })
         } else {
           usePlannerStore.setState({ ...INITIAL_STATE, ...(savedState ?? {}) })
         }
