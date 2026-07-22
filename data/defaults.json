@@ -39,6 +39,7 @@
     "quoteMorning": true,
     "quoteEvening": true,
     "autoExportEnabled": false,
-    "theme": "system"
+    "theme": "system",
+    "fontScale": "normal"
   }
 }

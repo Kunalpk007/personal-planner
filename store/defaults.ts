@@ -31,11 +31,13 @@ export const INITIAL_STATE: AppStateData = {
   history:   [],
   bufferLog: [],
   rewardRedemptions: [],
+  pendingRewardApprovals: [],
 
   badges:     [],
   badgeDates: {},
   rewards:    defaultsJson.rewards,
   zones:      defaultsJson.zones,
+  goals:      [],
 
   journal:    {},
   journalPin: null,
@@ -60,4 +62,6 @@ export const INITIAL_STATE: AppStateData = {
   changeLog: [],
 
   cfg: DEFAULT_CFG,
+
+  lastModified: null,
 }

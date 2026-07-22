@@ -3,7 +3,7 @@ import { useMemo }                from 'react'
 import { usePlannerStore }        from '@/store'
 import { todayEarned, todayTarget, getMoodMult } from '@/lib/engine/scoring'
 
-export function StatGrid({ today }: { today: string }) {
+export function StatGrid({ today, onStreakClick }: { today: string; onStreakClick?: () => void }) {
   const allTasks = usePlannerStore(s => s.tasks)
   const tasks   = useMemo(() => allTasks.filter(t => t.date === today), [allTasks, today])
   const done    = tasks.filter(t => t.done)
@@ -29,20 +29,27 @@ export function StatGrid({ today }: { today: string }) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--spacing-gap)', marginBottom: '1.5rem' }}>
-      {cards.map(c => (
-        <div key={c.label} className="stat-card">
-          <div className="stat-label">{c.label}</div>
-          {c.fire ? (
-            <div className="stat-value relative inline-flex items-center justify-center min-w-[1.5em]">
-              <span className="absolute text-[28px] opacity-20 select-none leading-none">🔥</span>
-              <span className="relative">{c.val}</span>
-            </div>
-          ) : (
-            <div className="stat-value">{c.val}</div>
-          )}
-          <div className="text-[11px] text-[var(--text2)] mt-1">{c.sub}</div>
-        </div>
-      ))}
+      {cards.map(c => {
+        const Tag = c.fire && onStreakClick ? 'button' : 'div'
+        return (
+          <Tag
+            key={c.label}
+            className={`stat-card${c.fire && onStreakClick ? ' text-left cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
+            {...(c.fire && onStreakClick ? { onClick: onStreakClick } : {})}
+          >
+            <div className="stat-label">{c.label}</div>
+            {c.fire ? (
+              <div className="stat-value relative inline-flex items-center justify-center min-w-[1.5em]">
+                <span className="absolute text-[28px] opacity-20 select-none leading-none">🔥</span>
+                <span className="relative">{c.val}</span>
+              </div>
+            ) : (
+              <div className="stat-value">{c.val}</div>
+            )}
+            <div className="text-[11px] text-[var(--text2)] mt-1">{c.sub}</div>
+          </Tag>
+        )
+      })}
     </div>
   )
 }

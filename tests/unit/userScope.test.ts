@@ -21,6 +21,17 @@ describe('readUidFromCookieSync', () => {
     globalThis.document.cookie = 'kp_uid=user%40example.com'
     expect(readUidFromCookieSync()).toBe('user@example.com')
   })
+
+  it('returns null when document is unavailable (SSR/non-browser environment)', () => {
+    const original = globalThis.document
+    // @ts-expect-error simulating an SSR environment with no document global
+    delete globalThis.document
+    try {
+      expect(readUidFromCookieSync()).toBeNull()
+    } finally {
+      globalThis.document = original
+    }
+  })
 })
 
 describe('setUserScope / getUserScope', () => {

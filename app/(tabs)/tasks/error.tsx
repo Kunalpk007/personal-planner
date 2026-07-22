@@ -1,11 +1,6 @@
 'use client'
-export default function TasksError({ reset }: { error: Error; reset: () => void }) {
-  return (
-    <div style={{ padding: '40px 24px', textAlign: 'center' }}>
-      <p className="text-[var(--text2)] text-sm mb-3">Tasks failed to load.</p>
-      <button onClick={reset} className="px-4 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
-        Try again
-      </button>
-    </div>
-  )
+import { RouteErrorFallback } from '@/ui/RouteErrorFallback'
+
+export default function TasksError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  return <RouteErrorFallback error={error} reset={reset} label="Tasks" />
 }

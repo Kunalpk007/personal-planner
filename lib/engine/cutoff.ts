@@ -29,6 +29,13 @@ export function getPrevDayKey(dateStr: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/** The calendar day immediately after dateStr (YYYY-MM-DD) */
+export function getNextDayKey(dateStr: string): string {
+  const d = new Date(`${dateStr}T12:00:00`)
+  d.setDate(d.getDate() + 1)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 /** Monday of the week containing dateStr */
 export function getWeekMonday(dateStr: string): string {
   const d = new Date(`${dateStr}T12:00:00`)

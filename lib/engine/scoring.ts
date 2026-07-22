@@ -9,13 +9,13 @@ export function basePts(task: Task): number {
 export function calcPts(task: Task): number {
   let pts = basePts(task)
 
-  // Deadline modifier
+  // Time-bound deadline modifier: completing after the deadline earns half.
+  // (Simple, predictable rule for time-bound tasks — see the countdown pill
+  // and half-pts display in app/(tabs)/tasks/page.tsx.)
   if (task.deadline && task.completedAt) {
     const dl = new Date(task.deadline).getTime()
     const ct = new Date(task.completedAt).getTime()
-    if (ct > dl + 3_600_000)  pts = Math.round(pts * 0.4)  // >1hr late
-    else if (ct > dl)          pts = Math.round(pts * 0.7)  // within 1hr
-    // on time = 100%
+    if (ct > dl) pts = Math.round(pts * 0.5)  // late → half; on time = 100%
   }
 
   // Slot mismatch -20%

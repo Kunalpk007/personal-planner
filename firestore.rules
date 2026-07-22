@@ -1,0 +1,96 @@
+rules_version = '2';
+
+// Kunal's Planner — Firestore security rules.
+// Base planner rule (users/{uid}/planner/**) is documented in FIREBASE_SETUP.md;
+// everything below supports the Friends & Accountability system
+// (see docs/PHASE2_SOCIAL_LIFE_OS.md). Deploy with:
+//   firebase deploy --only firestore:rules
+// or paste into Firebase Console → Firestore Database → Rules.
+
+  service cloud.firestore {
+    match /databases/{database}/documents {
+
+      // ── Core planner state (existing, unchanged) ──────────────────────────
+      match /users/{userId}/planner/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /users/{userId}/journal/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // ── Friends: users/{userId}/friends/{friendUid} ────────────────────────
+      // A subcollection keyed by the *other* user's uid, not an array field —
+      // this is what lets the friend list scale past the v1 soft cap of 5
+      // without a data-model change: every new friend is just another small
+      // document, never a rewrite of one growing array.
+      match /users/{userId}/friends/{friendUid} {
+        // The owner reads their own list as usual. The *referenced* friend can
+        // also read their own entry — this is what lets a reward-approval
+        // threshold live on the Notary's side of the relationship (see
+        // rewardApprovalThreshold in store/social/types.ts) while still being
+        // visible to the person whose redemptions it gates: Bob sets the
+        // threshold on users/{bob}/friends/{alice}, and Alice needs to read
+        // that specific doc to know her limit before redeeming.
+        allow read: if request.auth != null && (request.auth.uid == userId || request.auth.uid == friendUid);
+        // Either the list owner can add an entry, OR the friend being named can
+        // create the reciprocal entry when *accepting* a request — accepting
+        // writes both users/{sender}/friends/{accepter} and
+        // users/{accepter}/friends/{sender} in one batch (see
+        // lib/firebase/social.ts#acceptFriendRequest), and the accepter is not
+        // the owner of the sender's subcollection. Only the owner may later
+        // edit tags/threshold or delete — the friend being referenced can't
+        // rewrite how someone else has tagged them or lower their own
+        // approval threshold behind the Notary's back.
+        allow create: if request.auth != null && (request.auth.uid == userId || request.auth.uid == friendUid);
+        allow update, delete: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // ── Friend requests: root collection, not yet owned by either side ────
+      match /friendRequests/{requestId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == resource.data.fromUid || request.auth.uid == resource.data.toUid);
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.fromUid;
+        // Only the recipient can resolve (accept/reject) a request.
+        allow update: if request.auth != null && request.auth.uid == resource.data.toUid;
+        allow delete: if request.auth != null &&
+          (request.auth.uid == resource.data.fromUid || request.auth.uid == resource.data.toUid);
+      }
+
+      // ── Shared tasks: owner + participants ─────────────────────────────────
+      match /sharedTasks/{taskId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == resource.data.ownerUid || request.auth.uid in resource.data.participantUids);
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.ownerUid;
+        // Participants can update (e.g. mark their own perUserStatus entry done);
+        // fine-grained "only your own key" enforcement is done in app logic —
+        // Firestore rules can't diff a single map key cheaply.
+        allow update: if request.auth != null &&
+          (request.auth.uid == resource.data.ownerUid || request.auth.uid in resource.data.participantUids);
+        allow delete: if request.auth != null && request.auth.uid == resource.data.ownerUid;
+      }
+
+      // ── Task validations: owner + the assigned validator ───────────────────
+      match /validations/{validationId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.validatorUid);
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.ownerUid;
+        // Only the validator can resolve (approve/reject) — the task owner
+        // cannot self-approve, which is the entire point of this collection.
+        allow update: if request.auth != null && request.auth.uid == resource.data.validatorUid;
+      }
+
+      // ── Reward approvals: owner + Notary ───────────────────────────────────
+      match /rewardApprovals/{approvalId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.notaryUid);
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.ownerUid;
+        // The Notary resolves (approve/reject) or the owner reassigns/cancels —
+        // never a silent auto-approve from the server; the owner's own client
+        // flips expired approvals after the cooldown window (see
+        // lib/firebase/social.ts#autoApproveIfExpired), it still requires this
+        // same authenticated write, not a bypass.
+        allow update: if request.auth != null &&
+          (request.auth.uid == resource.data.notaryUid || request.auth.uid == resource.data.ownerUid);
+      }
+    }
+  }

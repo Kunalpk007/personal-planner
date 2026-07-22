@@ -1,4 +1,4 @@
-export type SyncStatus = 'idle' | 'waiting' | 'saving' | 'saved' | 'error'
+export type SyncStatus = 'idle' | 'waiting' | 'saving' | 'saved' | 'error' | 'disabled'
 
 type Listener = (s: SyncStatus) => void
 let _status: SyncStatus = 'idle'

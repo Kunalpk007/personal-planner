@@ -5,7 +5,7 @@ import { calcPts, walletPtsFor, todayEarned } from '@/lib/engine/scoring'
 
 export interface TasksSlice {
   // Actions
-  addTask:        (task: Omit<Task, 'id' | 'createdAt' | 'done' | 'completedAt' | 'subtasks'>) => void
+  addTask:        (task: Omit<Task, 'id' | 'createdAt' | 'done' | 'completedAt' | 'subtasks'>) => string
   removeTask:     (id: string) => void
   toggleTask:     (id: string) => { pts: number; walletPts: number } | null
   toggleTaskRetro:(id: string) => { pts: number; walletPts: number } | null
@@ -23,6 +23,12 @@ export interface TasksSlice {
   // Carries
   carryTask:      (taskId: string, tomorrowKey: string) => void
   processExpiredCarries: () => void
+  // Task validation
+  requestTaskValidation: (taskId: string, validatorUid: string, validatorName: string) => void
+  resolveTaskValidation: (taskId: string, status: 'approved' | 'rejected', note?: string | null) => { pts: number; walletPts: number } | null
+  cancelTaskValidation:  (taskId: string) => void
+  // Task challenges
+  addChallengeTask: (task: Omit<Task, 'id' | 'createdAt' | 'done' | 'completedAt' | 'subtasks'>, challengeId: string, challengedBy: string) => string
 }
 
 export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set, get) => ({
@@ -36,6 +42,7 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       subtasks:    [],
     }
     set(s => ({ tasks: [...s.tasks, task] }))
+    return task.id
   },
 
   removeTask(id) {
@@ -288,5 +295,68 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
 
   processExpiredCarries() {
     set(s => ({ tasks: s.tasks.filter(t => !t.carriedDays || t.carriedDays <= 3) }))
+  },
+
+  // ─── Task validation — see docs/PHASE2_SOCIAL_LIFE_OS.md Section 1.3/1.4 ──
+  // Deliberately does NOT touch `done`/rankXP/rewardWallet here — that only
+  // happens in resolveTaskValidation('approved'), once the friend signs off.
+  // Until then the task is simply not `done`, so the scoring engine (which
+  // only ever sums done tasks) naturally withholds its points — no separate
+  // "locked pts" bookkeeping needed like the reward-approval flow required.
+
+  requestTaskValidation(taskId, validatorUid, validatorName) {
+    set(s => ({
+      tasks: s.tasks.map(t => t.id === taskId
+        ? { ...t, needsValidation: true, validatorUid, validatorName, validationStatus: 'pending', validationNote: null }
+        : t),
+    }))
+  },
+
+  resolveTaskValidation(taskId, status, note) {
+    const task = get().tasks.find(t => t.id === taskId)
+    if (!task || task.validationStatus !== 'pending') return null
+
+    if (status === 'approved') {
+      const completedAt = new Date().toISOString()
+      const updated = { ...task, done: true, completedAt, validationStatus: 'approved' as const, validationNote: note ?? null }
+      const pts       = calcPts(updated)
+      const walletPts = walletPtsFor(pts)
+      set(s => ({
+        tasks: s.tasks.map(t => t.id === taskId ? updated : t),
+        rankXP:       s.rankXP + pts,
+        rewardWallet: s.rewardWallet + walletPts,
+        lastActiveDayForDecay: task.date,
+      }))
+      return { pts, walletPts }
+    }
+
+    set(s => ({
+      tasks: s.tasks.map(t => t.id === taskId ? { ...t, validationStatus: 'rejected' as const, validationNote: note ?? null } : t),
+    }))
+    return null
+  },
+
+  cancelTaskValidation(taskId) {
+    set(s => ({
+      tasks: s.tasks.map(t => t.id === taskId
+        ? { ...t, needsValidation: false, validatorUid: undefined, validatorName: undefined, validationStatus: undefined, validationNote: undefined }
+        : t),
+    }))
+  },
+
+  // ─── Task challenges ────────────────────────────────────────────────────────
+  addChallengeTask(partial, challengeId, challengedBy) {
+    const task: Task = {
+      ...partial,
+      id:          uid(),
+      createdAt:   new Date().toISOString(),
+      done:        false,
+      completedAt: null,
+      subtasks:    [],
+      challengeId,
+      challengedBy,
+    }
+    set(s => ({ tasks: [...s.tasks, task] }))
+    return task.id
   },
 })

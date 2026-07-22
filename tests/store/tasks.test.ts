@@ -75,6 +75,32 @@ describe('toggleTask', () => {
     expect(result).toBeNull()
     expect(usePlannerStore.getState()).toEqual(before)
   })
+
+  it('leaves other tasks untouched when completing one of several', () => {
+    usePlannerStore.getState().addTask(taskInput({ priority: 'high', title: 'A' }))
+    usePlannerStore.getState().addTask(taskInput({ priority: 'low', title: 'B' }))
+    const [idA, idB] = usePlannerStore.getState().tasks.map(t => t.id)
+
+    usePlannerStore.getState().toggleTask(idA)
+
+    const state = usePlannerStore.getState()
+    expect(state.tasks.find(t => t.id === idA)?.done).toBe(true)
+    expect(state.tasks.find(t => t.id === idB)?.done).toBe(false)
+  })
+
+  it('leaves other tasks untouched when un-completing one of several', () => {
+    usePlannerStore.getState().addTask(taskInput({ priority: 'high', title: 'A' }))
+    usePlannerStore.getState().addTask(taskInput({ priority: 'low', title: 'B' }))
+    const [idA, idB] = usePlannerStore.getState().tasks.map(t => t.id)
+    usePlannerStore.getState().toggleTask(idA)
+    usePlannerStore.getState().toggleTask(idB)
+
+    usePlannerStore.getState().toggleTask(idA) // un-complete A
+
+    const state = usePlannerStore.getState()
+    expect(state.tasks.find(t => t.id === idA)?.done).toBe(false)
+    expect(state.tasks.find(t => t.id === idB)?.done).toBe(true)
+  })
 })
 
 describe('toggleTaskRetro', () => {
@@ -105,6 +131,25 @@ describe('toggleTaskRetro', () => {
     expect(state.tasks[0].done).toBe(false)
     expect(state.rankXP).toBe(0)
     expect(state.rewardWallet).toBe(0)
+  })
+
+  it('returns null and does nothing for an unknown task id', () => {
+    const before = usePlannerStore.getState()
+    const result = usePlannerStore.getState().toggleTaskRetro('does-not-exist')
+    expect(result).toBeNull()
+    expect(usePlannerStore.getState()).toEqual(before)
+  })
+
+  it('leaves other tasks untouched when retro-completing one of several', () => {
+    usePlannerStore.getState().addTask(taskInput({ priority: 'med', date: '2024-01-07', title: 'A' }))
+    usePlannerStore.getState().addTask(taskInput({ priority: 'med', date: '2024-01-07', title: 'B' }))
+    const [idA, idB] = usePlannerStore.getState().tasks.map(t => t.id)
+
+    usePlannerStore.getState().toggleTaskRetro(idA)
+
+    const state = usePlannerStore.getState()
+    expect(state.tasks.find(t => t.id === idA)?.done).toBe(true)
+    expect(state.tasks.find(t => t.id === idB)?.done).toBe(false)
   })
 })
 
@@ -141,5 +186,28 @@ describe('removeTask', () => {
     usePlannerStore.getState().removeTask(id)
 
     expect(usePlannerStore.getState().pinnedTaskId).toBeNull()
+  })
+
+  it('clears pinnedTaskId when a pinned, completed task is removed', () => {
+    usePlannerStore.getState().addTask(taskInput({ priority: 'high' }))
+    const id = usePlannerStore.getState().tasks[0].id
+    usePlannerStore.getState().toggleTask(id) // mark done
+    usePlannerStore.getState().pinTask(id)
+
+    usePlannerStore.getState().removeTask(id)
+
+    expect(usePlannerStore.getState().pinnedTaskId).toBeNull()
+  })
+
+  it('leaves pinnedTaskId untouched when removing a different completed task', () => {
+    usePlannerStore.getState().addTask(taskInput({ priority: 'high', title: 'A' }))
+    usePlannerStore.getState().addTask(taskInput({ priority: 'high', title: 'B' }))
+    const [idA, idB] = usePlannerStore.getState().tasks.map(t => t.id)
+    usePlannerStore.getState().toggleTask(idA) // mark A done
+    usePlannerStore.getState().pinTask(idB)
+
+    usePlannerStore.getState().removeTask(idA)
+
+    expect(usePlannerStore.getState().pinnedTaskId).toBe(idB)
   })
 })

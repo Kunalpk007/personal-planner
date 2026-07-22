@@ -5,7 +5,7 @@ import type { AppState, AppConfig, HistoryEntry, Task } from '@/store/types'
 const CFG: AppConfig = {
   minPts: 70, weekendPts: 20, cutoffHour: 1, tone: 'balanced', managerName: 'Manager',
   moodMot: 1.2, moodSick: 0.5, pomoDuration: 25, quoteMorning: true, quoteEvening: true,
-  autoExportEnabled: false, theme: 'dark',
+  autoExportEnabled: false, theme: 'dark', fontScale: 'normal',
 }
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -131,6 +131,14 @@ describe('runOvernightLogic', () => {
     expect(carried).toHaveLength(0)
   })
 
+  it('sorts history by date to find the true last entry, even when history is unsorted', () => {
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-10'), makeHistoryEntry('2024-01-08')],
+    })
+    const result = runOvernightLogic(state, '2024-01-10')
+    expect(result.overnightMsg).toBeNull() // last real date is 2024-01-10 -> no gap
+  })
+
   it('returns null overnightMsg when there is no gap since the last history entry', () => {
     const state = makeState({ history: [makeHistoryEntry('2024-01-10')] })
     const result = runOvernightLogic(state, '2024-01-10')
@@ -162,7 +170,7 @@ describe('runOvernightLogic', () => {
     expect(result.streak).toBe(3)
     expect(result.bestStreak).toBe(3)
     expect(result.freezeTokens).toBe(1) // milestone bonus
-    expect(result.bufferXP).toBe(5)     // floor((80-70)/2)
+    expect(result.rankXP).toBe(5)       // overflow floor((80-70)/2) folded into rank XP
     expect(result.daysActive).toBe(1)
     expect(result.submittedDays?.['2024-01-09']).toBe(true)
     expect(result.weekDays?.['2024-01-09']).toBe(true)
@@ -174,7 +182,7 @@ describe('runOvernightLogic', () => {
     expect(result.overnightMsg).toMatch(/^✅/)
   })
 
-  it('uses a rest day for a missed day that fell short, when the week rest is unused', () => {
+  it('auto-protects a missed day that fell short as a rest day (rest takes precedence)', () => {
     const tasks = [makeTask({ id: 'a', date: '2024-01-09' })] // 20 pts < minPts 70
     const state = makeState({
       history: [makeHistoryEntry('2024-01-08')],
@@ -195,7 +203,7 @@ describe('runOvernightLogic', () => {
     expect(result.overnightMsg).toMatch(/^🟡/)
   })
 
-  it('uses a freeze for a missed day that fell short, when the week rest is already used', () => {
+  it('still uses a rest day even when the week rest was already used and freezes exist (no weekly cap, rest beats freeze)', () => {
     const tasks = [makeTask({ id: 'a', date: '2024-01-09' })] // 20 pts < minPts 70
     const state = makeState({
       history: [makeHistoryEntry('2024-01-08')],
@@ -208,19 +216,20 @@ describe('runOvernightLogic', () => {
     })
     const result = runOvernightLogic(state, '2024-01-10')
 
-    expect(result.freezeTokens).toBe(1)
-    expect(result.freezesBought).toBe(0)
-    expect(result.freezesUsed).toBe(1)
-    expect(result.frozenDays?.['2024-01-09']).toBe(true)
+    // Freeze is never spent — rest day always protects instead.
+    expect(result.freezeTokens).toBe(2)
+    expect(result.freezesUsed).toBe(0)
+    expect(result.restDays?.['2024-01-09']).toBe(true)
+    expect(result.frozenDays?.['2024-01-09']).toBeUndefined()
     expect(result.submittedDays?.['2024-01-09']).toBe(true)
     expect(result.streak).toBe(5) // unchanged
 
     const entry = result.history?.[1]
-    expect(entry).toMatchObject({ date: '2024-01-09', rxp: 20, frozen: true, rest: false })
-    expect(result.overnightMsg).toMatch(/^❄/)
+    expect(entry).toMatchObject({ date: '2024-01-09', rxp: 20, frozen: false, rest: true })
+    expect(result.overnightMsg).toMatch(/^🟡/)
   })
 
-  it('breaks the streak when no rest day or freeze is available', () => {
+  it('never breaks a live streak on a short day — rest day always protects it', () => {
     const tasks = [makeTask({ id: 'a', date: '2024-01-09' })] // 20 pts < minPts 70
     const state = makeState({
       history: [makeHistoryEntry('2024-01-08')],
@@ -231,7 +240,27 @@ describe('runOvernightLogic', () => {
     })
     const result = runOvernightLogic(state, '2024-01-10')
 
+    expect(result.streak).toBe(5) // unchanged — never breaks
+    expect(result.restDays?.['2024-01-09']).toBe(true)
+    expect(result.submittedDays?.['2024-01-09']).toBe(true)
+
+    const entry = result.history?.[1]
+    expect(entry).toMatchObject({ date: '2024-01-09', rxp: 20, frozen: false, rest: true })
+    expect(result.overnightMsg).toMatch(/^🟡/)
+  })
+
+  it('records a plain missed day (no rest) when the streak is already 0', () => {
+    const tasks = [makeTask({ id: 'a', date: '2024-01-09' })] // 20 pts < minPts 70
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-08')],
+      tasks,
+      streak: 0,
+      weekRestUsed: {},
+    })
+    const result = runOvernightLogic(state, '2024-01-10')
+
     expect(result.streak).toBe(0)
+    expect(result.restDays?.['2024-01-09']).toBeUndefined()
     expect(result.submittedDays?.['2024-01-09']).toBeUndefined()
 
     const entry = result.history?.[1]
@@ -253,6 +282,113 @@ describe('runOvernightLogic', () => {
     // Either way, the history entry should record the task snapshot
     const entry = result.history?.find(h => h.date === '2024-01-09')
     expect(entry?.tasks[0]?.priority).toBe('special')
+  })
+
+  it('records pct=0 for a missed day that has no tasks at all', () => {
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-08')],
+      tasks: [], // no tasks recorded for the missed day
+      streak: 0,
+    })
+    const result = runOvernightLogic(state, '2024-01-10')
+    const entry = result.history?.find(h => h.date === '2024-01-09')
+    expect(entry).toMatchObject({ date: '2024-01-09', done: 0, total: 0, pct: 0 })
+  })
+
+  it('carries forward a blocked incomplete task without incrementing the penalty counter (main loop)', () => {
+    const tasks = [
+      makeTask({ id: 'blocked1', date: '2024-01-09', done: false, blocked: true } as Partial<Task>),
+    ]
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-08')],
+      tasks,
+      streak: 5,
+    })
+    const result = runOvernightLogic(state, '2024-01-10')
+    const carried = result.tasks?.find(t => t.date === '2024-01-10')
+    expect(carried).toBeDefined()
+    expect(carried?.carriedDays).toBe(0)
+  })
+
+  it('does not award a milestone bonus for a non-milestone auto-submitted streak', () => {
+    const tasks = [
+      makeTask({ id: 'a', date: '2024-01-09' }),
+      makeTask({ id: 'b', date: '2024-01-09' }),
+      makeTask({ id: 'c', date: '2024-01-09' }),
+      makeTask({ id: 'd', date: '2024-01-09' }), // 80 pts >= minPts 70
+    ]
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-08')],
+      tasks,
+      streak: 1, // newStreak = 2, not a milestone
+      bestStreak: 1,
+    })
+    const result = runOvernightLogic(state, '2024-01-10')
+    expect(result.streak).toBe(2)
+    expect(result.badges).toHaveLength(0)
+    expect(result.freezeTokens).toBe(0)
+  })
+
+  it('treats a missing freezeTokens count as 0 when awarding a milestone bonus', () => {
+    const tasks = [
+      makeTask({ id: 'a', date: '2024-01-09' }),
+      makeTask({ id: 'b', date: '2024-01-09' }),
+      makeTask({ id: 'c', date: '2024-01-09' }),
+      makeTask({ id: 'd', date: '2024-01-09' }), // 80 pts >= minPts 70
+    ]
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-08')],
+      tasks,
+      streak: 2, // newStreak = 3 -> milestone bonus = 1
+      bestStreak: 2,
+      freezeTokens: undefined,
+    } as Partial<AppState>)
+    const result = runOvernightLogic(state, '2024-01-10')
+    expect(result.freezeTokens).toBe(1)
+  })
+
+  it('treats a missing daysActive count as 0 on an auto-submitted day', () => {
+    const tasks = [
+      makeTask({ id: 'a', date: '2024-01-09' }),
+      makeTask({ id: 'b', date: '2024-01-09' }),
+      makeTask({ id: 'c', date: '2024-01-09' }),
+      makeTask({ id: 'd', date: '2024-01-09' }), // 80 pts >= minPts 70
+    ]
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-08')],
+      tasks,
+      streak: 1,
+      bestStreak: 1,
+      daysActive: undefined,
+    } as Partial<AppState>)
+    const result = runOvernightLogic(state, '2024-01-10')
+    expect(result.daysActive).toBe(1)
+  })
+
+  it('treats a missing daysActive count as 0 on a rest-day-protected auto-submit', () => {
+    const tasks = [makeTask({ id: 'a', date: '2024-01-09' })] // 20 pts < minPts 70
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-08')],
+      tasks,
+      streak: 5,
+      weekRestUsed: {},
+      daysActive: undefined,
+    } as Partial<AppState>)
+    const result = runOvernightLogic(state, '2024-01-10')
+    expect(result.daysActive).toBe(1)
+  })
+
+  it('carries forward a blocked incomplete task without penalty via the gap=1 path', () => {
+    const tasks = [
+      makeTask({ id: 'blocked-gap1', date: '2024-01-09', done: false, blocked: true } as Partial<Task>),
+    ]
+    const state = makeState({ history: [makeHistoryEntry('2024-01-09')], tasks })
+
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
+    expect(carried).toHaveLength(1)
+    expect(carried[0].carriedDays).toBe(0)
   })
 
   it('skips days that were already submitted, rested, or frozen', () => {

@@ -2,7 +2,16 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { usePlannerStore } from '@/store'
 import { resetStore } from './helpers'
 import { FREEZE_COST, MAX_BOUGHT_FREEZES } from '@/constants/points'
-import type { HistoryEntry } from '@/store/types'
+import type { HistoryEntry, Task } from '@/store/types'
+
+function makeTask(overrides: Partial<Task> = {}): Task {
+  return {
+    id: 't1', title: 'Task', note: '', zone: 'z1', priority: 'high', slot: '',
+    deadline: null, done: false, date: '2024-01-08', createdAt: '2024-01-08T08:00:00.000Z',
+    completedAt: null, subtasks: [], level: '', isSpecial: false, specialPts: 0,
+    ...overrides,
+  }
+}
 
 function historyEntry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
   return {
@@ -30,15 +39,17 @@ describe('submitDay', () => {
     expect(result).toEqual({ freezeBonus: 0, milestoneStreak: null })
   })
 
-  it('banks excess points beyond minPts as buffer XP at a 2:1 ratio', () => {
-    // 2024-01-08 is a Monday -> minPts = 70. Earned 80 -> excess 10 -> +5 buffer
+  it('folds excess points beyond minPts directly into rank XP at a 2:1 ratio', () => {
+    // 2024-01-08 is a Monday -> minPts = 70. Earned 80 -> excess 10 -> +5 rank XP
+    usePlannerStore.setState({ rankXP: 100 })
     usePlannerStore.getState().submitDay(historyEntry({ date: '2024-01-08', rxp: 80 }))
-    expect(usePlannerStore.getState().bufferXP).toBe(5)
+    expect(usePlannerStore.getState().rankXP).toBe(105)
   })
 
-  it('does not bank buffer XP when rxp is below minPts', () => {
+  it('does not add overflow rank XP when rxp is below minPts', () => {
+    usePlannerStore.setState({ rankXP: 100 })
     usePlannerStore.getState().submitDay(historyEntry({ date: '2024-01-08', rxp: 50 }))
-    expect(usePlannerStore.getState().bufferXP).toBe(0)
+    expect(usePlannerStore.getState().rankXP).toBe(100)
   })
 
   it('awards a freeze token and badge when a milestone streak is reached', () => {
@@ -53,6 +64,45 @@ describe('submitDay', () => {
     expect(state.badges[0]).toMatchObject({ id: 's3', label: '3-Day Streak' })
     expect(result).toEqual({ freezeBonus: 1, milestoneStreak: 3 })
   })
+
+  it('carries forward an incomplete task to the next day', () => {
+    usePlannerStore.setState({
+      tasks: [
+        makeTask({ id: 'incomplete', date: '2024-01-08', done: false }),
+        makeTask({ id: 'complete', date: '2024-01-08', done: true }),
+      ],
+    })
+
+    usePlannerStore.getState().submitDay(historyEntry({ date: '2024-01-08', rxp: 80 }))
+
+    const carried = usePlannerStore.getState().tasks.filter(t => t.date === '2024-01-09')
+    expect(carried).toHaveLength(1)
+    expect(carried[0].carriedDays).toBe(1)
+    expect(carried[0].done).toBe(false)
+  })
+
+  it('carries forward a blocked incomplete task without incrementing the penalty counter', () => {
+    usePlannerStore.setState({
+      tasks: [makeTask({ id: 'blocked1', date: '2024-01-08', done: false, blocked: true } as Partial<Task>)],
+    })
+
+    usePlannerStore.getState().submitDay(historyEntry({ date: '2024-01-08', rxp: 80 }))
+
+    const carried = usePlannerStore.getState().tasks.find(t => t.date === '2024-01-09')
+    expect(carried).toBeDefined()
+    expect(carried?.carriedDays).toBe(0)
+  })
+
+  it('does not carry an unblocked task once it has already been carried MAX_CARRY times', () => {
+    usePlannerStore.setState({
+      tasks: [makeTask({ id: 'maxed', date: '2024-01-08', done: false, carriedDays: 3 })],
+    })
+
+    usePlannerStore.getState().submitDay(historyEntry({ date: '2024-01-08', rxp: 80 }))
+
+    const carried = usePlannerStore.getState().tasks.filter(t => t.date === '2024-01-09')
+    expect(carried).toHaveLength(0)
+  })
 })
 
 describe('useFreeze', () => {
@@ -62,8 +112,15 @@ describe('useFreeze', () => {
     expect(usePlannerStore.getState()).toEqual(before)
   })
 
+  it('does nothing when streak is 0, even with freeze tokens available', () => {
+    usePlannerStore.setState({ freezeTokens: 2, streak: 0 })
+    const before = usePlannerStore.getState()
+    usePlannerStore.getState().useFreeze('2024-01-08')
+    expect(usePlannerStore.getState()).toEqual(before)
+  })
+
   it('spends a freeze token, marks the day frozen/submitted, and logs history', () => {
-    usePlannerStore.setState({ freezeTokens: 2, freezesBought: 1, freezesUsed: 0 })
+    usePlannerStore.setState({ freezeTokens: 2, freezesBought: 1, freezesUsed: 0, streak: 3 })
 
     usePlannerStore.getState().useFreeze('2024-01-08')
 
@@ -75,6 +132,15 @@ describe('useFreeze', () => {
     expect(state.submittedDays['2024-01-08']).toBe(true)
     expect(state.history).toHaveLength(1)
     expect(state.history[0]).toMatchObject({ date: '2024-01-08', frozen: true, rest: false })
+    expect(state.streak).toBe(3) // using a freeze protects the streak — never increments it
+  })
+
+  it('treats a missing freezesBought count as 0 and clamps it at 0', () => {
+    usePlannerStore.setState({ freezeTokens: 1, streak: 3, freezesBought: undefined } as never)
+
+    usePlannerStore.getState().useFreeze('2024-01-08')
+
+    expect(usePlannerStore.getState().freezesBought).toBe(0)
   })
 })
 
@@ -102,6 +168,13 @@ describe('buyFreeze', () => {
     const result = usePlannerStore.getState().buyFreeze()
     expect(result).toBe(false)
   })
+
+  it('treats a missing freezesBought count as 0 when checking the cap and incrementing', () => {
+    usePlannerStore.setState({ rewardWallet: FREEZE_COST, freezesBought: undefined } as never)
+    const result = usePlannerStore.getState().buyFreeze()
+    expect(result).toBe(true)
+    expect(usePlannerStore.getState().freezesBought).toBe(1)
+  })
 })
 
 describe('useBuffer', () => {
@@ -123,7 +196,15 @@ describe('useBuffer', () => {
 })
 
 describe('declareRestDay', () => {
+  it('does nothing when streak is 0', () => {
+    usePlannerStore.setState({ streak: 0 })
+    const before = usePlannerStore.getState()
+    usePlannerStore.getState().declareRestDay('2024-01-09')
+    expect(usePlannerStore.getState()).toEqual(before)
+  })
+
   it('marks the day and week as rested, and logs a rest history entry', () => {
+    usePlannerStore.setState({ streak: 3 })
     usePlannerStore.getState().declareRestDay('2024-01-09')
 
     const state = usePlannerStore.getState()
@@ -133,5 +214,6 @@ describe('declareRestDay', () => {
     expect(state.daysActive).toBe(1)
     expect(state.history).toHaveLength(1)
     expect(state.history[0]).toMatchObject({ date: '2024-01-09', rest: true, frozen: false })
+    expect(state.streak).toBe(3) // taking a rest day protects the streak — never increments it
   })
 })

@@ -47,6 +47,18 @@ describe('editTask', () => {
     usePlannerStore.getState().editTask('unknown-id', { title: 'Ghost' })
     expect(usePlannerStore.getState().tasks).toEqual(before.tasks)
   })
+
+  it('leaves other tasks untouched when editing one of several', () => {
+    usePlannerStore.getState().addTask(taskInput({ title: 'A' }))
+    usePlannerStore.getState().addTask(taskInput({ title: 'B' }))
+    const [idA, idB] = usePlannerStore.getState().tasks.map(t => t.id)
+
+    usePlannerStore.getState().editTask(idA, { title: 'A edited' })
+
+    const state = usePlannerStore.getState()
+    expect(state.tasks.find(t => t.id === idA)?.title).toBe('A edited')
+    expect(state.tasks.find(t => t.id === idB)?.title).toBe('B')
+  })
 })
 
 describe('pinTask', () => {
@@ -97,6 +109,36 @@ describe('subtask operations', () => {
     expect(usePlannerStore.getState().tasks[0].subtasks[0].done).toBe(false)
   })
 
+  it('toggleSubtask only flips the targeted subtask, leaving other subtasks and tasks untouched', () => {
+    usePlannerStore.getState().addTask(taskInput({ title: 'A' }))
+    usePlannerStore.getState().addTask(taskInput({ title: 'B' }))
+    const [taskA, taskB] = usePlannerStore.getState().tasks.map(t => t.id)
+    usePlannerStore.getState().addSubtask(taskA, 'Sub 1')
+    usePlannerStore.getState().addSubtask(taskA, 'Sub 2')
+    const subs = usePlannerStore.getState().tasks.find(t => t.id === taskA)!.subtasks
+    const [sub1, sub2] = subs.map(s => s.id)
+
+    usePlannerStore.getState().toggleSubtask(taskA, sub1)
+
+    const state = usePlannerStore.getState()
+    const updatedSubs = state.tasks.find(t => t.id === taskA)!.subtasks
+    expect(updatedSubs.find(s => s.id === sub1)?.done).toBe(true)
+    expect(updatedSubs.find(s => s.id === sub2)?.done).toBe(false)
+    expect(state.tasks.find(t => t.id === taskB)?.subtasks).toHaveLength(0)
+  })
+
+  it('addSubtask only appends to the targeted task, leaving another task untouched', () => {
+    usePlannerStore.getState().addTask(taskInput({ title: 'A' }))
+    usePlannerStore.getState().addTask(taskInput({ title: 'B' }))
+    const [taskA, taskB] = usePlannerStore.getState().tasks.map(t => t.id)
+
+    usePlannerStore.getState().addSubtask(taskA, 'Sub for A')
+
+    const state = usePlannerStore.getState()
+    expect(state.tasks.find(t => t.id === taskA)?.subtasks).toHaveLength(1)
+    expect(state.tasks.find(t => t.id === taskB)?.subtasks).toHaveLength(0)
+  })
+
   it('removeSubtask removes only the targeted subtask', () => {
     usePlannerStore.getState().addTask(taskInput())
     const taskId = usePlannerStore.getState().tasks[0].id
@@ -109,6 +151,20 @@ describe('subtask operations', () => {
     const subtasks = usePlannerStore.getState().tasks[0].subtasks
     expect(subtasks).toHaveLength(1)
     expect(subtasks[0].id).toBe(keepId)
+  })
+
+  it('removeSubtask leaves another task entirely untouched', () => {
+    usePlannerStore.getState().addTask(taskInput({ title: 'A' }))
+    usePlannerStore.getState().addTask(taskInput({ title: 'B' }))
+    const [taskA, taskB] = usePlannerStore.getState().tasks.map(t => t.id)
+    usePlannerStore.getState().addSubtask(taskB, 'Keep on B')
+    const subId = usePlannerStore.getState().tasks.find(t => t.id === taskB)!.subtasks[0].id
+
+    usePlannerStore.getState().removeSubtask(taskB, subId)
+
+    const state = usePlannerStore.getState()
+    expect(state.tasks.find(t => t.id === taskA)?.subtasks).toHaveLength(0)
+    expect(state.tasks.find(t => t.id === taskB)?.subtasks).toHaveLength(0)
   })
 })
 
@@ -134,6 +190,24 @@ describe('recurring templates', () => {
     usePlannerStore.getState().editRecurring(id, { title: 'New' })
 
     expect(usePlannerStore.getState().recurring[0].title).toBe('New')
+  })
+
+  it('editRecurring leaves other templates untouched', () => {
+    usePlannerStore.getState().addRecurring({
+      title: 'A', note: '', zone: 'z1',
+      priority: 'med', slot: '', level: '', isSpecial: false, specialPts: 0,
+    })
+    usePlannerStore.getState().addRecurring({
+      title: 'B', note: '', zone: 'z1',
+      priority: 'med', slot: '', level: '', isSpecial: false, specialPts: 0,
+    })
+    const [idA, idB] = usePlannerStore.getState().recurring.map(r => r.id)
+
+    usePlannerStore.getState().editRecurring(idA, { title: 'A edited' })
+
+    const recurring = usePlannerStore.getState().recurring
+    expect(recurring.find(r => r.id === idA)?.title).toBe('A edited')
+    expect(recurring.find(r => r.id === idB)?.title).toBe('B')
   })
 
   it('removeRecurring deletes a template by id', () => {
@@ -262,5 +336,38 @@ describe('submitRetroFix', () => {
 
     expect(result).toEqual({ ok: false, reason: 'insufficient-wallet' })
     expect(usePlannerStore.getState().rewardWallet).toBe(10)
+  })
+
+  it('records pct=0 when there are no tasks at all for that date', () => {
+    // No tasks added for 2024-01-07
+    const result = usePlannerStore.getState().submitRetroFix('2024-01-07')
+
+    expect(result).toEqual({ ok: true })
+    const entry = usePlannerStore.getState().history.find(h => h.date === '2024-01-07')
+    expect(entry).toMatchObject({ done: 0, total: 0, pct: 0 })
+  })
+
+  it('records "special" priority in the task snapshot for a special task', () => {
+    usePlannerStore.getState().addTask(taskInput({ date: '2024-01-07', isSpecial: true, specialPts: 40 }))
+    const taskId = usePlannerStore.getState().tasks[0].id
+    usePlannerStore.getState().toggleTaskRetro(taskId)
+
+    usePlannerStore.getState().submitRetroFix('2024-01-07')
+
+    const entry = usePlannerStore.getState().history.find(h => h.date === '2024-01-07')
+    expect(entry?.tasks[0]?.priority).toBe('special')
+  })
+
+  it('treats a missing rewards array on the existing history entry as empty', () => {
+    usePlannerStore.getState().addTask(taskInput({ date: '2024-01-07' }))
+    const entry = histEntry('2024-01-07')
+    delete (entry as { rewards?: unknown }).rewards
+    usePlannerStore.setState({ history: [entry], rewardWallet: 100 })
+
+    const result = usePlannerStore.getState().submitRetroFix('2024-01-07', { title: 'Treat', cost: 5 })
+
+    expect(result).toEqual({ ok: true })
+    const updated = usePlannerStore.getState().history.find(h => h.date === '2024-01-07')
+    expect(updated?.rewards).toEqual(['Treat'])
   })
 })

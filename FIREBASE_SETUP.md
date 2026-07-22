@@ -190,6 +190,26 @@ Add your `.env.local` values as Environment Variables in Vercel dashboard.
 
 ---
 
+## Friends & Accountability — Deploying the Extended Rules
+
+The Friends system (see `docs/PHASE2_SOCIAL_LIFE_OS.md`) adds new collections
+(`users/{uid}/friends`, `friendRequests`, `sharedTasks`, `validations`,
+`rewardApprovals`) alongside the existing planner rule. The full rule set now
+lives in the source-controlled `firestore.rules` file at the project root
+instead of only in the Console.
+
+1. Install the Firebase CLI once: `npm install -g firebase-tools`
+2. `firebase login`, then `firebase use <your-project-id>`
+3. Deploy: `firebase deploy --only firestore:rules`
+
+Or simply copy the contents of `firestore.rules` into Firebase Console →
+Firestore Database → Rules → Publish. Still free on Spark — no Cloud Functions
+are used anywhere in this design (the plan explicitly avoids them; see the
+"no Cloud Functions" notes in `lib/firebase/social.ts`), so this stays within
+the same free tier as the rest of the app.
+
+---
+
 ## After Firebase is Live — Remove the Argon2 Fallback
 
 Once Firebase is working for all your accounts, you can remove the custom auth system to simplify the codebase. Tell Claude: *"Remove the Argon2/JWT fallback auth — Firebase is now the only auth provider."*

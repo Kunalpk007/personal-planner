@@ -1,4 +1,4 @@
-const CACHE = 'kunals-planner-v2'
+const CACHE = 'kunals-planner-v3'
 
 self.addEventListener('install', () => {
   self.skipWaiting()
@@ -39,14 +39,19 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (isAsset(event.request)) {
+    // Stale-while-revalidate: serve the cached asset immediately for a fast,
+    // app-like repeat load, and refresh the cache in the background so the
+    // next load picks up changes. Static assets are content-hashed by Next.js
+    // build output, so a cached hit is never stale in practice.
     event.respondWith(
-      fetch(event.request).then((res) => {
-        if (res.status === 200) {
-          const clone = res.clone()
-          caches.open(CACHE).then((cache) => cache.put(event.request, clone))
-        }
-        return res
-      }).catch(() => caches.match(event.request))
+      caches.open(CACHE).then(async (cache) => {
+        const cached = await cache.match(event.request)
+        const network = fetch(event.request).then((res) => {
+          if (res.status === 200) cache.put(event.request, res.clone())
+          return res
+        }).catch(() => cached)
+        return cached || network
+      })
     )
     return
   }

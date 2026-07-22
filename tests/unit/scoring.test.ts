@@ -7,7 +7,7 @@ import type { Task, AppConfig } from '@/store/types'
 const CFG: AppConfig = {
   minPts: 70, weekendPts: 20, cutoffHour: 1, tone: 'balanced', managerName: 'Manager',
   moodMot: 1.2, moodSick: 0.5, pomoDuration: 25, quoteMorning: true, quoteEvening: true,
-  autoExportEnabled: false, theme: 'dark',
+  autoExportEnabled: false, theme: 'dark', fontScale: 'normal',
 }
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -40,22 +40,22 @@ describe('calcPts', () => {
     expect(calcPts(makeTask({ priority: 'high' }))).toBe(20)
   })
 
-  it('applies 0.7 multiplier when completed within 1hr of deadline', () => {
+  it('halves points when completed shortly after the deadline (time-bound)', () => {
     const task = makeTask({
       priority: 'high',
       deadline: '2024-01-08T10:00:00.000Z',
       completedAt: '2024-01-08T10:30:00.000Z',
     })
-    expect(calcPts(task)).toBe(14) // round(20 * 0.7)
+    expect(calcPts(task)).toBe(10) // round(20 * 0.5)
   })
 
-  it('applies 0.4 multiplier when completed more than 1hr late', () => {
+  it('halves points when completed well after the deadline (time-bound)', () => {
     const task = makeTask({
       priority: 'high',
       deadline: '2024-01-08T10:00:00.000Z',
       completedAt: '2024-01-08T11:30:01.000Z',
     })
-    expect(calcPts(task)).toBe(8) // round(20 * 0.4)
+    expect(calcPts(task)).toBe(10) // round(20 * 0.5) — flat half, no separate >1hr tier
   })
 
   it('applies no penalty when completed before deadline', () => {
