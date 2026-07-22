@@ -1,12 +1,14 @@
 [build]
   command = "npm run build"
 
-# These are server-only secrets that legitimately end up in compiled server
-# bundle chunks (API routes, SSR functions) — those chunks run in Netlify's
-# Functions runtime and are never shipped to the browser, so Netlify's
-# secrets scanner otherwise flags them as false positives and fails the build.
+# SESSION_SECRET / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY are server-only
+# secrets that legitimately end up in compiled server bundle chunks (API
+# routes, SSR functions) — those chunks run in Netlify's Functions runtime and
+# are never shipped to the browser. NEXT_PUBLIC_FIREBASE_PROJECT_ID is a public
+# Firebase project identifier (also committed in .firebaserc), not a secret.
+# All are false positives for Netlify's secrets scanner otherwise.
 [build.environment]
-  SECRETS_SCAN_OMIT_KEYS = "SESSION_SECRET,FIREBASE_CLIENT_EMAIL,FIREBASE_PRIVATE_KEY"
+  SECRETS_SCAN_OMIT_KEYS = "SESSION_SECRET,FIREBASE_CLIENT_EMAIL,FIREBASE_PRIVATE_KEY,NEXT_PUBLIC_FIREBASE_PROJECT_ID"
 
 # Use esbuild bundler for Netlify Functions to handle ESM/CJS interop
 [functions]
