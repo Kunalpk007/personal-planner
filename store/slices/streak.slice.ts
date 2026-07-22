@@ -1,10 +1,10 @@
 import type { StateCreator } from 'zustand'
-import type { AppState, HistoryEntry, PausedStreak } from '../types'
+import type { AppState, HistoryEntry, PausedStreak, Task } from '../types'
 import { checkStreakMilestone } from '@/lib/engine/streak'
-import { getWeekMonday }       from '@/lib/engine/cutoff'
+import { getWeekMonday, getNextDayKey } from '@/lib/engine/cutoff'
 import { uid }                 from '@/lib/engine/cutoff'
 import { getMinPts }           from '@/lib/engine/scoring'
-import { MAX_PAUSE_DAYS, MAX_BOUGHT_FREEZES, FREEZE_COST, WALLET_RATIO } from '@/constants/points'
+import { MAX_PAUSE_DAYS, MAX_BOUGHT_FREEZES, FREEZE_COST, WALLET_RATIO, MAX_CARRY } from '@/constants/points'
 
 export interface StreakSlice {
   submitDay:        (entry: HistoryEntry) => { freezeBonus: number; milestoneStreak: number | null }
@@ -30,11 +30,30 @@ export const createStreakSlice: StateCreator<AppState, [], [], StreakSlice> = (s
       ? [...s.badges, { id: `s${newStreak}`, label: `${newStreak}-Day Streak`, icon: '🔥', date: entry.date }]
       : s.badges
 
-    // Buffer XP for points earned beyond the daily minimum, at the same
-    // 2:1 ratio as the reward wallet (2 rank XP = 1 buffer XP)
+    // Points earned beyond the daily minimum go straight into Rank XP (at the
+    // same 2:1 ratio the reward wallet uses) rather than a separate buffer.
     const minPts = getMinPts(entry.date, s.cfg)
     const excess = Math.max(0, entry.rxp - minPts)
-    const bufferXP = s.bufferXP + Math.floor(excess / WALLET_RATIO)
+    const overflowXP = Math.floor(excess / WALLET_RATIO)
+
+    // Carry forward any incomplete tasks from the submitted day, mirroring the
+    // overnight auto-logic's carry-forward so manual submission doesn't silently
+    // drop pending work (blocked tasks carry without penalty).
+    const nextKey = getNextDayKey(entry.date)
+    const carried: Task[] = []
+    for (const t of s.tasks.filter(t => t.date === entry.date && !t.done)) {
+      const newCarried = t.blocked ? (t.carriedDays ?? 0) : (t.carriedDays ?? 0) + 1
+      if (!t.blocked && newCarried > MAX_CARRY) continue
+      carried.push({
+        ...t,
+        id:          uid(),
+        date:        nextKey,
+        done:        false,
+        completedAt: null,
+        createdAt:   new Date().toISOString(),
+        carriedDays: newCarried,
+      } as Task)
+    }
 
     set({
       streak:        newStreak,
@@ -45,7 +64,8 @@ export const createStreakSlice: StateCreator<AppState, [], [], StreakSlice> = (s
       freezeTokens:  s.freezeTokens + bonus,
       badges:        newBadges,
       history:       [...s.history, entry],
-      bufferXP,
+      tasks:         carried.length ? [...s.tasks, ...carried] : s.tasks,
+      rankXP:        s.rankXP + overflowXP,
       lastActiveDayForDecay: entry.date,
     })
 
@@ -54,7 +74,8 @@ export const createStreakSlice: StateCreator<AppState, [], [], StreakSlice> = (s
 
   useFreeze(today) {
     const s = get()
-    if (s.freezeTokens <= 0) return
+    // A freeze protects an existing streak — with streak at 0 there's nothing to protect.
+    if (s.freezeTokens <= 0 || s.streak <= 0) return
     set({
       freezeTokens:  s.freezeTokens - 1,
       freezesBought: Math.max(0, (s.freezesBought ?? 0) - 1),
@@ -119,6 +140,9 @@ export const createStreakSlice: StateCreator<AppState, [], [], StreakSlice> = (s
   },
 
   declareRestDay(today) {
+    const s0 = get()
+    // A rest day protects an existing streak — with streak at 0 there's nothing to protect.
+    if (s0.streak <= 0) return
     const mon = getWeekMonday(today)
     set(s => ({
       weekRestUsed:  { ...s.weekRestUsed, [mon]: true },

@@ -36,7 +36,8 @@
       "Bash(grep -q \"Ready\" /tmp/dev.log)",
       "Bash(break)",
       "Read(//tmp/**)",
-      "Bash(time curl -s -o /tmp/login.html -w \"HTTP %{http_code} - %{time_total}s\\\\n\" http://localhost:3000/login)"
+      "Bash(time curl -s -o /tmp/login.html -w \"HTTP %{http_code} - %{time_total}s\\\\n\" http://localhost:3000/login)",
+      "Bash(npx vitest *)"
     ]
   }
 }

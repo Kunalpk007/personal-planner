@@ -34,7 +34,7 @@ export function PinGate({ children, title = 'Enter PIN' }: PinGateProps) {
 
   if (!pin || step === 'setup') {
     return (
-      <div className="flex justify-center pt-10">
+      <div className="flex justify-center items-end min-h-[80vh] pb-20">
         <div className="w-full max-w-sm">
           <div className="text-[15px] font-semibold mb-1 text-center">Set up {title}</div>
           <div className="text-xs text-[var(--text3)] mb-4 text-center">
@@ -55,7 +55,7 @@ export function PinGate({ children, title = 'Enter PIN' }: PinGateProps) {
 
   if (step === 'forgot-question') {
     return (
-      <div className="flex justify-center pt-10">
+      <div className="flex justify-center items-end min-h-[80vh] pb-20">
         <div className="w-full max-w-sm text-center">
           <div className="text-[15px] font-semibold mb-1">Forgot PIN</div>
           {question ? (
@@ -106,7 +106,7 @@ export function PinGate({ children, title = 'Enter PIN' }: PinGateProps) {
 
   if (step === 'forgot-reset') {
     return (
-      <div className="flex justify-center pt-10">
+      <div className="flex justify-center items-end min-h-[80vh] pb-20">
         <div className="w-full max-w-sm">
           <PinSetup
             title="Set a new PIN"
@@ -123,7 +123,7 @@ export function PinGate({ children, title = 'Enter PIN' }: PinGateProps) {
   }
 
   return (
-    <div className="flex justify-center pt-10">
+    <div className="flex justify-center items-end min-h-[80vh] pb-20">
       <div className="w-full max-w-sm text-center">
         <PinPad mode="verify" storedHash={pin} onSuccess={() => setUnlocked(true)} title={title} />
         <button onClick={() => setStep('forgot-question')} className="mt-3 w-full py-2.5 rounded-md text-sm font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] hover:bg-[var(--bg3)]">

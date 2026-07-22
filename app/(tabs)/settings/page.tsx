@@ -7,7 +7,7 @@ import { showToast }       from '@/ui/Toast'
 import { PinPad }          from '@/ui/PinPad'
 import { PinSetup }        from '@/ui/PinSetup'
 import { exportJSON, importJSON } from '@/lib/persistence/export'
-import { pad } from '@/lib/engine/cutoff'
+import { pad, uid } from '@/lib/engine/cutoff'
 import { PIN_LENGTH, PIN_LOCKOUT_THRESHOLD } from '@/constants/points'
 import { getBackupFolderName, pickBackupFolder, fsBackupSupported } from '@/lib/persistence/fsBackup'
 import { deleteAllUserData } from '@/lib/firebase/firestore'
@@ -17,16 +17,24 @@ import { syncNow, destroySync } from '@/lib/sync/sync'
 import { setUserScope } from '@/store/userScope'
 import { STORAGE_KEY, INITIAL_STATE } from '@/store/defaults'
 import pkg from '@/package.json'
-import type { AppConfig } from '@/store/types'
+import type { AppConfig, GoalCadence, GoalTargetType } from '@/store/types'
+import { FLAGS } from '@/constants/feature-flags'
+
+const SUPPORT_EMAIL = 'kunalpk007@gmail.com'
+const MAX_ZONE_NAME = 15
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<'general' | 'streak' | 'rules' | 'phase2'>('general')
+  const [tab, setTab] = useState<'general' | 'streak' | 'rules' | 'phase2' | 'help'>('general')
 
   const cfg         = usePlannerStore(s => s.cfg)
   const setConfig   = usePlannerStore(s => s.setConfig)
   const zones       = usePlannerStore(s => s.zones)
   const addZone     = usePlannerStore(s => s.addZone)
   const removeZone  = usePlannerStore(s => s.removeZone)
+  const setZoneWeight = usePlannerStore(s => s.setZoneWeight)
+  const goals       = usePlannerStore(s => s.goals)
+  const addGoal     = usePlannerStore(s => s.addGoal)
+  const removeGoal  = usePlannerStore(s => s.removeGoal)
   const streak      = usePlannerStore(s => s.streak)
   const bestStreak  = usePlannerStore(s => s.bestStreak)
   const daysActive  = usePlannerStore(s => s.daysActive)
@@ -55,6 +63,21 @@ export default function SettingsPage() {
 
   const [zoneName,   setZoneName]  = useState('')
   const [zoneColor,  setZoneColor] = useState('#639922')
+  const [goalTitle,      setGoalTitle]      = useState('')
+  const [goalCadence,    setGoalCadence]    = useState<GoalCadence>('weekly')
+  const [goalZoneId,     setGoalZoneId]     = useState('')
+  const [goalTargetType, setGoalTargetType] = useState<GoalTargetType>('taskCount')
+  const [goalTarget,     setGoalTarget]     = useState(5)
+  const [goalChecklist,  setGoalChecklist]  = useState<string[]>([])
+  const [goalChecklistDraft, setGoalChecklistDraft] = useState('')
+  const [goalEndDate,    setGoalEndDate]    = useState('')
+  // Goal/challenge end dates: today through +2 months, matching the "End
+  // date not more than 2 months" rule for goal-type friend challenges.
+  const minGoalEndDate = `${new Date().getFullYear()}-${pad(new Date().getMonth() + 1)}-${pad(new Date().getDate())}`
+  const maxGoalEndDate = (() => {
+    const d = new Date(); d.setMonth(d.getMonth() + 2)
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  })()
   const [pauseReason, setPauseReason] = useState('')
   const [pauseOpen,  setPauseOpen] = useState(false)
   const [invText,    setInvText]   = useState('')
@@ -139,6 +162,7 @@ export default function SettingsPage() {
     { k: 'streak',  l: 'Streak & Badges' },
     { k: 'rules',   l: 'Rules & Guide' },
     { k: 'phase2',  l: 'Phase 2' },
+    { k: 'help',    l: 'FAQ & Help' },
   ]
 
   return (
@@ -170,6 +194,24 @@ export default function SettingsPage() {
                     }}
                   >
                     {t === 'dark' ? '🌙 Dark' : t === 'light' ? '☀️ Light' : '🖥 System'}
+                  </button>
+                ))}
+              </div>
+            </SettingRow>
+            <SettingRow label="Text size" sub="Takes effect immediately — useful on mobile">
+              <div className="flex gap-1.5">
+                {(['normal', 'large', 'xlarge'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => { setConfig({ fontScale: f }); setDraft(d => ({ ...d, fontScale: f })) }}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium border transition-all"
+                    style={{
+                      background:  (cfg.fontScale ?? 'normal') === f ? 'var(--green-bg)' : 'var(--bg2)',
+                      color:       (cfg.fontScale ?? 'normal') === f ? 'var(--green)'    : 'var(--text2)',
+                      borderColor: (cfg.fontScale ?? 'normal') === f ? 'var(--green-mid)': 'var(--border2)',
+                    }}
+                  >
+                    {f === 'normal' ? 'A Normal' : f === 'large' ? 'A Large' : 'A Extra large'}
                   </button>
                 ))}
               </div>
@@ -277,19 +319,151 @@ export default function SettingsPage() {
               <div key={z.id} className="flex items-center gap-2.5 p-2.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] mb-2">
                 <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: z.color }} />
                 <span className="flex-1 text-[13px]">{z.name}</span>
+                {FLAGS.LIFE_SCORE && (
+                  <label className="flex items-center gap-1.5 text-[11px] text-[var(--text3)]">
+                    Weight
+                    <input
+                      type="number" min={0} max={10} step={0.5} value={z.weight ?? 1}
+                      onChange={e => setZoneWeight(z.id, +e.target.value)}
+                      className="w-14 text-[12px] px-1.5 py-1 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none"
+                    />
+                  </label>
+                )}
                 <button onClick={() => removeZone(z.id)} className="btn-icon danger">×</button>
               </div>
             ))}
-            <div className="flex gap-2 flex-wrap items-center mt-2">
-              <input value={zoneName} onChange={e => setZoneName(e.target.value)} placeholder="Zone name..."
-                className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+            <div className="flex gap-2 flex-wrap items-start mt-2">
+              <div className="flex-1 min-w-[160px]">
+                <input value={zoneName} onChange={e => setZoneName(e.target.value)} placeholder="Zone name..."
+                  style={{ borderWidth: 1, borderStyle: 'solid', borderColor: zoneName.length > MAX_ZONE_NAME ? '#E24B4A' : 'var(--border2)' }}
+                  className="w-full text-[13px] px-2.5 py-2 rounded-md bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                {zoneName.length > MAX_ZONE_NAME && <div className="text-[11px] text-[var(--red)] mt-0.5">Max length {MAX_ZONE_NAME}</div>}
+              </div>
               <input type="color" value={zoneColor} onChange={e => setZoneColor(e.target.value)} style={{ width: 36, height: 36, padding: 0 }} className="border-2 border-[var(--border2)] bg-none cursor-pointer rounded-full overflow-hidden" />
-              <button onClick={() => { if (!zoneName.trim()) return; addZone(zoneName.trim(), zoneColor); setZoneName(''); showToast('Zone added.') }}
-                className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+              <button
+                disabled={!zoneName.trim() || zoneName.length > MAX_ZONE_NAME}
+                onClick={() => { if (!zoneName.trim() || zoneName.length > MAX_ZONE_NAME) return; addZone(zoneName.trim(), zoneColor); setZoneName(''); showToast('Zone added.') }}
+                className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-40">
                 + Add zone
               </button>
             </div>
+            {FLAGS.LIFE_SCORE && (
+              <p className="text-[11px] text-[var(--text3)] mt-2">Weights control each zone&apos;s share of your Life Score on the dashboard. Default is 1 (equal weight).</p>
+            )}
           </div>
+
+          {FLAGS.GOALS && (
+            <>
+              <SectionLabel>Goals</SectionLabel>
+              <div className="mb-3">
+                {goals.map(g => {
+                  const zoneName = g.zoneId ? zones.find(z => z.id === g.zoneId)?.name : null
+                  const detail = g.targetType === 'checklist'
+                    ? `${g.checklist?.length ?? 0} tasks${g.endDate ? ` · by ${g.endDate}` : ''}`
+                    : g.targetType === 'points' ? `${g.target} pts` : `${g.target} tasks`
+                  return (
+                    <div key={g.id} className="flex items-center gap-2.5 p-2.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] mb-2">
+                      <span className="flex-1 text-[13px]">
+                        {g.title}
+                        <span className="text-[var(--text3)]"> · {g.cadence} · {detail}{zoneName ? ` · ${zoneName}` : ''}{g.challengedBy ? ` · from ${g.challengedBy}` : ''}</span>
+                      </span>
+                      <button onClick={() => removeGoal(g.id)} className="btn-icon danger">×</button>
+                    </div>
+                  )
+                })}
+                <div className="flex gap-2 flex-wrap items-center mt-2">
+                  <input value={goalTitle} onChange={e => setGoalTitle(e.target.value)} placeholder="Goal title..."
+                    className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                  <select value={goalCadence} onChange={e => setGoalCadence(e.target.value as GoalCadence)} className="setting-input">
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                  <select value={goalTargetType} onChange={e => setGoalTargetType(e.target.value as GoalTargetType)} className="setting-input">
+                    <option value="taskCount">Tasks completed</option>
+                    <option value="points">Points earned</option>
+                    <option value="checklist">Checklist (multiple tasks)</option>
+                  </select>
+                  {goalTargetType === 'taskCount' && (
+                    <select value={goalZoneId} onChange={e => setGoalZoneId(e.target.value)} className="setting-input">
+                      <option value="">All zones</option>
+                      {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+                    </select>
+                  )}
+                  {goalTargetType !== 'checklist' && (
+                    <input type="number" value={goalTarget} onChange={e => setGoalTarget(+e.target.value)} min={1} style={{ width: 80 }}
+                      className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                  )}
+                  {goalTargetType !== 'checklist' && (
+                    <button
+                      onClick={() => {
+                        if (!goalTitle.trim() || goalTarget < 1) { showToast('Give the goal a title and a target > 0.'); return }
+                        addGoal({
+                          title: goalTitle.trim(), cadence: goalCadence, targetType: goalTargetType, target: goalTarget,
+                          ...(goalTargetType === 'taskCount' && goalZoneId ? { zoneId: goalZoneId } : {}),
+                        })
+                        setGoalTitle(''); setGoalZoneId(''); setGoalTarget(5)
+                        showToast('Goal added.')
+                      }}
+                      className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+                      + Add goal
+                    </button>
+                  )}
+                </div>
+
+                {goalTargetType === 'checklist' && (
+                  <div className="mt-2 p-2.5 rounded-[10px] border border-[var(--border2)] bg-[var(--bg2)]">
+                    <div className="flex gap-2 flex-wrap items-center">
+                      <input
+                        value={goalChecklistDraft}
+                        onChange={e => setGoalChecklistDraft(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key !== 'Enter' || !goalChecklistDraft.trim()) return
+                          setGoalChecklist(l => [...l, goalChecklistDraft.trim()]); setGoalChecklistDraft('')
+                        }}
+                        placeholder="Task in this goal... (Enter to add)"
+                        className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] outline-none" />
+                      <button
+                        onClick={() => { if (!goalChecklistDraft.trim()) return; setGoalChecklist(l => [...l, goalChecklistDraft.trim()]); setGoalChecklistDraft('') }}
+                        className="px-3 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)]">
+                        + Add task
+                      </button>
+                    </div>
+                    {goalChecklist.length > 0 && (
+                      <div className="flex gap-1.5 flex-wrap mt-2">
+                        {goalChecklist.map((t, i) => (
+                          <span key={i} className="text-[12px] px-2 py-1 rounded-full border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] flex items-center gap-1.5">
+                            {t}
+                            <button onClick={() => setGoalChecklist(l => l.filter((_, idx) => idx !== i))} className="text-[var(--text3)]">×</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2 flex-wrap items-center mt-2.5">
+                      <label className="text-[12px] text-[var(--text3)]">End date (optional, max 2 months out):</label>
+                      <input type="date" value={goalEndDate} onChange={e => setGoalEndDate(e.target.value)}
+                        min={minGoalEndDate} max={maxGoalEndDate}
+                        className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] outline-none" />
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (!goalTitle.trim() || goalChecklist.length === 0) { showToast('Give the goal a title and at least one task.'); return }
+                        addGoal({
+                          title: goalTitle.trim(), cadence: goalCadence, targetType: 'checklist', target: goalChecklist.length,
+                          checklist: goalChecklist.map(t => ({ id: uid(), title: t, done: false })),
+                          ...(goalEndDate ? { endDate: goalEndDate } : {}),
+                        })
+                        setGoalTitle(''); setGoalChecklist([]); setGoalChecklistDraft(''); setGoalEndDate('')
+                        showToast('Goal added.')
+                      }}
+                      className="mt-2.5 px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+                      + Add goal
+                    </button>
+                  </div>
+                )}
+                <p className="text-[11px] text-[var(--text3)] mt-2">Progress is shown on the Dashboard. Zone-scoped goals only support &quot;Tasks completed&quot; — per-task points aren&apos;t tracked per zone.</p>
+              </div>
+            </>
+          )}
 
           <SectionLabel>Account</SectionLabel>
           <SettingCard>
@@ -319,7 +493,7 @@ export default function SettingsPage() {
 
       {/* Fixed bottom bar */}
       {tab === 'general' && (
-        <div className="fixed bottom-[64px] sm:bottom-2 z-10" style={{ left: '50%', transform: 'translateX(-50%)', width: 'min(860px, calc(100vw - 2rem))' }}>
+        <div className="fixed-bottom-bar">
           <button
             onClick={saveSettings}
             disabled={!dirty}
@@ -483,6 +657,124 @@ export default function SettingsPage() {
           </Accordion>
           <Accordion title="📱 Telegram / WhatsApp notifications">
             <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">Daily task reminders via Telegram Bot or WhatsApp (Twilio). GitHub Actions cron job.</p>
+          </Accordion>
+        </div>
+      )}
+
+      {tab === 'help' && (
+        <div className="pb-20">
+          <div className="rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-3.5 mb-3.5">
+            <div className="text-[13px] font-medium mb-1">Need help?</div>
+            <p className="text-[12px] text-[var(--text2)] mb-2.5 leading-relaxed">
+              Can&apos;t find your answer below, or hit a bug? Reach out directly — screenshots and steps to reproduce help the most.
+            </p>
+            <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Kunal's Planner — support request")}`}
+              className="inline-flex items-center gap-1.5 text-[13px] px-3.5 py-2 rounded-md font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+              ✉️ Email {SUPPORT_EMAIL}
+            </a>
+          </div>
+
+          <SectionLabel>Sync & devices</SectionLabel>
+          <Accordion title="Why don't my tasks/streak show up on another device?" defaultOpen>
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Cross-device sync needs Firebase set up and you signed into the same account on both devices. Check the sync badge in the top nav — &quot;Saved ✓&quot; means it&apos;s working, &quot;No cloud sync ⚠&quot; means Firebase isn&apos;t configured on this deployment (common on a fresh Netlify deploy if the Firebase environment variables weren&apos;t added to the site&apos;s build settings). &quot;Offline ⚠&quot; just means no network right now — it&apos;ll catch up once you&apos;re back online.
+            </p>
+          </Accordion>
+          <Accordion title="My journal syncs but tasks/streak don't — why?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              This was a real bug (fixed — see BUG-030 in the bug tracker): journaling on a device could make that device&apos;s data look &quot;newer&quot; than another device&apos;s real task/streak sync, even with no local tasks, which then wrongly overwrote real cloud data. The sync merge now also checks whether local data looks empty before trusting its timestamp. If you still see this, force a refresh and check the sync badge.
+            </p>
+          </Accordion>
+          <Accordion title="What does the sync status badge in the top bar mean?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Saving… = a change is being written to the cloud right now. Saved ✓ = everything&apos;s up to date. Offline ⚠ = no network, changes are queued locally. No cloud sync ⚠ = this deployment has no Firebase connection at all, so nothing leaves this device/browser.
+            </p>
+          </Accordion>
+
+          <SectionLabel>Tasks, streaks & points</SectionLabel>
+          <Accordion title="How does the daily cutoff work?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Your &quot;day&quot; runs until your configured cutoff hour (default 1:00 AM, adjustable up to 4:00 AM in Settings → General), not midnight. At cutoff, the app auto-submits if you&apos;ve hit your minimum points, auto-rests or auto-freezes if available, or breaks the streak if none of those apply.
+            </p>
+          </Accordion>
+          <Accordion title="What happens to tasks I don't finish?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Incomplete tasks automatically carry forward to the next day at cutoff (up to 3 days), losing a small number of points per day carried — unless the task is marked &quot;Blocked&quot; by a dependency, in which case it carries with no penalty.
+            </p>
+          </Accordion>
+          <Accordion title="What's the difference between a Rest Day and a Freeze?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Both protect your streak from breaking without incrementing it. A Rest Day is a manual, self-declared day off. A Freeze is a limited resource (earned or bought with 250 wallet pts) that gets consumed automatically if cutoff arrives with no activity. Neither works if your streak is already 0 — there's nothing to protect.
+            </p>
+          </Accordion>
+          <Accordion title="How are points calculated?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Base points by priority (High 20 / Medium 12 / Low 6 / ⭐ Special custom), adjusted by deadline timing, slot mismatch, and your mood setting for the day. Full details are in the Rules & Guide tab → &quot;Points system&quot;.
+            </p>
+          </Accordion>
+          <Accordion title="What's the difference between Rank XP and Wallet points?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Rank XP drives your overall rank/level and never gets spent. Wallet points are what you redeem for rewards — every 2 task points earned adds 1 wallet point, and the wallet never decays.
+            </p>
+          </Accordion>
+          <Accordion title="How do I redeem a reward, and what's a reward approval?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Redeem anytime from the Rewards tab — no need to submit the day first. If a reward is above a cost threshold or linked to a habit, a friend you've tagged as Notary needs to approve it (or it auto-approves after a cooldown if they don't respond) — this is an anti-cheat check, not a hard block.
+            </p>
+          </Accordion>
+
+          <SectionLabel>Friends, challenges & goals</SectionLabel>
+          <Accordion title="How do I add a friend?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Go to Tasks → Friends mode, share your friend code (copy it or send it via the WhatsApp button), and have them paste it into their own &quot;Add a friend&quot; box. There's a soft cap on how many friends you can add at once — remove someone first if you're at the limit.
+            </p>
+          </Accordion>
+          <Accordion title="What happens if I remove a friend?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Only your own friend list changes. Any challenges, validations, or reward approvals already in progress with them aren't affected, and they can re-add you later with your friend code. Removal always asks for confirmation first.
+            </p>
+          </Accordion>
+          <Accordion title="What's the difference between a task challenge and a goal challenge?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              A task challenge sends a single task straight onto your friend's list for today. A goal challenge sends a checklist of multiple tasks with an end date (up to 2 months out) — accepting it creates a whole Goal on their Goals list instead of one task, tagged with who challenged them.
+            </p>
+          </Accordion>
+          <Accordion title="Why do challenge tasks use fixed zones (Health/Fitness/Finance/Personal/Other) instead of my own zones?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Zones are personal/custom per account, so a zone id from your list might not exist — or might mean something completely different — on your friend's account. Challenges always use a fixed, shared zone set so it renders sensibly on both sides.
+            </p>
+          </Accordion>
+          <Accordion title="What does the notification bell show?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Incoming friend requests, tasks/rewards waiting on your review, incoming challenges, and updates on things you sent out (accepted, declined, or completed). It's driven by live listeners, not polling, so it should reflect changes within a second or two.
+            </p>
+          </Accordion>
+          <Accordion title="How do checklist goals work?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Add a goal in Settings → Goals with type &quot;Checklist (multiple tasks)&quot;, list out the individual tasks, and optionally set an end date. Progress is just how many of the checklist items you've checked off — shown as checkboxes on your Dashboard's Goals card.
+            </p>
+          </Accordion>
+          <Accordion title="Can I set weekly or monthly goals?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Yes — cadence (Weekly/Monthly) applies to points-based and task-count goals, which reset and re-track each period automatically. Checklist goals (including goal challenges from friends) are one-off and time-bound by their own end date instead.
+            </p>
+          </Accordion>
+          <Accordion title="Who can validate my tasks, and why would I need that?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              You can ask any friend to sign off on a task before it counts — useful for anything easy to fake (gym check-ins, etc). Points stay withheld until they approve or reject; there's no silent auto-approve for validations (unlike reward approvals, which do auto-approve after a cooldown).
+            </p>
+          </Accordion>
+
+          <SectionLabel>Privacy & account</SectionLabel>
+          <Accordion title="Is my journal private?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Yes — journal entries are yours alone; friends never see them. You can additionally lock the journal behind an app PIN and optional encryption in Settings → General.
+            </p>
+          </Accordion>
+          <Accordion title="How do I report a bug or request something?">
+            <p className="text-[13px] text-[var(--text2)] mt-2 leading-relaxed">
+              Email {SUPPORT_EMAIL} with what happened and, if possible, a screenshot or the steps to reproduce it. Every bug found and fixed in this app gets logged in an internal bug tracker so nothing gets silently forgotten.
+            </p>
           </Accordion>
         </div>
       )}

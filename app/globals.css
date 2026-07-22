@@ -136,6 +136,7 @@
     max-width: 860px;
     margin: 0 auto;
     padding: var(--spacing-section) var(--spacing-page);
+    zoom: var(--content-zoom, 1);
   }
 
   /* Cards */
@@ -293,6 +294,22 @@
     .bottom-nav { display: flex; }
     .page-container { padding-bottom: 5.5rem; }
   }
+
+  /* Fixed bottom action bars (e.g. Settings "Save") must clear the bottom
+     mobile nav — its real height varies with env(safe-area-inset-bottom)
+     (home-indicator devices), so a plain fixed px offset can land the bar
+     half-hidden behind the nav on some phones. */
+  .fixed-bottom-bar {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(860px, calc(100vw - 2rem));
+    z-index: 60;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+  @media (max-width: 1024px) {
+    .fixed-bottom-bar { bottom: calc(60px + env(safe-area-inset-bottom)); }
+  }
 }
 
 /* ── Top tab bar ──────────────────────────────────────────────────────────── */
@@ -374,6 +391,34 @@
   0%   { width: 0; left: 0; }
   50%  { width: 60%; left: 20%; }
   100% { width: 0; left: 100%; }
+}
+
+/* ── Click-feedback loader (shown on tap before an action resolves) ──────── */
+.click-loader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  animation: clickLoaderFadeIn 0.15s ease;
+}
+.click-loader-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  animation: clickLoaderSpin 0.6s linear infinite;
+}
+@keyframes clickLoaderSpin {
+  to { transform: rotate(360deg); }
+}
+@keyframes clickLoaderFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ── Page enter animations ────────────────────────────────────────────────── */

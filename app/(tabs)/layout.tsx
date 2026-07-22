@@ -4,11 +4,14 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Toast }            from '@/ui/Toast'
 import { ManagerModal }     from '@/ui/ManagerModal'
 import { ThemeApplier }     from '@/ui/ThemeApplier'
+import { FontScaleApplier } from '@/ui/FontScaleApplier'
 import { useOvernightCheck } from '@/hooks/useOvernightCheck'
 import { StoreBootstrap }   from '@/features/auth/StoreBootstrap'
 import { PwaBootstrap }     from '@/features/pwa/PwaBootstrap'
 import { AppShellErrorBoundary } from './AppShellErrorBoundary'
 import { SyncStatusBadge }  from '@/ui/SyncStatusBadge'
+import { NotificationBell } from '@/ui/NotificationBell'
+import { FLAGS }            from '@/constants/feature-flags'
 
 function DashboardIcon() {
   return (
@@ -54,6 +57,16 @@ function HistoryIcon() {
     </svg>
   )
 }
+function FriendsIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  )
+}
 function SettingsIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -68,10 +81,14 @@ const TAB_ICONS: Record<string, React.ComponentType> = {
   '/tasks': TasksIcon,
   '/journal': JournalIcon,
   '/rewards': RewardsIcon,
+  '/friends': FriendsIcon,
   '/history': HistoryIcon,
   '/settings': SettingsIcon,
 }
 
+// Friends used to be its own top-level tab; it's now a mode on the Tasks
+// page instead (alongside Today's Tasks / Recurring Templates — see
+// app/(tabs)/tasks/page.tsx) so it doesn't cost a nav slot of its own.
 const TABS = [
   { href: '/dashboard', label: 'Home' },
   { href: '/tasks',     label: 'Tasks' },
@@ -87,14 +104,20 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const prevPath  = useRef(pathname)
   const touchX    = useRef(0)
   const touchY    = useRef(0)
-  const [navigating, setNavigating] = useState(false)
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
   const [animKey, setAnimKey] = useState(0)
   const [optimisticTab, setOptimisticTab] = useState<string | null>(null)
 
   useOvernightCheck()
 
-  // Detect route change → play slide animation + clear loading state
+  // Warm the client-side cache for every tab up front so the first click on
+  // each is instant — the tab buttons use router.push (not <Link>), which
+  // otherwise wouldn't prefetch and would fetch each route cold on click.
+  useEffect(() => {
+    TABS.forEach(t => router.prefetch(t.href))
+  }, [router])
+
+  // Detect route change → play slide animation
   useEffect(() => {
     if (prevPath.current === pathname) return
     const prevIdx = TABS.findIndex(t => t.href === prevPath.current)
@@ -103,14 +126,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
       setSlideDir(currIdx > prevIdx ? 'right' : 'left')
       setAnimKey(k => k + 1)
     }
-    setNavigating(false)
     setOptimisticTab(null)
     prevPath.current = pathname
   }, [pathname])
 
   const navigateTab = useCallback((href: string) => {
     if (href === pathname) return
-    setNavigating(true)
     setOptimisticTab(href)
     const currIdx = TABS.findIndex(t => t.href === href)
     const prevIdx = TABS.findIndex(t => t.href === pathname)
@@ -156,18 +177,20 @@ function AppShell({ children }: { children: React.ReactNode }) {
               </button>
             ))}
           </div>
+          {FLAGS.FRIENDS && <NotificationBell />}
           <SyncStatusBadge />
         </div>
       </nav>
-
-      {/* Loading bar shown during tab transitions */}
-      {navigating && <div className="nav-loading-bar" />}
 
       {/* Page content with swipe + animation */}
       <main
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
-        style={{ position: 'relative' }}
+        // Swipe-to-navigate only registers on touches inside <main>. Without a
+        // min-height, short/empty pages (e.g. history with no entries) leave
+        // most of the viewport outside this element, so swipes there were
+        // silently ignored. Force it to always cover at least the viewport.
+        style={{ position: 'relative', minHeight: '100dvh' }}
       >
         <div key={animKey ? `${pathname}-${animKey}` : pathname} className={`page-container page-enter-${slideDir}`}>
           {children}
@@ -212,6 +235,7 @@ export default function TabsLayout({ children }: { children: React.ReactNode }) 
   return (
     <>
       <ThemeApplier />
+      <FontScaleApplier />
       <StoreBootstrap onReady={onReady} />
 
       {storeReady ? (

@@ -85,12 +85,23 @@ describe('getTaskCompleteMessage', () => {
     const msg = getTaskCompleteMessage('high', true, undefined, CFG_TONE)
     expect(typeof msg).toBe('string')
   })
+
+  it('falls back to "balanced" when an unknown tone is provided', () => {
+    mockHour(8)
+    const msg = getTaskCompleteMessage('high', false, undefined, 'unknown' as any)
+    expect(typeof msg).toBe('string')
+    expect(msg.length).toBeGreaterThan(0)
+  })
 })
 
 describe('getConcernMessage', () => {
   it('returns a non-empty string for any tone', () => {
     expect(getConcernMessage(CFG_TONE).length).toBeGreaterThan(0)
     expect(getConcernMessage('strict').length).toBeGreaterThan(0)
+  })
+
+  it('falls back to "balanced" when an unknown tone is provided', () => {
+    expect(getConcernMessage('unknown' as any).length).toBeGreaterThan(0)
   })
 })
 
@@ -101,5 +112,9 @@ describe('getMilestoneMessage', () => {
 
   it('falls back gracefully for an unknown streak milestone', () => {
     expect(getMilestoneMessage(9999, CFG_TONE).length).toBeGreaterThan(0)
+  })
+
+  it('falls back to "balanced" when an unknown tone is provided', () => {
+    expect(getMilestoneMessage(7, 'unknown' as any).length).toBeGreaterThan(0)
   })
 })

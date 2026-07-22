@@ -11,7 +11,21 @@ export function PwaBootstrap() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
 
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    if (process.env.NODE_ENV === 'development') {
+      // Never register (and actively remove any previously-registered) SW in
+      // dev — Next's dev build rebuilds JS chunks on every change without
+      // content-hashing them the way prod does, so a cached chunk under the
+      // stale-while-revalidate strategy can silently serve stale code and
+      // make new changes look like they "aren't showing up".
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => reg.unregister())
+      })
+      if ('caches' in window) {
+        caches.keys().then(keys => keys.forEach(k => caches.delete(k)))
+      }
+    } else {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
+    }
 
     const handler = (e: Event) => {
       e.preventDefault()

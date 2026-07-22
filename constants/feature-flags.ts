@@ -3,6 +3,9 @@
 
 export const FLAGS = {
   HISTORY_CHART:  process.env.NEXT_PUBLIC_ENABLE_HISTORY_CHART  === 'true',
+  FRIENDS:        process.env.NEXT_PUBLIC_ENABLE_FRIENDS        === 'true',
+  GOALS:          process.env.NEXT_PUBLIC_ENABLE_GOALS          === 'true',
+  LIFE_SCORE:     process.env.NEXT_PUBLIC_ENABLE_LIFE_SCORE     === 'true',
   NOTION_SYNC:    process.env.NEXT_PUBLIC_ENABLE_NOTION_SYNC    === 'true',
   GCAL_SYNC:      process.env.NEXT_PUBLIC_ENABLE_GCAL_SYNC      === 'true',
   AI_SUMMARY:     process.env.NEXT_PUBLIC_ENABLE_AI_SUMMARY     === 'true',

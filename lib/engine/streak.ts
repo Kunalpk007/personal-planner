@@ -64,7 +64,7 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
     streak:        state.streak,
     bestStreak:    state.bestStreak,
     daysActive:    state.daysActive,
-    bufferXP:      state.bufferXP,
+    rankXP:        state.rankXP ?? 0,
     badges:        [...state.badges],
     history:       [...state.history],
     tasks:         [...state.tasks],
@@ -122,9 +122,10 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
         patch.badges!.push({ id: `s${newStreak}`, label: `${newStreak}-Day Streak`, icon: '🔥', date: mk })
         patch.freezeTokens = (patch.freezeTokens ?? 0) + bonus
       }
-      // Buffer XP at the same 2:1 ratio as the reward wallet
+      // Overflow past the daily minimum goes straight into Rank XP (at the
+      // same 2:1 ratio the reward wallet uses) instead of a separate buffer.
       const excess = Math.max(0, earned - minPts)
-      patch.bufferXP = (patch.bufferXP ?? 0) + Math.floor(excess / WALLET_RATIO)
+      patch.rankXP = patch.rankXP! + Math.floor(excess / WALLET_RATIO)
 
       patch.streak             = newStreak
       patch.daysActive         = (patch.daysActive ?? 0) + 1
@@ -137,25 +138,22 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
 
     const mon = getWeekMonday(mk)
 
-    if (!patch.weekRestUsed![mon]) {
+    // Rest day takes precedence over the streak whenever the day's tasks
+    // weren't completed: an incomplete day is always auto-protected as a Rest
+    // Day (streak held, not incremented), ahead of ever spending a freeze or
+    // breaking the streak. There's no once-per-week cap on this — a rest day
+    // always wins over losing the streak. With the streak already at 0 there's
+    // nothing to protect, so the day is just recorded as a plain missed day.
+    if (patch.streak! <= 0) {
+      patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: false })
+      overnightMsg = `😔 ${mk} missed (${earned}/${minPts} pts). No streak yet to protect.`
+    } else {
       patch.weekRestUsed![mon] = true
       patch.restDays![mk]      = true
       patch.submittedDays![mk] = true
       patch.daysActive         = (patch.daysActive ?? 0) + 1
       patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: true })
-      overnightMsg = `🟡 Rest Day auto-used for ${mk} (${earned}/${minPts} pts). Streak protected.`
-    } else if ((patch.freezeTokens ?? 0) > 0) {
-      patch.freezeTokens! -= 1
-      if ((patch.freezesBought ?? 0) > 0) patch.freezesBought! -= 1
-      patch.freezesUsed        = (patch.freezesUsed ?? 0) + 1
-      patch.frozenDays![mk]    = true
-      patch.submittedDays![mk] = true
-      patch.history!.push({ ...baseEntry, rxp: earned, frozen: true, rest: false })
-      overnightMsg = `❄ Auto-freeze used for ${mk} (${earned}/${minPts} pts). Streak protected.`
-    } else {
-      patch.streak = 0
-      patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: false })
-      overnightMsg = `😔 Streak broke on ${mk} (${earned}/${minPts} pts). No protection available. Start fresh!`
+      overnightMsg = `🟡 Rest Day auto-applied for ${mk} (${earned}/${minPts} pts). Streak protected.`
     }
   }
 

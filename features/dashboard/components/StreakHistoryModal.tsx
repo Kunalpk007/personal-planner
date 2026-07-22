@@ -33,6 +33,7 @@ export function StreakHistoryModal({ open, onClose }: { open: boolean; onClose: 
   const history        = usePlannerStore(s => s.history)
   const cfg            = usePlannerStore(s => s.cfg)
   const isSettledToday = usePlannerStore(s => !!s.submittedDays[today])
+  const streak         = usePlannerStore(s => s.streak)
   const restAvailable  = usePlannerStore(s => !s.weekRestUsed[getWeekMonday(today)])
   const freezeTokens   = usePlannerStore(s => s.freezeTokens)
   const useFreeze      = usePlannerStore(s => s.useFreeze)
@@ -89,19 +90,21 @@ export function StreakHistoryModal({ open, onClose }: { open: boolean; onClose: 
           <div className="text-[10px] uppercase tracking-wide text-[var(--text3)] mb-0.5">Today&apos;s Actions</div>
           <button
             onClick={() => setRestConfirmOpen(true)}
-            disabled={isSettledToday || !restAvailable}
+            disabled={isSettledToday || !restAvailable || streak <= 0}
             className="w-full text-left px-3.5 py-2.5 rounded-md text-sm font-medium border disabled:opacity-35 bg-[var(--amber-bg)] text-[var(--amber)] border-[#EF9F27]"
           >
             🟡 Take Rest Day
-            {!restAvailable && <span className="block text-[11px] opacity-80 font-normal">Already used this week</span>}
+            {streak <= 0 && <span className="block text-[11px] opacity-80 font-normal">No streak to protect</span>}
+            {streak > 0 && !restAvailable && <span className="block text-[11px] opacity-80 font-normal">Already used this week</span>}
           </button>
           <button
             onClick={() => { useFreeze(today); onClose(); showToast('❄ Freeze used. Streak protected.') }}
-            disabled={isSettledToday || freezeTokens <= 0}
+            disabled={isSettledToday || freezeTokens <= 0 || streak <= 0}
             className="w-full text-left px-3.5 py-2.5 rounded-md text-sm font-medium border disabled:opacity-35 bg-[var(--blue-bg)] text-[var(--blue)] border-[var(--blue)]"
           >
             ❄ Use Freeze
-            {freezeTokens <= 0 && <span className="block text-[11px] opacity-80 font-normal">No freeze tokens available</span>}
+            {streak <= 0 && <span className="block text-[11px] opacity-80 font-normal">No streak to protect</span>}
+            {streak > 0 && freezeTokens <= 0 && <span className="block text-[11px] opacity-80 font-normal">No freeze tokens available</span>}
           </button>
         </div>
       </Modal>

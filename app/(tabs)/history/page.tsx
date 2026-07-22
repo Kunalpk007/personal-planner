@@ -1,7 +1,14 @@
 'use client'
-import { usePlannerStore } from '@/store'
-import { Accordion }       from '@/ui/Accordion'
-import { formatDate }      from '@/lib/engine/cutoff'
+import dynamic              from 'next/dynamic'
+import { usePlannerStore }  from '@/store'
+import { Accordion }        from '@/ui/Accordion'
+import { formatDate }       from '@/lib/engine/cutoff'
+import { FLAGS }            from '@/constants/feature-flags'
+
+const HistoryChartsSection = dynamic(() => import('@/features/history/components/HistoryChartsSection'), {
+  ssr: false,
+  loading: () => <div className="text-[12px] text-[var(--text3)] py-4 text-center">Loading charts…</div>,
+})
 
 const MOOD_LABELS: Record<string, string> = {
   motivated: '⚡ Motivated', neutral: '😐 Neutral', sick: '🤒 Sick',
@@ -17,6 +24,7 @@ export default function HistoryPage() {
 
   return (
     <div>
+      {FLAGS.HISTORY_CHART && <HistoryChartsSection />}
       <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">Completion log</div>
       {sorted.length === 0 && (
         <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No history yet. Submit your first day.</div>

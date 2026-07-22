@@ -20,7 +20,10 @@ export function RankProgress() {
 
   return (
     <>
-      <div className="card mb-3.5">
+      <button
+        onClick={() => setOpen(true)}
+        className="card mb-3.5 w-full text-left cursor-pointer transition-opacity hover:opacity-90"
+      >
         <div className="flex justify-between items-center flex-wrap gap-1 mb-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span
@@ -31,20 +34,12 @@ export function RankProgress() {
             </span>
             <span className="text-xs text-[var(--text2)]">{rankXP} XP</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--text2)]">
-              {nextRank ? `${rankXP - rank.min}/${nextRank.min - rank.min} XP to ${nextRank.label}` : '🏆 MAX RANK'}
-            </span>
-            <button
-              onClick={() => setOpen(true)}
-              className="w-[22px] h-[22px] rounded-full bg-[var(--bg3)] border border-[var(--border2)] text-[11px] font-bold text-[var(--text2)]"
-            >
-              ℹ
-            </button>
-          </div>
+          <span className="text-xs text-[var(--text2)]">
+            {nextRank ? `${rankXP - rank.min}/${nextRank.min - rank.min} XP to ${nextRank.label}` : '🏆 MAX RANK'}
+          </span>
         </div>
         <ProgressBar value={pct} />
-      </div>
+      </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="🏆 Rank milestones">
         <div className="space-y-2">

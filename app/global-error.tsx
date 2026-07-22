@@ -10,10 +10,18 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     // ChunkLoadError means the browser has stale JS bundle references (e.g. after
-    // a hot-reload recompile). Force a full reload to fetch the fresh chunks.
-    if (error?.name === 'ChunkLoadError' || error?.message?.includes('ChunkLoadError') || error?.message?.includes('Failed to load chunk')) {
-      window.location.reload()
-    }
+    // a hot-reload recompile or a fresh deploy). Force a full reload to fetch the
+    // fresh chunks — but only once per error, so a genuinely broken build can't
+    // trap the user in an infinite reload loop.
+    const isChunk = error?.name === 'ChunkLoadError'
+      || /ChunkLoadError|Loading chunk|Failed to load chunk|Loading CSS chunk|dynamically imported module/i.test(error?.message ?? '')
+    if (!isChunk) return
+    const key = `kp_chunk_reload:${error?.digest ?? error?.message ?? 'x'}`
+    try {
+      if (sessionStorage.getItem(key)) return
+      sessionStorage.setItem(key, '1')
+    } catch {}
+    window.location.reload()
   }, [error])
 
   return (

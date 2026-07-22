@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { GlobalThemeApplier } from '@/ui/GlobalThemeApplier'
 
 export const metadata: Metadata = {
   title:       "Kunal's Planner",
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body>
+        <GlobalThemeApplier />
         {children}
       </body>
     </html>

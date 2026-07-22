@@ -12,9 +12,11 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint:fix": "eslint --fix .",
-"verify": "vitest run --coverage && next build --webpack"
+    "verify": "vitest run --coverage && next build --webpack"
   },
   "dependencies": {
+    "@dataconnect/admin-generated": "file:src/dataconnect-admin-generated",
+    "@dataconnect/generated": "file:src/dataconnect-generated",
     "@node-rs/argon2": "^2.0.2",
     "firebase": "^12.14.0",
     "firebase-admin": "^14.0.0",

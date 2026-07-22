@@ -17,6 +17,7 @@ export default function JournalPage() {
   const [text, setText] = useState('')
   const [editKey, setEditKey]   = useState<string | null>(null)
   const [deleteKey, setDeleteKey] = useState<string | null>(null)
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
 
   const journal     = usePlannerStore(s => s.journal)
   const encToken    = usePlannerStore(s => s.journalEncryptionToken)
@@ -130,17 +131,27 @@ export default function JournalPage() {
 
   // ── Journal actions ──────────────────────────────────────────────────────
 
-  async function handleSave() {
+  // Save is gated behind a confirmation modal (requestSave opens it,
+  // handleSave runs after the user confirms) so an entry is never written
+  // by an accidental tap.
+  function requestSave() {
     if (!text.trim()) { showToast('Write something first.'); return }
+    setConfirmSaveOpen(true)
+  }
+
+  async function handleSave() {
+    if (!text.trim()) { setConfirmSaveOpen(false); return }
     const key = hasJournalKey() ? getJournalKey()! : null
     let savedText = text.trim()
     if (key) {
       savedText = await encryptText(savedText, key)
     }
+    const wasEdit = !!editKey
     const { isFirst } = saveEntry(today, savedText, editKey ?? undefined)
     setText('')
     setEditKey(null)
-    showToast(editKey ? 'Entry updated.' : isFirst ? '+5 Rank XP + 2 wallet pts for journaling!' : 'Entry saved.')
+    setConfirmSaveOpen(false)
+    showToast(wasEdit ? 'Entry updated.' : isFirst ? '+5 Rank XP + 2 wallet pts for journaling!' : 'Entry saved.')
   }
 
   function handleEdit(key: string) {
@@ -194,14 +205,14 @@ export default function JournalPage() {
 
       {/* Loading state — key loaded, still decrypting */}
       {waitingDecrypt && (
-        <div className="flex justify-center pt-10">
+        <div className="flex justify-center items-end min-h-[80vh] pb-20">
           <div className="text-sm text-[var(--text3)]">Decrypting journal entries…</div>
         </div>
       )}
 
       {/* Encryption gate — passphrase prompt */}
       {needsPassphrase && (
-        <div className="flex justify-center pt-6">
+        <div className="flex justify-center items-end min-h-[80vh] pb-20">
           <div className="w-full max-w-sm text-center">
             <div className="text-[15px] font-semibold mb-1">Journal Encryption</div>
             <div className="text-xs text-[var(--text3)] mb-4">
@@ -264,18 +275,6 @@ export default function JournalPage() {
         </div>
       )}
 
-      {/* Encryption setup prompt (when no token set yet) */}
-      {!encToken && !encSetup && (
-        <div className="flex justify-end mb-2">
-          <button
-            onClick={() => setEncSetup(true)}
-            className="px-2.5 py-1 rounded-md text-[11px] border border-[var(--border2)] text-[var(--text3)]"
-          >
-            🔒 Encrypt journal
-          </button>
-        </div>
-      )}
-
       {/* Encryption setup form */}
       {encSetup && (
         <div className="max-w-sm mx-auto mb-4 p-3 rounded-[10px] border border-[var(--border2)] bg-[var(--bg2)]">
@@ -319,17 +318,49 @@ export default function JournalPage() {
       {/* Journal UI — only shown when encryption is unlocked or not set */}
       {showJournal && (
         <>
-          <div className="inline-flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5">
-            {[{k:'write',l:'Write'},{k:'history',l:'Past entries'}].map(m => (
-              <button key={m.k} onClick={() => setMode(m.k as any)}
-                className={`px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${mode === m.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
-                {m.l}
-              </button>
-            ))}
-          </div>
+          {mode === 'history' && (
+            <>
+              <div className="inline-flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5">
+                {[{k:'write',l:'Write'},{k:'history',l:'Past entries'}].map(m => (
+                  <button key={m.k} onClick={() => setMode(m.k as any)}
+                    className={`px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${mode === m.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
+                    {m.l}
+                  </button>
+                ))}
+              </div>
+              {!encToken && !encSetup && (
+                <div className="flex justify-end mb-3">
+                  <button
+                    onClick={() => setEncSetup(true)}
+                    className="px-3 py-1.5 rounded-md text-xs font-semibold border-[1.5px] border-[var(--green-mid)] bg-[var(--green-bg)] text-[var(--green)]"
+                  >
+                    🔒 Encrypt Journal
+                  </button>
+                </div>
+              )}
+            </>
+          )}
 
           {mode === 'write' && (
-            <>
+            <div className="flex flex-col justify-center min-h-[70vh]">
+              <div className="inline-flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5 self-start">
+                {[{k:'write',l:'Write'},{k:'history',l:'Past entries'}].map(m => (
+                  <button key={m.k} onClick={() => setMode(m.k as any)}
+                    className={`px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${mode === m.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
+                    {m.l}
+                  </button>
+                ))}
+              </div>
+              {!encToken && !encSetup && (
+                <div className="flex justify-end mb-3">
+                  <button
+                    onClick={() => setEncSetup(true)}
+                    className="px-3 py-1.5 rounded-md text-xs font-semibold border-[1.5px] border-[var(--green-mid)] bg-[var(--green-bg)] text-[var(--green)]"
+                  >
+                    🔒 Encrypt Journal
+                  </button>
+                </div>
+              )}
               <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">
                 {editKey ? `Editing: ${formatDate(editKey.slice(0, 10))} at ${editKey.slice(11)}` : `Today's entry — ${formatDate(today)}`}
               </div>
@@ -340,7 +371,7 @@ export default function JournalPage() {
                 className="w-full min-h-[140px] text-[13px] p-3 rounded-[10px] border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] outline-none font-sans leading-relaxed resize-y"
               />
               <div className="flex gap-2 mt-2.5 items-center flex-wrap">
-                <button onClick={handleSave} className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+                <button onClick={requestSave} className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
                   {editKey ? 'Update entry' : 'Save entry (+5 XP)'}
                 </button>
                 <button
@@ -355,7 +386,7 @@ export default function JournalPage() {
                   </span>
                 )}
               </div>
-            </>
+            </div>
           )}
 
           {mode === 'history' && (
@@ -380,6 +411,23 @@ export default function JournalPage() {
               ))}
             </>
           )}
+
+          <Modal open={confirmSaveOpen} onClose={() => setConfirmSaveOpen(false)} title={editKey ? 'Update entry?' : 'Save entry?'}>
+            <p className="text-sm text-[var(--text2)] mb-4">
+              {editKey
+                ? 'Save your changes to this journal entry?'
+                : 'Save this journal entry for today?'}
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmSaveOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+              <button
+                onClick={handleSave}
+                className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]"
+              >
+                {editKey ? 'Update' : 'Save'}
+              </button>
+            </div>
+          </Modal>
 
           <Modal open={!!deleteKey} onClose={() => setDeleteKey(null)} title="Delete entry?">
             <p className="text-sm text-[var(--text2)] mb-4">
