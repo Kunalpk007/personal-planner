@@ -1,6 +1,8 @@
 import type { AppState, HistoryEntry, Task } from '@/store/types'
 import { getWeekMonday, daysBetween, pad, uid } from './cutoff'
 import { todayEarned, getMinPts } from './scoring'
+import { goalPtsEarnedOn } from './goals'
+import { restOrLightXpPenalty, streakBrokenXpPenalty } from './xpPenalty'
 import { WALLET_RATIO, MAX_CARRY } from '@/constants/points'
 import defaults from '@/data/defaults.json'
 
@@ -81,7 +83,7 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
 
     const dayTasks  = state.tasks.filter(t => t.date === mk)
     const doneTasks = dayTasks.filter(t => t.done)
-    const earned    = todayEarned(doneTasks, state.mood[mk], state.cfg)
+    const earned    = todayEarned(doneTasks, state.mood[mk], state.cfg, goalPtsEarnedOn(state.goals, mk))
     const minPts    = getMinPts(mk, state.cfg)
     const pct       = dayTasks.length ? Math.round(doneTasks.length / dayTasks.length * 100) : 0
     const taskSnap  = snapshotTasks(state, mk)
@@ -143,11 +145,17 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
     // Day (streak held, not incremented), ahead of ever spending a freeze or
     // breaking the streak. There's no once-per-week cap on this — a rest day
     // always wins over losing the streak. With the streak already at 0 there's
-    // nothing to protect, so the day is just recorded as a plain missed day.
+    // nothing to protect, so the day is just recorded as a plain missed day —
+    // and, unlike a protected rest day, it bleeds a flat per-day XP penalty
+    // for as long as the streak stays broken (see xpPenalty.ts).
     if (patch.streak! <= 0) {
+      const penalty = streakBrokenXpPenalty(mk, state.mood)
+      patch.rankXP = Math.max(0, patch.rankXP! - penalty)
       patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: false })
       overnightMsg = `😔 ${mk} missed (${earned}/${minPts} pts). No streak yet to protect.`
     } else {
+      const penalty = restOrLightXpPenalty(mk, state.cfg, state.mood)
+      patch.rankXP = Math.max(0, patch.rankXP! - penalty)
       patch.weekRestUsed![mon] = true
       patch.restDays![mk]      = true
       patch.submittedDays![mk] = true

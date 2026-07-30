@@ -1,6 +1,12 @@
 // Friends & Accountability — v1 constants.
 // See docs/PHASE2_SOCIAL_LIFE_OS.md Section 1 for the full design discussion.
 
+// Fixed production URL — used for WhatsApp/link sharing instead of
+// window.location.origin, since the app is sometimes opened via a local
+// ngrok tunnel during testing and that origin isn't what should get shared.
+export const APP_URL = 'https://thepersonalplanner.netlify.app/'
+export const APP_SHARE_MESSAGE = `Hey! I've been using Personal Planner to keep my daily tasks, streaks & rewards on track — thought you'd like it too. Check it out: ${APP_URL}`
+
 export const FRIEND_SOFT_CAP = 5   // hard ceiling in v1 — configurable per user, not hardcoded elsewhere
 export const FRIEND_NUDGE_AT = 3   // show the "3 is usually the sweet spot" nudge once past this many
 
@@ -33,7 +39,7 @@ export const FRIEND_TAGS = Object.keys(FRIEND_TAG_META) as FriendTag[]
 // requiring everyone's custom zones to line up.
 export const CHALLENGE_ZONES: { id: string; name: string; color: string }[] = [
   { id: 'health',   name: 'Health',   color: '#E24B4A' },
-  { id: 'fitness',  name: 'Fitness',  color: '#EF9F27' },
+  { id: 'career',   name: 'Career',   color: '#EF9F27' },
   { id: 'finance',  name: 'Finance',  color: '#2FAE60' },
   { id: 'personal', name: 'Personal', color: '#7B6EF6' },
   { id: 'other',    name: 'Other',    color: '#888888' },

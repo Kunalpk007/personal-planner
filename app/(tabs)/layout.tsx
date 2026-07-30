@@ -104,6 +104,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const prevPath  = useRef(pathname)
   const touchX    = useRef(0)
   const touchY    = useRef(0)
+  const ignoreSwipe = useRef(false)
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
   const [animKey, setAnimKey] = useState(0)
   const [optimisticTab, setOptimisticTab] = useState<string | null>(null)
@@ -145,8 +146,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     touchX.current = e.touches[0].clientX
     touchY.current = e.touches[0].clientY
+    // Don't let a stray swipe change tabs (and lose typed input) while a modal
+    // is open or while the user is interacting with a field / scrollable list.
+    const t = e.target as Element | null
+    const inInteractive = !!t?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"]')
+    ignoreSwipe.current = inInteractive || !!document.querySelector('[role="dialog"]')
   }, [])
   const onTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (ignoreSwipe.current) { ignoreSwipe.current = false; return }
     const dx = e.changedTouches[0].clientX - touchX.current
     const dy = e.changedTouches[0].clientY - touchY.current
     if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return

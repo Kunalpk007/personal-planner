@@ -10,12 +10,15 @@ import { SubmitArea }      from '@/features/dashboard/components/SubmitArea'
 import { Accordion }       from '@/ui/Accordion'
 import { showToast }       from '@/ui/Toast'
 import { todayEarned, todayTarget, calcPts } from '@/lib/engine/scoring'
+import { goalPtsEarnedOn } from '@/lib/engine/goals'
 import { getPrevDayKey } from '@/lib/engine/cutoff'
 import { getDailyQuote }   from '@/lib/engine/quotes'
 import { getManagerMessage } from '@/lib/engine/manager'
 import { StreakHistoryModal } from '@/features/dashboard/components/StreakHistoryModal'
 import { MorningQuoteOverlay } from '@/features/dashboard/components/MorningQuoteOverlay'
 import { LifeScoreCard }   from '@/features/dashboard/components/LifeScoreCard'
+import { NotificationBell } from '@/ui/NotificationBell'
+import { FLAGS }           from '@/constants/feature-flags'
 
 const DAYS  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 const MONTHS= ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -52,6 +55,7 @@ export default function DashboardPage() {
   const submitRetroFix  = usePlannerStore(s => s.submitRetroFix)
   const retroFixedDays  = usePlannerStore(s => s.retroFixedDays)
   const streak       = usePlannerStore(s => s.streak)
+  const allGoals     = usePlannerStore(s => s.goals)
 
   const [fixDismissed, setFixDismissed] = useState(false)
   const [retroRewardTitle, setRetroRewardTitle] = useState('')
@@ -67,7 +71,7 @@ export default function DashboardPage() {
     && !retroFixedDays[prevDay]
     && now.getHours() < cfg.cutoffHour
 
-  const earned  = todayEarned(done, mood, cfg)
+  const earned  = todayEarned(done, mood, cfg, goalPtsEarnedOn(allGoals, today))
   const target  = todayTarget(tasks)
   const pct     = target > 0 ? Math.round(earned / target * 100) : 0
   const quote   = getDailyQuote(today, now.getHours() < 17 ? 'morning' : 'evening')
@@ -99,9 +103,16 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Notification bell — the top nav is hidden on mobile, so surface
+                it here (just before the streak icon) on small screens. */}
+            {FLAGS.FRIENDS && (
+              <div className="lg:hidden flex items-center">
+                <NotificationBell />
+              </div>
+            )}
             <button
               onClick={() => setStreakHistoryOpen(true)}
-              className="relative flex items-center justify-center w-14 h-14"
+              className="relative flex items-center justify-center w-14 h-14 rounded-full bg-[var(--bg3)] border border-[var(--border)] transition-transform active:scale-90 hover:brightness-110 cursor-pointer"
               title="View streak history"
             >
               <span className="absolute text-[34px] opacity-25 select-none leading-none">🔥</span>

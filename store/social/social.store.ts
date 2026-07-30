@@ -12,6 +12,8 @@ import {
   rejectFriendRequest as rejectFriendRequestApi,
   updateFriendTags as updateFriendTagsApi,
   removeFriend as removeFriendApi,
+  addFriendDirect as addFriendDirectApi,
+  isReciprocalFriend as isReciprocalFriendApi,
   setNotaryThreshold as setNotaryThresholdApi,
   getNotaryThreshold as getNotaryThresholdApi,
   listenPendingApprovals, listenOwnApprovals,
@@ -27,6 +29,7 @@ import {
   sendTaskChallenge as sendTaskChallengeApi,
   sendGoalChallenge as sendGoalChallengeApi,
   listenIncomingChallenges, listenSentChallenges, respondToChallenge, markChallengeCompletion,
+  sendChallengeReminder as sendChallengeReminderApi,
 } from '@/lib/firebase/social'
 
 // Deliberately NOT wrapped in Zustand's `persist` middleware and NOT merged
@@ -77,6 +80,11 @@ interface SocialState {
   reject:      (requestId: string) => Promise<void>
   setTags:     (friendUid: string, tags: FriendTag[]) => Promise<void>
   remove:      (friendUid: string) => Promise<void>
+  /** Direct mutual add — no request/approval. Used by the add-friend box and
+   *  the shared invite link. Returns a small result for UI messaging. */
+  addFriendDirect: (friendUid: string, friendName: string) => Promise<SendRequestResult>
+  /** Whether the other person still lists me (false = they removed me → offer re-add). */
+  checkReciprocal: (friendUid: string) => Promise<boolean>
 
   setThresholdFor:  (friendUid: string, threshold: number) => Promise<void>
   getThresholdFrom: (notaryUid: string) => Promise<number | undefined>
@@ -91,9 +99,10 @@ interface SocialState {
   rejectValidation:  (validationId: string, note: string | null) => Promise<void>
 
   sendChallenge:     (friendUid: string, friendName: string, title: string, note: string, zone: string, priority: SharedTask['priority']) => Promise<void>
-  sendGoalChallenge: (friendUid: string, friendName: string, title: string, taskTitles: string[], endDate: string) => Promise<void>
+  sendGoalChallenge: (friendUid: string, friendName: string, title: string, taskTitles: string[], endDate: string, completionPoints: number, delayPoints: number) => Promise<void>
   acceptChallenge:  (challenge: SharedTask) => Promise<void>
   declineChallenge: (challengeId: string) => Promise<void>
+  sendChallengeReminder: (challengeId: string, friendUid: string) => Promise<void>
 
   /** True once past FRIEND_NUDGE_AT — UI shows the "3 is usually the sweet
    *  spot" nudge once, not a hard block (only FRIEND_SOFT_CAP blocks). */
@@ -229,6 +238,22 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     await acceptFriendRequestApi(request)
   },
 
+  async addFriendDirect(friendUid, friendName) {
+    const { uid, displayName, friends } = get()
+    if (!uid) return { ok: false, reason: 'not-signed-in' }
+    if (friendUid === uid) return { ok: false, reason: 'self' }
+    if (friends.some(f => f.uid === friendUid)) return { ok: false, reason: 'already-friends' }
+    if (friends.length >= FRIEND_SOFT_CAP) return { ok: false, reason: 'cap-reached' }
+    await addFriendDirectApi(uid, displayName, friendUid, friendName)
+    return { ok: true }
+  },
+
+  async checkReciprocal(friendUid) {
+    const { uid } = get()
+    if (!uid) return true
+    return isReciprocalFriendApi(friendUid, uid)
+  },
+
   async reject(requestId) {
     await rejectFriendRequestApi(requestId)
   },
@@ -299,18 +324,20 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     await sendTaskChallengeApi(uid, displayName, friendUid, title, note, zone, priority)
   },
 
-  async sendGoalChallenge(friendUid, _friendName, title, taskTitles, endDate) {
+  async sendGoalChallenge(friendUid, _friendName, title, taskTitles, endDate, completionPoints, delayPoints) {
     const { uid, displayName } = get()
     if (!uid) return
-    await sendGoalChallengeApi(uid, displayName, friendUid, title, taskTitles, endDate)
+    await sendGoalChallengeApi(uid, displayName, friendUid, title, taskTitles, endDate, completionPoints, delayPoints)
   },
 
   async acceptChallenge(challenge) {
     const { uid } = get()
     if (!uid) return
     if (challenge.type === 'goal') {
+      const full = challenge.completionPoints ?? 20
       usePlannerStore.getState().addChallengeGoal(
-        challenge.title, challenge.checklist ?? [], challenge.endDate, challenge.ownerName
+        challenge.title, challenge.checklist ?? [], challenge.endDate, challenge.ownerName,
+        full, challenge.delayPoints ?? Math.round(full * 0.5)
       )
     } else {
       usePlannerStore.getState().addChallengeTask({
@@ -326,6 +353,10 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     const { uid } = get()
     if (!uid) return
     await respondToChallenge(challengeId, uid, false)
+  },
+
+  async sendChallengeReminder(challengeId, friendUid) {
+    await sendChallengeReminderApi(challengeId, friendUid)
   },
 
   atNudgeThreshold() {

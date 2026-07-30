@@ -2,6 +2,7 @@
 import { useMemo }                from 'react'
 import { usePlannerStore }        from '@/store'
 import { todayEarned, todayTarget, getMoodMult } from '@/lib/engine/scoring'
+import { goalPtsEarnedOn } from '@/lib/engine/goals'
 
 export function StatGrid({ today, onStreakClick }: { today: string; onStreakClick?: () => void }) {
   const allTasks = usePlannerStore(s => s.tasks)
@@ -11,8 +12,9 @@ export function StatGrid({ today, onStreakClick }: { today: string; onStreakClic
   const cfg     = usePlannerStore(s => s.cfg)
   const wallet  = usePlannerStore(s => s.rewardWallet)
   const streak  = usePlannerStore(s => s.streak)
+  const goals   = usePlannerStore(s => s.goals)
 
-  const earned  = todayEarned(done, mood, cfg)
+  const earned  = todayEarned(done, mood, cfg, goalPtsEarnedOn(goals, today))
   const target  = todayTarget(tasks)
   const mult    = getMoodMult(mood, cfg)
 

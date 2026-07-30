@@ -7,16 +7,23 @@ import {
 } from '@/lib/engine/historyChart'
 
 const RANGES: Array<{ label: string; days: number | null }> = [
+  { label: '7D',  days: 7 },
   { label: '30D', days: 30 },
   { label: '90D', days: 90 },
   { label: 'All', days: null },
 ]
 
 const W = 640
-const H = 200
-const PAD_L = 32
-const PAD_B = 24
-const PAD_T = 10
+const H = 220
+const PAD_L = 40
+const PAD_R = 10
+const PAD_B = 34
+const PAD_T = 12
+
+function shortDate(d: string): string {
+  const dt = new Date(`${d}T12:00:00`)
+  return `${dt.getDate()}/${dt.getMonth() + 1}`
+}
 
 export function DailyTrendChart() {
   const history = usePlannerStore(s => s.history)
@@ -34,111 +41,102 @@ export function DailyTrendChart() {
   }
 
   const maxPts = Math.max(...trend.map(p => Math.max(p.pts, p.target)), 10)
-  const plotW  = W - PAD_L - 8
+  const niceMax = Math.ceil(maxPts / 10) * 10
+  const plotW  = W - PAD_L - PAD_R
   const plotH  = H - PAD_T - PAD_B
-  const barW   = Math.max(2, Math.min(18, plotW / trend.length - 2))
-  const xFor   = (i: number) => PAD_L + (i + 0.5) * (plotW / trend.length)
-  const yFor   = (v: number) => PAD_T + plotH - (v / maxPts) * plotH
+  const slot   = plotW / trend.length
+  const barW   = Math.max(2, Math.min(20, slot - 3))
+  const xFor   = (i: number) => PAD_L + (i + 0.5) * slot
+  const yFor   = (v: number) => PAD_T + plotH - (v / niceMax) * plotH
 
-  const targetPath = trend
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xFor(i)} ${yFor(p.target)}`)
-    .join(' ')
-
-  const bestInRange = bestWeek && trend.some(p => p.date === bestWeek.startDate)
-    ? bestWeek
-    : null
+  const targetPath = trend.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xFor(i)} ${yFor(p.target)}`).join(' ')
+  const metCount = trend.filter(p => p.metTarget).length
 
   return (
     <div>
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         <div className="text-[12px] text-[var(--text2)]">
           {baseline.deltaPct == null
-            ? `Last ${RANGES[rangeIdx].label}: ${baseline.currentTotal} pts logged so far.`
-            : `This week: ${baseline.currentTotal} pts (${baseline.deltaPct >= 0 ? '+' : ''}${baseline.deltaPct}% vs. your last-4-week avg)`}
+            ? `Last ${RANGES[rangeIdx].label}: ${baseline.currentTotal} pts logged.`
+            : `This week: ${baseline.currentTotal} pts (${baseline.deltaPct >= 0 ? '+' : ''}${baseline.deltaPct}% vs your last-4-week avg)`}
         </div>
         <div className="flex gap-1">
           {RANGES.map((r, i) => (
-            <button
-              key={r.label}
-              onClick={() => setRangeIdx(i)}
-              className={`text-[11px] px-2 py-1 rounded-full border ${
-                i === rangeIdx
-                  ? 'bg-[var(--green-mid)] text-white border-[var(--green-mid)]'
-                  : 'border-[var(--border2)] text-[var(--text3)]'
-              }`}
-            >
+            <button key={r.label} onClick={() => setRangeIdx(i)}
+              className={`text-[11px] px-2 py-1 rounded-full border ${i === rangeIdx ? 'bg-[var(--green-mid)] text-white border-[var(--green-mid)]' : 'border-[var(--border2)] text-[var(--text3)]'}`}>
               {r.label}
             </button>
           ))}
         </div>
       </div>
 
-      {bestWeek && (
-        <div className="text-[11px] text-[var(--amber)] mb-1.5">
-          🏆 Best 7-day stretch: {bestWeek.startDate} → {bestWeek.endDate} ({bestWeek.total} pts)
-        </div>
-      )}
+      {/* Legend */}
+      <div className="flex items-center gap-3 mb-2 text-[11px] text-[var(--text2)] flex-wrap">
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: 'var(--green-mid)' }} /> Hit your goal</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: 'var(--red)' }} /> Below goal</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: 'var(--text3)' }} /> Daily goal</span>
+        <span className="text-[var(--text3)]">· {metCount}/{trend.length} days hit</span>
+      </div>
 
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Daily points trend">
-        {/* y-axis gridlines */}
-        {[0, 0.5, 1].map(f => (
-          <line key={f} x1={PAD_L} x2={W - 8} y1={PAD_T + plotH * (1 - f)} y2={PAD_T + plotH * (1 - f)}
-            stroke="var(--border)" strokeWidth={1} />
-        ))}
-
-        {/* best-week shaded region */}
-        {bestInRange && (() => {
-          const startI = trend.findIndex(p => p.date === bestInRange.startDate)
-          const endI   = trend.findIndex(p => p.date === bestInRange.endDate)
-          if (startI < 0 || endI < 0) return null
-          const x0 = xFor(startI) - barW
-          const x1 = xFor(endI) + barW
-          return <rect x={x0} y={PAD_T} width={x1 - x0} height={plotH} fill="var(--amber)" opacity={0.08} />
-        })()}
-
-        {/* bars */}
-        {trend.map((p, i) => (
-          <rect
-            key={p.date}
-            x={xFor(i) - barW / 2}
-            y={yFor(p.pts)}
-            width={barW}
-            height={Math.max(0, PAD_T + plotH - yFor(p.pts))}
-            fill={p.metTarget ? 'var(--green-mid)' : 'var(--red)'}
-            opacity={selected && selected.date !== p.date ? 0.35 : 0.85}
-            onClick={() => setSelected(selected?.date === p.date ? null : p)}
-            className="cursor-pointer"
-          />
-        ))}
-
-        {/* target line */}
-        <path d={targetPath} fill="none" stroke="var(--text3)" strokeWidth={1.5} strokeDasharray="3 3" />
-
-        {/* flag markers */}
-        {trend.map((p, i) => {
-          const flag = p.frozen ? '❄' : p.rest ? '🟡' : p.auto ? '•' : p.late ? '!' : null
-          if (!flag) return null
+        {/* y-axis gridlines + labels */}
+        {[0, 0.5, 1].map(f => {
+          const y = PAD_T + plotH * (1 - f)
           return (
-            <text key={`f-${p.date}`} x={xFor(i)} y={H - 6} textAnchor="middle" fontSize={9}>
-              {flag}
-            </text>
+            <g key={f}>
+              <line x1={PAD_L} x2={W - PAD_R} y1={y} y2={y} stroke="var(--border)" strokeWidth={1} />
+              <text x={PAD_L - 6} y={y + 3} textAnchor="end" fontSize={9} fill="var(--text3)">{Math.round(niceMax * f)}</text>
+            </g>
           )
+        })}
+
+        {/* bars (rounded) */}
+        {trend.map((p, i) => {
+          const y = yFor(p.pts)
+          const h = Math.max(0, PAD_T + plotH - y)
+          return (
+            <rect key={p.date}
+              x={xFor(i) - barW / 2} y={y} width={barW} height={h} rx={Math.min(3, barW / 2)}
+              fill={p.metTarget ? 'var(--green-mid)' : 'var(--red)'}
+              opacity={selected && selected.date !== p.date ? 0.3 : 0.9}
+              onClick={() => setSelected(selected?.date === p.date ? null : p)}
+              className="cursor-pointer" />
+          )
+        })}
+
+        {/* daily-goal line */}
+        <path d={targetPath} fill="none" stroke="var(--text3)" strokeWidth={1.5} strokeDasharray="4 3" />
+
+        {/* x-axis date labels: first, middle, last */}
+        {[0, Math.floor((trend.length - 1) / 2), trend.length - 1]
+          .filter((v, idx, arr) => arr.indexOf(v) === idx)
+          .map(i => (
+            <text key={`x-${i}`} x={xFor(i)} y={H - 14} textAnchor="middle" fontSize={9} fill="var(--text3)">{shortDate(trend[i].date)}</text>
+          ))}
+
+        {/* protected-day markers under the axis */}
+        {trend.map((p, i) => {
+          const flag = p.frozen ? '❄' : p.rest ? '🟡' : null
+          if (!flag) return null
+          return <text key={`f-${p.date}`} x={xFor(i)} y={H - 2} textAnchor="middle" fontSize={9}>{flag}</text>
         })}
       </svg>
 
-      {selected && (
-        <div className="mt-2 text-[12px] bg-[var(--bg2)] border border-[var(--border)] rounded-[8px] px-3 py-2 flex items-center justify-between">
-          <span>{selected.date}</span>
-          <span className={selected.metTarget ? 'text-[var(--green)]' : 'text-[var(--red)]'}>
-            {selected.pts} / {selected.target} pts
-          </span>
+      {bestWeek && (
+        <div className="text-[11px] text-[var(--amber)] mt-1.5">🏆 Best 7-day stretch: {shortDate(bestWeek.startDate)}–{shortDate(bestWeek.endDate)} ({bestWeek.total} pts)</div>
+      )}
+
+      {selected ? (
+        <div className="mt-2 text-[12px] bg-[var(--bg2)] border border-[var(--border)] rounded-[8px] px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
+          <span className="font-medium">{selected.date}</span>
+          <span className={selected.metTarget ? 'text-[var(--green)]' : 'text-[var(--red)]'}>{selected.pts} / {selected.target} pts</span>
           <span className="text-[var(--text3)]">
-            {selected.frozen && '❄ Frozen '}
-            {selected.rest && '🟡 Rest '}
-            {selected.auto && '• Auto '}
-            {selected.late && '! Late'}
+            {selected.frozen && '❄ Frozen '}{selected.rest && '🟡 Rest '}{selected.auto && '• Auto '}{selected.late && '! Late'}
+            {!selected.frozen && !selected.rest && !selected.auto && !selected.late && (selected.metTarget ? '✓ Goal met' : 'Below goal')}
           </span>
         </div>
+      ) : (
+        <div className="mt-2 text-[11px] text-[var(--text3)] text-center">Tap a bar for that day&apos;s detail.</div>
       )}
     </div>
   )

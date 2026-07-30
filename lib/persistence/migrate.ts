@@ -23,6 +23,7 @@ export function migrateV1ToV2(): void {
       cfg: {
         minPts:       v1.cfg?.minH !== undefined ? 70 : 70,
         weekendPts:   20,
+        lightDays:    [0, 6],
         cutoffHour:   1,
         tone:         v1.cfg?.tone ?? 'balanced',
         managerName:  'The Manager',

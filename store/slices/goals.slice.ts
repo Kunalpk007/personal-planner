@@ -1,13 +1,17 @@
 import type { StateCreator } from 'zustand'
 import type { AppState, Goal, GoalChecklistItem } from '../types'
 import { uid } from '@/lib/engine/cutoff'
+import { WALLET_RATIO } from '@/constants/points'
 
 export interface GoalsSlice {
   addGoal:    (g: Omit<Goal, 'id' | 'createdAt'>) => void
   removeGoal: (id: string) => void
   editGoal:   (id: string, updates: Partial<Omit<Goal, 'id' | 'createdAt'>>) => void
-  toggleGoalChecklistItem: (goalId: string, itemId: string) => void
-  addChallengeGoal: (title: string, taskTitles: string[], endDate: string | undefined, challengedBy: string) => string
+  toggleGoalChecklistItem: (goalId: string, itemId: string) => { pts: number; walletPts: number } | null
+  setGoalNote: (goalId: string, note: string) => void
+  completeGoal: (goalId: string) => { pts: number; walletPts: number } | null
+  uncompleteGoal: (goalId: string) => { pts: number; walletPts: number } | null
+  addChallengeGoal: (title: string, taskTitles: string[], endDate: string | undefined, challengedBy: string, points: number, delayPoints: number) => string
 }
 
 /** For a 'checklist' goal, `target` is always kept equal to the checklist
@@ -18,11 +22,23 @@ function syncChecklistTarget(g: Omit<Goal, 'id' | 'createdAt'>): Omit<Goal, 'id'
   return { ...g, target: g.checklist?.length ?? 0 }
 }
 
-/** Goals (Section 3 of docs/PHASE2_SOCIAL_LIFE_OS.md).
- *  Only definitions live here — progress is always derived at render time
- *  from history[]/tasks[] via lib/engine/goals.ts, never stored, so it can
- *  never drift out of sync with the underlying task data. */
-export const createGoalsSlice: StateCreator<AppState, [], [], GoalsSlice> = (set) => ({
+/** Total points a goal awards on completion. 'perSubtask' sums each item's
+ *  points; 'whole' (or unset) uses the single Goal.points value. */
+function goalFullPoints(g: Goal): number {
+  if (g.pointsMode === 'perSubtask') {
+    return (g.checklist ?? []).reduce((sum, i) => sum + (i.points ?? 0), 0)
+  }
+  return g.points ?? 0
+}
+
+/** True once the goal's deadline (endDate, a YYYY-MM-DD) has passed. Points
+ *  are only reduced once the deadline is crossed — never for carry-forward. */
+function isPastDeadline(g: Goal): boolean {
+  if (!g.endDate) return false
+  return new Date().toISOString().slice(0, 10) > g.endDate
+}
+
+export const createGoalsSlice: StateCreator<AppState, [], [], GoalsSlice> = (set, get) => ({
   addGoal(g) {
     const goal = syncChecklistTarget(g)
     set(s => ({ goals: [...s.goals, { ...goal, id: uid(), createdAt: new Date().toISOString() }] }))
@@ -43,15 +59,71 @@ export const createGoalsSlice: StateCreator<AppState, [], [], GoalsSlice> = (set
   },
 
   toggleGoalChecklistItem(goalId, itemId) {
-    set(s => ({
-      goals: s.goals.map(g => {
-        if (g.id !== goalId || !g.checklist) return g
-        return { ...g, checklist: g.checklist.map(item => item.id === itemId ? { ...item, done: !item.done } : item) }
-      }),
-    }))
+    const goal = get().goals.find(g => g.id === goalId)
+    if (!goal || !goal.checklist) return null
+    const item = goal.checklist.find(i => i.id === itemId)
+    if (!item) return null
+    const nowDone = !item.done
+    const checklist = goal.checklist.map(i => i.id === itemId ? { ...i, done: nowDone } : i)
+
+    // Unchecking a subtask on an already-completed goal reopens the goal and
+    // claws back the points it was awarded — a goal can't stay "complete"
+    // once one of its subtasks is undone again.
+    if (!nowDone && goal.completedAt) {
+      const pts = goal.awardedPts ?? 0
+      const walletPts = Math.floor(pts / WALLET_RATIO)
+      set(s => ({
+        goals:        s.goals.map(g => g.id === goalId ? { ...g, checklist, completedAt: null, awardedPts: undefined } : g),
+        rankXP:       Math.max(0, s.rankXP - pts),
+        rewardWallet: Math.max(0, s.rewardWallet - walletPts),
+      }))
+      return { pts, walletPts }
+    }
+
+    set(s => ({ goals: s.goals.map(g => g.id === goalId ? { ...g, checklist } : g) }))
+    return null
   },
 
-  addChallengeGoal(title, taskTitles, endDate, challengedBy) {
+  setGoalNote(goalId, note) {
+    set(s => ({ goals: s.goals.map(g => g.id === goalId ? { ...g, note } : g) }))
+  },
+
+  completeGoal(goalId) {
+    const goal = get().goals.find(g => g.id === goalId)
+    if (!goal || goal.completedAt) return null
+    // A goal can only complete once every checklist item is done.
+    const allDone = !goal.checklist || goal.checklist.length === 0 || goal.checklist.every(i => i.done)
+    if (!allDone) return null
+
+    const full = goalFullPoints(goal)
+    const delayed = isPastDeadline(goal)
+    // Past deadline → reduced points (giver-declared delayPoints, or half for
+    // own goals). Carry-forward never reduces — only a crossed deadline does.
+    const pts = delayed ? (goal.delayPoints ?? Math.round(full * 0.5)) : full
+    const walletPts = Math.floor(pts / WALLET_RATIO)
+
+    set(s => ({
+      goals:        s.goals.map(g => g.id === goalId ? { ...g, completedAt: new Date().toISOString(), awardedPts: pts } : g),
+      rankXP:       s.rankXP + pts,
+      rewardWallet: s.rewardWallet + walletPts,
+    }))
+    return { pts, walletPts }
+  },
+
+  uncompleteGoal(goalId) {
+    const goal = get().goals.find(g => g.id === goalId)
+    if (!goal || !goal.completedAt) return null
+    const pts = goal.awardedPts ?? 0
+    const walletPts = Math.floor(pts / WALLET_RATIO)
+    set(s => ({
+      goals:        s.goals.map(g => g.id === goalId ? { ...g, completedAt: null, awardedPts: undefined } : g),
+      rankXP:       Math.max(0, s.rankXP - pts),
+      rewardWallet: Math.max(0, s.rewardWallet - walletPts),
+    }))
+    return { pts, walletPts }
+  },
+
+  addChallengeGoal(title, taskTitles, endDate, challengedBy, points, delayPoints) {
     const checklist: GoalChecklistItem[] = taskTitles
       .map(t => t.trim())
       .filter(Boolean)
@@ -66,6 +138,10 @@ export const createGoalsSlice: StateCreator<AppState, [], [], GoalsSlice> = (set
       checklist,
       endDate,
       challengedBy,
+      pointsMode: 'whole',
+      points,
+      delayPoints,
+      completedAt: null,
     }
     set(s => ({ goals: [...s.goals, goal] }))
     return goal.id

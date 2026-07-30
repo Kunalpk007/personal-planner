@@ -5,7 +5,7 @@ import {
 import type { Task, AppConfig } from '@/store/types'
 
 const CFG: AppConfig = {
-  minPts: 70, weekendPts: 20, cutoffHour: 1, tone: 'balanced', managerName: 'Manager',
+  minPts: 70, weekendPts: 20, lightDays: [0, 6], cutoffHour: 1, tone: 'balanced', managerName: 'Manager',
   moodMot: 1.2, moodSick: 0.5, pomoDuration: 25, quoteMorning: true, quoteEvening: true,
   autoExportEnabled: false, theme: 'dark', fontScale: 'normal',
 }
@@ -177,8 +177,15 @@ describe('getMinPts', () => {
   })
 
   it('falls back to defaults when cfg values are missing', () => {
-    const partial = { minPts: undefined, weekendPts: undefined } as unknown as AppConfig
+    const partial = { minPts: undefined, weekendPts: undefined, lightDays: undefined } as unknown as AppConfig
     expect(getMinPts('2024-01-08', partial)).toBe(70)
     expect(getMinPts('2024-01-06', partial)).toBe(20)
+  })
+
+  it('uses configurable lightDays instead of the hardcoded weekend', () => {
+    const midweekLight: AppConfig = { ...CFG, lightDays: [2, 4] } // Tue/Thu
+    expect(getMinPts('2024-01-09', midweekLight)).toBe(20) // Tuesday -> light day
+    expect(getMinPts('2024-01-11', midweekLight)).toBe(20) // Thursday -> light day
+    expect(getMinPts('2024-01-06', midweekLight)).toBe(70) // Saturday -> no longer light
   })
 })

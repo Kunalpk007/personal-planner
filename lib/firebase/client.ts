@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app'
 import { getAuth,      type Auth }      from 'firebase/auth'
 import { getFirestore, type Firestore } from 'firebase/firestore'
+import { getStorage,   type FirebaseStorage } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,6 +18,7 @@ const firebaseConfig = {
 // so the lazy path is safe.
 let _auth: Auth | null      = null
 let _db:   Firestore | null = null
+let _storage: FirebaseStorage | null = null
 
 function getApp_() {
   if (typeof window === 'undefined') throw new Error('Firebase client must not be used on the server')
@@ -31,6 +33,11 @@ export function getClientAuth(): Auth {
 export function getClientDb(): Firestore {
   if (!_db) _db = getFirestore(getApp_())
   return _db
+}
+
+export function getClientStorage(): FirebaseStorage {
+  if (!_storage) _storage = getStorage(getApp_())
+  return _storage
 }
 
 /** Wait for Firebase Auth to finish restoring session from persistence (IndexedDB). */

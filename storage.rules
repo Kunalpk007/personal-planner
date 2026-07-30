@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// Firebase Storage rules for Personal Planner.
+// Deploy with:  firebase deploy --only storage
+// (Requires Storage to be enabled in the Firebase Console first.)
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Journal voice notes — each user can only read/write their own folder.
+    match /journalAudio/{userId}/{file=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

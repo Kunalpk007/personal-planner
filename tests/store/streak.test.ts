@@ -35,7 +35,6 @@ describe('submitDay', () => {
     expect(state.submittedDays['2024-01-08']).toBe(true)
     expect(state.weekDays['2024-01-08']).toBe(true)
     expect(state.history).toHaveLength(1)
-    expect(state.lastActiveDayForDecay).toBe('2024-01-08')
     expect(result).toEqual({ freezeBonus: 0, milestoneStreak: null })
   })
 

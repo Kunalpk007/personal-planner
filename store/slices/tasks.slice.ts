@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { AppState, Task, RecurringTemplate, Subtask } from '../types'
 import { uid }       from '@/lib/engine/cutoff'
 import { calcPts, walletPtsFor, todayEarned } from '@/lib/engine/scoring'
+import { goalPtsEarnedOn } from '@/lib/engine/goals'
 
 export interface TasksSlice {
   // Actions
@@ -78,7 +79,6 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
         tasks: s.tasks.map(t => t.id === id ? updated : t),
         rankXP:       s.rankXP + pts,
         rewardWallet: s.rewardWallet + walletPts,
-        lastActiveDayForDecay: task.date,
       }))
       return { pts, walletPts }
     } else {
@@ -140,7 +140,7 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
     const state    = get()
     const dayTasks = state.tasks.filter(t => t.date === dateKey)
     const doneTasks= dayTasks.filter(t => t.done)
-    const rxp      = todayEarned(doneTasks, state.mood[dateKey], state.cfg)
+    const rxp      = todayEarned(doneTasks, state.mood[dateKey], state.cfg, goalPtsEarnedOn(state.goals, dateKey))
     const pct      = dayTasks.length ? Math.round(doneTasks.length / dayTasks.length * 100) : 0
     const taskSnap = dayTasks.map(t => ({
       title:       t.title,
@@ -325,7 +325,6 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
         tasks: s.tasks.map(t => t.id === taskId ? updated : t),
         rankXP:       s.rankXP + pts,
         rewardWallet: s.rewardWallet + walletPts,
-        lastActiveDayForDecay: task.date,
       }))
       return { pts, walletPts }
     }

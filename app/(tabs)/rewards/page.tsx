@@ -37,7 +37,15 @@ export default function RewardsPage() {
   const [cost,     setCost]     = useState(15)
   const [habitLinked, setHabitLinked] = useState(false)
   const [redeemTarget, setRedeemTarget] = useState<{ id: string; title: string; cost: number; habitLinked?: boolean; habitCooldownHours?: number } | null>(null)
+  const [redeemedReceipt, setRedeemedReceipt] = useState<{ title: string; cost: number } | null>(null)
+  const rewardRedemptions = usePlannerStore(s => s.rewardRedemptions)
   const today = new Date().toISOString().slice(0, 10)
+
+  const redeemedTodayTitles = new Set(
+    rewardRedemptions.filter(r => r.date === today).map(r => r.title)
+  )
+  const availableRewards = rewards.filter(r => !redeemedTodayTitles.has(r.title))
+  const redeemedToday = rewards.filter(r => redeemedTodayTitles.has(r.title))
 
   function handleRedeem(id: string) {
     const reward = rewards.find(r => r.id === id)
@@ -59,7 +67,7 @@ export default function RewardsPage() {
     }
 
     const ok = redeemReward(id, today)
-    if (ok) showToast('🎁 Reward redeemed!')
+    if (ok) { showToast('🎁 Reward redeemed!'); setRedeemedReceipt({ title: reward.title, cost: reward.cost }) }
     else    showToast('Not enough wallet pts.')
   }
 
@@ -74,11 +82,11 @@ export default function RewardsPage() {
   }
 
   return (
-    <div>
+    <div className="pt-3 sm:pt-0">
       <div className="flex gap-2 items-center flex-wrap mb-3">
         <span className="wallet-chip">🪙 Wallet: <span className="ml-1">{wallet}</span> pts</span>
         <button onClick={() => setBuyOpen(true)} className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--blue-bg)] text-[var(--blue)] border border-[#4A9EE0]">
-          ❄ Buy Streak Freeze
+          {freezeTokens} ❄ Buy Streak Freeze
         </button>
       </div>
       <div className="text-[11px] bg-[var(--bg3)] text-[var(--text2)] px-2.5 py-1 rounded-full border border-[var(--border)] inline-block mb-3">
@@ -107,7 +115,7 @@ export default function RewardsPage() {
       <PendingApprovalsPanel />
 
       <div className="mb-4">
-        {rewards.map(r => {
+        {availableRewards.map(r => {
           const ok = wallet >= r.cost
           return (
             <div key={r.id} className={`flex items-center gap-2.5 p-3 rounded-[10px] border mb-2 ${ok ? 'border-[var(--green-mid)]' : 'border-[var(--border)]'} bg-[var(--bg)]`}>
@@ -146,6 +154,40 @@ export default function RewardsPage() {
         )}
         <div className="text-[11px] text-[var(--text3)] mt-1">Min cost: 15 reward pts</div>
       </div>
+
+      {redeemedToday.length > 0 && (
+        <>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mt-4 mb-2">Redeemed today</div>
+          <div className="mb-4">
+            {redeemedToday.map(r => (
+              <div key={r.id} className="flex items-center gap-2.5 p-3 rounded-[10px] border border-[var(--border)] bg-[var(--bg2)] mb-2 opacity-50">
+                <span className="flex-1 text-[13px] line-through">{r.title}</span>
+                <span className="text-xs font-semibold whitespace-nowrap text-[var(--text3)]">{r.cost} pts</span>
+                <span className="px-3 py-1.5 rounded-md text-xs font-medium border bg-[var(--bg3)] border-[var(--border2)] text-[var(--text3)]">
+                  ✓ Redeemed
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Redemption receipt */}
+      <Modal open={!!redeemedReceipt} onClose={() => setRedeemedReceipt(null)} title="🎉 Reward Redeemed">
+        {redeemedReceipt && (
+          <>
+            <p className="text-sm text-[var(--text2)] mb-3">
+              <strong>{redeemedReceipt.title}</strong> redeemed for <strong>{redeemedReceipt.cost} pts</strong>.
+            </p>
+            <p className="text-xs text-[var(--text3)] mb-3">Wallet balance: <strong>{wallet}</strong> pts.</p>
+            <div className="flex justify-end">
+              <button onClick={() => setRedeemedReceipt(null)} className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+                Done
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       {/* Redeem confirmation */}
       <Modal open={!!redeemTarget} onClose={() => setRedeemTarget(null)} title="🎁 Redeem Reward">

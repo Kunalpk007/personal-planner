@@ -5,8 +5,11 @@ import { formatDate }      from '@/lib/engine/cutoff'
 import { usePlannerStore } from '@/store'
 import { Accordion }       from '@/ui/Accordion'
 import { Modal }           from '@/ui/Modal'
+import { Pagination }      from '@/ui/Pagination'
+import { usePagination }   from '@/hooks/usePagination'
 import { showToast }       from '@/ui/Toast'
 import { PinGate }         from '@/ui/PinGate'
+import { VoiceControls }   from '@/features/journal/VoiceControls'
 import { tryUnlock, encryptText, decryptText, validatePassphrase } from '@/lib/crypto/journal-encrypt'
 import { hasJournalKey, getJournalKey, setJournalKey, clearJournalKey } from '@/lib/crypto/journal-key'
 import { createEncryptionKey } from '@/lib/crypto/journal-encrypt'
@@ -189,6 +192,8 @@ export default function JournalPage() {
     if (!byDay[day]) { byDay[day] = []; dayOrder.push(day) }
     byDay[day].push(k)
   })
+  const JOURNAL_PAGE_SIZE = 8
+  const { page: historyPage, totalPages: historyTotalPages, pageItems: dayOrderPage, hasPrev, hasNext, prevPage, nextPage } = usePagination(dayOrder, JOURNAL_PAGE_SIZE)
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -364,6 +369,7 @@ export default function JournalPage() {
               <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">
                 {editKey ? `Editing: ${formatDate(editKey.slice(0, 10))} at ${editKey.slice(11)}` : `Today's entry — ${formatDate(today)}`}
               </div>
+              <VoiceControls dateKey={today} onAppendText={(t) => setText(prev => (prev ? prev.replace(/\s*$/, ' ') : '') + t)} />
               <textarea
                 value={text}
                 onChange={e => setText(e.target.value)}
@@ -393,7 +399,7 @@ export default function JournalPage() {
             <>
               <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">All journal entries</div>
               {dayOrder.length === 0 && <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No entries yet.</div>}
-              {dayOrder.map(day => (
+              {dayOrderPage.map(day => (
                 <Accordion key={day} title={<span className="font-semibold">{formatDate(day)} <span className="text-[11px] text-[var(--text3)] font-normal ml-2">{byDay[day].length} entr{byDay[day].length === 1 ? 'y' : 'ies'}</span></span>}>
                   {byDay[day].map(key => (
                     <div key={key} className="border-t border-[var(--border)] py-2.5">
@@ -409,6 +415,7 @@ export default function JournalPage() {
                   ))}
                 </Accordion>
               ))}
+              <Pagination page={historyPage} totalPages={historyTotalPages} hasPrev={hasPrev} hasNext={hasNext} onPrev={prevPage} onNext={nextPage} />
             </>
           )}
 

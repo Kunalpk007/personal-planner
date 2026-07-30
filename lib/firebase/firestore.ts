@@ -11,6 +11,64 @@ function journalRef(uid: string, dateKey: string) {
   return doc(getClientDb(), 'users', uid, JOURNAL_COLLECTION, dateKey)
 }
 
+/** A small, friends-readable profile (name + rankXP) so friend tiles can show
+ *  each other's XP without exposing the private planner doc. Lives at
+ *  users/{uid}/public/profile; the security rule allows any signed-in user to
+ *  read it, only the owner to write. */
+function publicProfileRef(uid: string) {
+  return doc(getClientDb(), 'users', uid, 'public', 'profile')
+}
+
+export async function writePublicProfile(uid: string, displayName: string, rankXP: number): Promise<void> {
+  await setDoc(publicProfileRef(uid), { displayName, rankXP, updatedAt: serverTimestamp() })
+}
+
+export async function getPublicProfile(uid: string): Promise<{ displayName?: string; rankXP?: number } | null> {
+  try {
+    const snap = await getDoc(publicProfileRef(uid))
+    return snap.exists() ? (snap.data() as { displayName?: string; rankXP?: number }) : null
+  } catch {
+    return null
+  }
+}
+
+/** Top-level roster the admin dashboard lists to see all users + basic stats.
+ *  Each user maintains only their own row (uid == doc id). */
+export async function writeUserIndex(uid: string, displayName: string, email: string, rankXP: number, streak: number): Promise<void> {
+  await setDoc(doc(getClientDb(), 'userIndex', uid), {
+    displayName, email, rankXP, streak, updatedAt: serverTimestamp(),
+  }, { merge: true })
+}
+
+// ── Bug reports / complaints ──────────────────────────────────────────────
+
+export interface BugReport {
+  id: string
+  uid: string
+  email: string
+  category: string
+  message: string
+  createdAt?: unknown
+  status?: string
+}
+
+export async function submitBugReport(uid: string, email: string, category: string, message: string): Promise<void> {
+  const ref = doc(collection(getClientDb(), 'bugReports'))
+  await setDoc(ref, { id: ref.id, uid, email, category, message, status: 'open', createdAt: serverTimestamp() })
+}
+
+// ── Admin dashboard reads (gated to the admin uid by security rules) ───────
+
+export async function listUserIndex(): Promise<Array<{ id: string; displayName?: string; email?: string; rankXP?: number; streak?: number }>> {
+  const snap = await getDocs(collection(getClientDb(), 'userIndex'))
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as Record<string, unknown>) }))
+}
+
+export async function listBugReports(): Promise<BugReport[]> {
+  const snap = await getDocs(collection(getClientDb(), 'bugReports'))
+  return snap.docs.map(d => d.data() as BugReport)
+}
+
 function journalCollectionRef(uid: string) {
   return collection(getClientDb(), 'users', uid, JOURNAL_COLLECTION)
 }

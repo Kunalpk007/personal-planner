@@ -8,14 +8,15 @@ import { showToast }       from '@/ui/Toast'
 import { showManagerMessage } from '@/ui/ManagerModal'
 import { calcPts, basePts } from '@/lib/engine/scoring'
 import { getTaskCompleteMessage } from '@/lib/engine/manager'
-import type { Task, Priority, Slot, Level, RecurringTemplate } from '@/store/types'
+import type { Task, Priority, Slot, Level } from '@/store/types'
 import { useSocialStore } from '@/store/social/social.store'
 import { FLAGS } from '@/constants/feature-flags'
 import { CHALLENGE_ZONES } from '@/constants/social'
 import { pad } from '@/lib/engine/cutoff'
 import { FriendsPageContent } from '@/features/friends/components/FriendsPageContent'
-import { GoalsCard } from '@/features/dashboard/components/GoalsCard'
 import { SubmitArea } from '@/features/dashboard/components/SubmitArea'
+import { GoalTile, GoalFormModal } from '@/features/goals/GoalsInTasks'
+import { ChallengesPanel } from '@/features/challenges/ChallengesPanel'
 
 // Input length caps — enforced with an inline red error, not a hard maxLength,
 // so the user sees *why* they can't add/save (see LimitedField below).
@@ -166,20 +167,19 @@ export default function TasksPage() {
 function TasksPageInner() {
   const { today }    = useDayKey()
   const searchParams = useSearchParams()
-  const [mode, setMode] = useState<'normal' | 'recur' | 'goals' | 'friends'>('normal')
-  const [zone, setZone] = useState('all')
+  const [mode, setMode] = useState<'normal' | 'recur' | 'challenges' | 'friends'>('normal')
 
-  // Friends & Goals used to live elsewhere (own nav tab / dashboard) — now
-  // they're modes here, deep-linkable via ?mode=friends / ?mode=goals (see
-  // the redirect in app/(tabs)/friends/page.tsx and the notification bell).
+  // Friends & Challenges are modes here, deep-linkable via ?mode=friends /
+  // ?mode=challenges (see the redirect in app/(tabs)/friends/page.tsx and the
+  // notification bell). Goals now live inline in the normal Today's Tasks list.
   useEffect(() => {
     const m = searchParams.get('mode')
-    if (m === 'recur' || m === 'friends' || m === 'goals') setMode(m)
+    if (m === 'recur' || m === 'friends' || m === 'challenges') setMode(m)
+    if (m === 'goals') setMode('challenges') // old deep-link → Challenges
   }, [searchParams])
 
   const allTasks  = usePlannerStore(s => s.tasks)
   const tasks     = useMemo(() => allTasks.filter(t => t.date === today), [allTasks, today])
-  const recurring = usePlannerStore(s => s.recurring)
   const zones     = usePlannerStore(s => s.zones)
   const submitted = usePlannerStore(s => !!s.submittedDays[today])
   const pinned    = usePlannerStore(s => s.pinnedTaskId)
@@ -192,10 +192,7 @@ function TasksPageInner() {
   const toggleTask    = usePlannerStore(s => s.toggleTask)
   const editTask      = usePlannerStore(s => s.editTask)
   const pinTask       = usePlannerStore(s => s.pinTask)
-  const addRecurring    = usePlannerStore(s => s.addRecurring)
-  const removeRecurring = usePlannerStore(s => s.removeRecurring)
-  const editRecurring   = usePlannerStore(s => s.editRecurring)
-  const injectRecurring = usePlannerStore(s => s.injectRecurring)
+  const addRecurring  = usePlannerStore(s => s.addRecurring)
 
   const friends           = useSocialStore(s => s.friends)
   const requestValidation = useSocialStore(s => s.requestValidation)
@@ -203,31 +200,16 @@ function TasksPageInner() {
   const sendGoalChallenge = useSocialStore(s => s.sendGoalChallenge)
   const [challengeOpen, setChallengeOpen] = useState(false)
 
-  // Add form state
-  const [title,    setTitle]    = useState('')
-  const [note,     setNote]     = useState('')
-  const [zoneId,   setZoneId]   = useState(zones[0]?.id ?? '')
-  const [priority, setPriority] = useState<Priority>('high')
-  const [slot,     setSlot]     = useState<Slot>('')
-  const [level,    setLevel]    = useState<Level>('')
-  const [deadline, setDeadline] = useState('')
-  const [specialPts, setSpecialPts] = useState(30)
-
-  const titleOver = title.length > MAX_TASK_NAME
-  const noteOver  = note.length > MAX_TASK_NOTE
-  const canAdd    = !!title.trim() && !titleOver && !noteOver
-
-  function handleAdd() {
-    if (!title.trim()) return
-    if (titleOver || noteOver) { showToast('Fix the highlighted fields first.'); return }
-    addTask({
-      title: title.trim(), note: note.trim(), zone: zoneId || zones[0]?.id,
-      priority, slot, deadline: deadline || null, date: today, level,
-      isSpecial: priority === 'special', specialPts,
-    })
-    setTitle(''); setNote(''); setDeadline('')
-    showToast('Task added.')
-  }
+  // Goals now live inline in the Today's Tasks list (Session 8 revamp).
+  // Completed goals stay visible (struck-through, like completed tasks) —
+  // sunk to the bottom rather than filtered out entirely.
+  const allGoals   = usePlannerStore(s => s.goals)
+  const sortedGoals = useMemo(
+    () => [...allGoals].sort((a, b) => Number(!!a.completedAt) - Number(!!b.completedAt)),
+    [allGoals]
+  )
+  const [goalFormOpen, setGoalFormOpen] = useState(false)
+  const [addTaskOpen, setAddTaskOpen] = useState(false)
 
   function handleToggle(id: string) {
     if (submitted) { showToast('Day submitted — tasks locked.'); return }
@@ -240,7 +222,7 @@ function TasksPageInner() {
   }
 
   const filtered = tasks
-    .filter(t => zone === 'all' || t.zone === zone)
+    .slice()
     .sort((a, b) => {
       if ((a.carriedDays ?? 0) !== (b.carriedDays ?? 0)) return (b.carriedDays ?? 0) - (a.carriedDays ?? 0)
       if (a.done !== b.done) return a.done ? 1 : -1
@@ -254,9 +236,8 @@ function TasksPageInner() {
       <div className="flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5">
         {[
           { k: 'normal', l: "Today's Tasks" },
-          { k: 'recur',  l: 'Recurring' },
-          ...(FLAGS.GOALS   ? [{ k: 'goals',   l: 'Goals' }]   : []),
-          ...(FLAGS.FRIENDS ? [{ k: 'friends', l: 'Friends' }] : []),
+          ...(FLAGS.FRIENDS ? [{ k: 'challenges', l: 'Challenges' }] : []),
+          ...(FLAGS.FRIENDS ? [{ k: 'friends',    l: 'Friends' }]    : []),
         ].map(m => (
           <button key={m.k} onClick={() => setMode(m.k as any)}
             className={`flex-1 text-center px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${mode === m.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
@@ -267,69 +248,42 @@ function TasksPageInner() {
 
       {mode === 'normal' && (
         <>
-          {/* Zone filter */}
-          <select
-            value={zone}
-            onChange={e => setZone(e.target.value)}
-            className="w-auto min-w-[130px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none mb-3"
-          >
-            <option value="all">All zones</option>
-            {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
-          </select>
-
-          {/* Add form */}
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">Add Task</div>
-          <div className="card mb-4">
-            <div className="mb-2">
-              <LimitedField value={title} onChange={setTitle} max={MAX_TASK_NAME} placeholder="Task name..." onEnter={handleAdd} />
-            </div>
-            <div className="flex gap-2 flex-wrap mb-2">
-              <select value={zoneId} onChange={e => setZoneId(e.target.value)}
-                className="flex-1 min-w-0 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
-                {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
-              </select>
-              <select value={priority} onChange={e => setPriority(e.target.value as Priority)}
-                className="flex-1 min-w-0 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
-                {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.label}</option>)}
-              </select>
-              <select value={level} onChange={e => setLevel(e.target.value as Level)}
-                className="flex-1 min-w-0 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
-                {LEVELS.map(l => <option key={l.val} value={l.val}>{l.label}</option>)}
-              </select>
-            </div>
-            {priority === 'special' && (
-              <div className="flex gap-2 flex-wrap mb-2 items-center">
-                <span className="text-xs text-[var(--text2)]">⭐ Pts:</span>
-                <input type="number" value={specialPts} onChange={e => setSpecialPts(+e.target.value)} min={1} max={200}
-                  className="w-20 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
-              </div>
-            )}
-            <div className="mb-2">
-              <LimitedField value={note} onChange={setNote} max={MAX_TASK_NOTE} placeholder="Note (optional)" />
-            </div>
-            <div className="flex gap-2 flex-wrap items-center">
-              <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)} title="Time-bound: earns half points if not completed by this time"
-                className="flex-1 min-w-[140px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
-              <select value={slot} onChange={e => setSlot(e.target.value as Slot)}
-                className="flex-1 min-w-[110px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
-                {SLOTS.map(s => <option key={s.val} value={s.val}>{s.label}</option>)}
-              </select>
-              <button onClick={handleAdd} disabled={!canAdd}
-                className="px-3.5 py-2 rounded-md text-xs font-semibold bg-[var(--green-bg)] text-[var(--green)] border-[1.5px] border-[var(--green-mid)] disabled:opacity-40">
-                + Add Task
+          {/* Add row — buttons share one line and shrink together on narrow screens */}
+          <div className="flex gap-2 items-stretch mb-4">
+            <button onClick={() => setAddTaskOpen(true)}
+              className="flex-1 min-w-0 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-md text-[12px] sm:text-[13px] font-semibold bg-[var(--green-bg)] text-[var(--green)] border-[1.5px] border-[var(--green-mid)] truncate">
+              + Add Task
+            </button>
+            {FLAGS.GOALS && (
+              <button onClick={() => setGoalFormOpen(true)} className="flex-1 min-w-0 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-md text-[12px] sm:text-[13px] font-semibold bg-[var(--blue-bg)] text-[var(--blue)] border-[1.5px] border-[var(--blue)] truncate">
+                🎯 Add Goal
               </button>
-              {FLAGS.FRIENDS && friends.length > 0 && (
-                <button onClick={() => setChallengeOpen(true)} className="px-3.5 py-2 rounded-md text-xs font-semibold bg-[var(--purple-bg)] text-[var(--purple)] border-[1.5px] border-[#CECBF6]">
-                  🎯 Challenge a friend
-                </button>
-              )}
-            </div>
-            {deadline && <div className="text-[11px] text-[var(--text3)] mt-1.5">⏳ Time-bound — earns half points if not done by the selected time.</div>}
+            )}
+            {FLAGS.FRIENDS && friends.length > 0 && (
+              <button onClick={() => setChallengeOpen(true)} className="flex-1 min-w-0 px-2 sm:px-3 py-2 rounded-md text-[12px] sm:text-[13px] font-semibold bg-[var(--purple-bg)] text-[var(--purple)] border-[1.5px] border-[#CECBF6] truncate">
+                ⚔️ Challenge Friend
+              </button>
+            )}
           </div>
 
-          {/* Task list */}
+          <AddTaskModal
+            open={addTaskOpen}
+            onClose={() => setAddTaskOpen(false)}
+            zones={zones}
+            onAdd={(t, recurring) => {
+              const id = addTask({ ...t, date: today })
+              if (recurring) {
+                addRecurring({ title: t.title, note: t.note, zone: t.zone, priority: t.priority, slot: t.slot, level: t.level, isSpecial: t.isSpecial, specialPts: t.specialPts })
+              }
+              showToast(recurring ? 'Task added + set to recur daily.' : 'Task added.')
+              return id
+            }}
+          />
+
+          {/* Task + Goal list */}
           <div className="mb-4">
-            {filtered.length === 0 && <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No tasks yet. Add one above.</div>}
+            {filtered.length === 0 && sortedGoals.length === 0 && <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No tasks yet. Add one above.</div>}
+            {FLAGS.GOALS && sortedGoals.map(g => <GoalTile key={g.id} goal={g} />)}
             {filtered.map(t => (
               <TaskRow key={t.id} task={t} zones={zones} pinned={pinned === t.id}
                 locked={submitted} onToggle={() => handleToggle(t.id)}
@@ -344,6 +298,8 @@ function TasksPageInner() {
             ))}
           </div>
 
+          {FLAGS.GOALS && <GoalFormModal open={goalFormOpen} onClose={() => setGoalFormOpen(false)} />}
+
           {FLAGS.FRIENDS && (
             <ChallengeModal
               open={challengeOpen}
@@ -354,45 +310,23 @@ function TasksPageInner() {
                 setChallengeOpen(false)
                 showToast(`Challenge sent to ${friendName}.`)
               }}
-              onSendGoal={(friendUid, friendName, title, taskTitles, endDate) => {
-                sendGoalChallenge(friendUid, friendName, title, taskTitles, endDate)
+              onSendGoal={(friendUid, friendName, title, taskTitles, endDate, completionPoints, delayPoints) => {
+                sendGoalChallenge(friendUid, friendName, title, taskTitles, endDate, completionPoints, delayPoints)
                 setChallengeOpen(false)
                 showToast(`Goal challenge sent to ${friendName}.`)
               }}
             />
           )}
 
-          {/* Submit My Day — lives at the very bottom of the tasks list */}
-          <SubmitArea today={today} />
+          {/* Submit My Day — pinned above the bottom nav; spacer keeps the last
+              task from being hidden behind the fixed bar while the list above
+              stays scrollable. */}
+          <div className="pb-32" />
+          <SubmitArea today={today} pinned />
         </>
       )}
 
-      {mode === 'goals' && FLAGS.GOALS && (
-        <>
-          <div className="text-[11px] bg-[var(--bg3)] text-[var(--text2)] px-2.5 py-1 rounded-full border border-[var(--border)] inline-block mb-3">
-            Manage goals in Settings → Goals. Progress shows here.
-          </div>
-          <GoalsCard today={today} />
-        </>
-      )}
-
-      {mode === 'recur' && (
-        <>
-          <div className="text-[11px] bg-[var(--bg3)] text-[var(--text2)] px-2.5 py-1 rounded-full border border-[var(--border)] inline-block mb-3">
-            Recurring tasks auto-populate each day.
-          </div>
-          <div className="mb-4">
-            {recurring.length === 0 && <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No templates yet.</div>}
-            {recurring.map(r => (
-              <RecurRow key={r.id} r={r} zones={zones}
-                onEdit={(updates) => editRecurring(r.id, updates)}
-                onRemove={() => { removeRecurring(r.id); showToast('Template deleted.') }} />
-            ))}
-          </div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">Add Recurring Template</div>
-          <AddRecurForm zones={zones} onAdd={(r) => { addRecurring(r); injectRecurring(today); showToast('Template added — added to today.') }} />
-        </>
-      )}
+      {mode === 'challenges' && FLAGS.FRIENDS && <ChallengesPanel />}
 
       {mode === 'friends' && FLAGS.FRIENDS && <FriendsPageContent />}
     </div>
@@ -783,7 +717,7 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
   open: boolean; onClose: () => void;
   friends: { uid: string; displayName: string }[];
   onSend: (friendUid: string, friendName: string, title: string, note: string, zoneId: string, priority: Priority) => void
-  onSendGoal: (friendUid: string, friendName: string, title: string, taskTitles: string[], endDate: string) => void
+  onSendGoal: (friendUid: string, friendName: string, title: string, taskTitles: string[], endDate: string, completionPoints: number, delayPoints: number) => void
 }) {
   const [mode, setMode] = useState<'task' | 'goal'>('task')
   const [friendUid, setFriendUid] = useState('')
@@ -792,36 +726,43 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
   const [zoneId, setZoneId] = useState(CHALLENGE_ZONES[0].id)
   const [priority, setPriority] = useState<Priority>('high')
 
-  // Goal mode: a repeatable list of task titles + a bounded end date.
+  // Goal mode: a repeatable list of task titles + a bounded end date + the
+  // points the giver declares for completion vs. finishing after the deadline.
   const [goalTasks, setGoalTasks] = useState<string[]>([])
   const [goalTaskDraft, setGoalTaskDraft] = useState('')
+  const [completionPts, setCompletionPts] = useState('30')
+  const [delayPts, setDelayPts] = useState('15')
   const minEndDate = `${new Date().getFullYear()}-${pad(new Date().getMonth() + 1)}-${pad(new Date().getDate())}`
   const maxEndDate = (() => {
     const d = new Date(); d.setMonth(d.getMonth() + 2)
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
   })()
   const [endDate, setEndDate] = useState(maxEndDate)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setMode('task'); setFriendUid(''); setTitle(''); setNote('')
     setZoneId(CHALLENGE_ZONES[0].id); setPriority('high')
     setGoalTasks([]); setGoalTaskDraft(''); setEndDate(maxEndDate)
+    setCompletionPts('30'); setDelayPts('15'); setConfirmOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  function handleSend() {
-    const friend = friends.find(f => f.uid === friendUid)
+  const friend = friends.find(f => f.uid === friendUid)
+
+  function confirmSend() {
     if (!friend || !title.trim()) return
     if (mode === 'goal') {
       if (goalTasks.length === 0) return
-      onSendGoal(friend.uid, friend.displayName, title.trim(), goalTasks, endDate)
+      onSendGoal(friend.uid, friend.displayName, title.trim(), goalTasks, endDate, Math.max(0, +completionPts || 0), Math.max(0, +delayPts || 0))
     } else {
       onSend(friend.uid, friend.displayName, title.trim(), note.trim(), zoneId || CHALLENGE_ZONES[0].id, priority)
     }
+    setConfirmOpen(false)
   }
 
-  const canSend = !!friendUid && !!title.trim() && (mode === 'task' || goalTasks.length > 0)
+  const canSend = !!friendUid && !!title.trim() && title.length <= MAX_TASK_NAME && (mode === 'task' || goalTasks.length > 0)
 
   return (
     <Modal open={open} onClose={onClose} title="🎯 Challenge a friend">
@@ -846,8 +787,7 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
           <option value="">Choose a friend…</option>
           {friends.map(f => <option key={f.uid} value={f.uid}>{f.displayName}</option>)}
         </select>
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder={mode === 'task' ? 'Task name...' : 'Goal title...'}
-          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+        <LimitedField value={title} onChange={setTitle} max={MAX_TASK_NAME} placeholder={mode === 'task' ? 'Task name...' : 'Goal title...'} />
 
         {mode === 'task' ? (
           <>
@@ -868,19 +808,18 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
           </>
         ) : (
           <>
-            <div className="flex gap-2 flex-wrap items-center">
-              <input
-                value={goalTaskDraft}
-                onChange={e => setGoalTaskDraft(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key !== 'Enter' || !goalTaskDraft.trim()) return
-                  setGoalTasks(l => [...l, goalTaskDraft.trim()]); setGoalTaskDraft('')
-                }}
-                placeholder="Task in this goal... (Enter to add)"
-                className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+            <div className="flex gap-2 flex-wrap items-start">
+              <div className="flex-1 min-w-[160px]">
+                <LimitedField
+                  value={goalTaskDraft} onChange={setGoalTaskDraft} max={MAX_TASK_NAME}
+                  placeholder="Task in this goal... (Enter to add)"
+                  onEnter={() => { if (!goalTaskDraft.trim()) return; setGoalTasks(l => [...l, goalTaskDraft.trim()]); setGoalTaskDraft('') }}
+                />
+              </div>
               <button
-                onClick={() => { if (!goalTaskDraft.trim()) return; setGoalTasks(l => [...l, goalTaskDraft.trim()]); setGoalTaskDraft('') }}
-                className="px-3 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+                onClick={() => { if (!goalTaskDraft.trim() || goalTaskDraft.length > MAX_TASK_NAME) return; setGoalTasks(l => [...l, goalTaskDraft.trim()]); setGoalTaskDraft('') }}
+                disabled={!goalTaskDraft.trim() || goalTaskDraft.length > MAX_TASK_NAME}
+                className="px-3 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] disabled:opacity-40">
                 + Add task
               </button>
             </div>
@@ -894,104 +833,102 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
                 ))}
               </div>
             )}
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-center flex-wrap">
               <label className="text-[12px] text-[var(--text3)]">End date (max 2 months out):</label>
               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
                 min={minEndDate} max={maxEndDate}
                 className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+            </div>
+            <div className="flex gap-2 items-center flex-wrap text-[12px] text-[var(--text3)]">
+              <label>Points on completion:</label>
+              <input type="number" min={0} max={500} value={completionPts} onChange={e => setCompletionPts(e.target.value)}
+                className="w-20 text-[13px] px-2 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+              <label>if late:</label>
+              <input type="number" min={0} max={500} value={delayPts} onChange={e => setDelayPts(e.target.value)}
+                className="w-20 text-[13px] px-2 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
             </div>
           </>
         )}
       </div>
       <div className="flex gap-2 justify-end mt-4">
         <button onClick={onClose} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
-        <button onClick={handleSend} disabled={!canSend}
+        <button onClick={() => setConfirmOpen(true)} disabled={!canSend}
           className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6] disabled:opacity-40">
           Send Challenge
         </button>
       </div>
+
+      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Confirm challenge">
+        <p className="text-sm text-[var(--text2)] mb-3">
+          Send {mode === 'goal' ? 'goal' : 'task'} <strong>&ldquo;{title.trim()}&rdquo;</strong> to <strong>{friend?.displayName}</strong>?
+        </p>
+        {mode === 'goal' ? (
+          <p className="text-xs text-[var(--text3)] mb-3">
+            {goalTasks.length} subtask{goalTasks.length === 1 ? '' : 's'} · by {endDate} · +{Math.max(0, +completionPts || 0)} pts ({Math.max(0, +delayPts || 0)} if late)
+          </p>
+        ) : (
+          <p className="text-xs text-[var(--text3)] mb-3">
+            {CHALLENGE_ZONES.find(z => z.id === zoneId)?.name ?? zoneId} · {PRIORITIES.find(p => p.val === priority)?.label ?? priority}
+          </p>
+        )}
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => setConfirmOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={confirmSend} className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6]">
+            Confirm &amp; Send
+          </button>
+        </div>
+      </Modal>
     </Modal>
   )
 }
 
-function RecurRow({ r, zones, onEdit, onRemove }: {
-  r: RecurringTemplate; zones: any[];
-  onEdit: (updates: Partial<RecurringTemplate>) => void; onRemove: () => void
-}) {
-  const [editOpen, setEditOpen] = useState(false)
-  const [delOpen, setDelOpen]   = useState(false)
-
-  return (
-    <>
-      <div className="flex items-center gap-2.5 p-3 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] mb-2">
-        <div className="flex-1">
-          <span className="text-[13px] font-medium">{r.title}</span>
-          <span className={`ml-2 ${priBadgeClass({ isSpecial: r.isSpecial, priority: r.priority } as Task)}`}>
-            {r.isSpecial ? '⭐' : ({ high: 'H', med: 'M', low: 'L', special: '⭐' } as Record<string,string>)[r.priority]}
-          </span>
-          {r.level && <span className="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6]">{r.level}</span>}
-          {r.note && <div className="text-[11px] text-[var(--text3)] mt-0.5">{r.note}</div>}
-        </div>
-        <button onClick={() => setEditOpen(true)} className="btn-icon">✏</button>
-        <button onClick={() => setDelOpen(true)} className="btn-icon danger">×</button>
-      </div>
-      <EditRecurringModal open={editOpen} onClose={() => setEditOpen(false)} template={r} zones={zones} onSave={onEdit} />
-      <Modal open={delOpen} onClose={() => setDelOpen(false)} title="Delete recurring template?">
-        <p className="text-sm text-[var(--text2)] mb-3">Why are you deleting &ldquo;{r.title}&rdquo;?</p>
-        <div className="flex flex-col gap-1.5 mb-3">
-          {DELETE_REASONS.map(reason => (
-            <button
-              key={reason}
-              onClick={() => { onRemove(); setDelOpen(false) }}
-              className="text-left px-3 py-2 rounded-md text-[13px] border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] hover:bg-[var(--bg3)]"
-            >
-              {reason}
-            </button>
-          ))}
-        </div>
-        <div className="flex justify-end">
-          <button onClick={() => setDelOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
-        </div>
-      </Modal>
-    </>
-  )
+interface NewTaskFields {
+  title: string; note: string; zone: string; priority: Priority; slot: Slot;
+  deadline: string | null; level: Level; isSpecial: boolean; specialPts: number;
 }
 
-function EditRecurringModal({ open, onClose, template, zones, onSave }: {
-  open: boolean; onClose: () => void; template: RecurringTemplate; zones: any[];
-  onSave: (updates: Partial<RecurringTemplate>) => void
+/** Full Add Task form in a modal. A "Make this recurring" checkbox folds in
+ *  the old Recurring-templates feature — the daily task is added now, and (if
+ *  checked) a recurring template is created so it auto-populates future days. */
+function AddTaskModal({ open, onClose, zones, onAdd }: {
+  open: boolean; onClose: () => void; zones: any[];
+  onAdd: (t: NewTaskFields, recurring: boolean) => string
 }) {
-  const [title,    setTitle]    = useState(template.title)
-  const [note,     setNote]     = useState(template.note)
-  const [zoneId,   setZoneId]   = useState(template.zone)
-  const [priority, setPriority] = useState<Priority>(template.priority)
-  const [slot,     setSlot]     = useState<Slot>(template.slot)
-  const [level,    setLevel]    = useState<Level>(template.level)
-  const [specialPts, setSpecialPts] = useState(template.specialPts)
+  const [title, setTitle]       = useState('')
+  const [note, setNote]         = useState('')
+  const [zoneId, setZoneId]     = useState(zones[0]?.id ?? '')
+  const [priority, setPriority] = useState<Priority>('high')
+  const [slot, setSlot]         = useState<Slot>('')
+  const [level, setLevel]       = useState<Level>('')
+  const [deadline, setDeadline] = useState('')
+  const [specialPts, setSpecialPts] = useState(30)
+  const [recurring, setRecurring] = useState(false)
 
-  // Re-seed the draft whenever the modal is (re)opened for a template
   useEffect(() => {
     if (!open) return
-    setTitle(template.title); setNote(template.note); setZoneId(template.zone)
-    setPriority(template.priority); setSlot(template.slot); setLevel(template.level)
-    setSpecialPts(template.specialPts)
-  }, [open, template])
+    setTitle(''); setNote(''); setZoneId(zones[0]?.id ?? ''); setPriority('high')
+    setSlot(''); setLevel(''); setDeadline(''); setSpecialPts(30); setRecurring(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
-  function handleSave() {
-    if (!title.trim()) return
-    onSave({
+  const titleOver = title.length > MAX_TASK_NAME
+  const noteOver  = note.length > MAX_TASK_NOTE
+  const canAdd    = !!title.trim() && !titleOver && !noteOver
+
+  function handleAdd() {
+    if (!canAdd) return
+    onAdd({
       title: title.trim(), note: note.trim(), zone: zoneId || zones[0]?.id,
-      priority, slot, level, isSpecial: priority === 'special', specialPts,
-    })
+      priority, slot, deadline: deadline || null, level,
+      isSpecial: priority === 'special', specialPts,
+    }, recurring)
     onClose()
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Edit Recurring Template">
+    <Modal open={open} onClose={onClose} title="Add Task">
       <div className="flex flex-col gap-2.5">
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Recurring task name..."
-          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
-
+        <LimitedField value={title} onChange={setTitle} max={MAX_TASK_NAME} placeholder="Task name..." autoFocus />
         <div className="flex gap-2 flex-wrap">
           <select value={zoneId} onChange={e => setZoneId(e.target.value)}
             className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
@@ -1006,7 +943,6 @@ function EditRecurringModal({ open, onClose, template, zones, onSave }: {
             {LEVELS.map(l => <option key={l.val} value={l.val}>{l.label}</option>)}
           </select>
         </div>
-
         {priority === 'special' && (
           <div className="flex gap-2 flex-wrap items-center">
             <span className="text-xs text-[var(--text2)]">⭐ Pts:</span>
@@ -1014,59 +950,29 @@ function EditRecurringModal({ open, onClose, template, zones, onSave }: {
               className="w-20 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
           </div>
         )}
-
-        <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)"
-          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none min-h-[60px] resize-y" />
-
-        <select value={slot} onChange={e => setSlot(e.target.value as Slot)}
-          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
-          {SLOTS.map(s => <option key={s.val} value={s.val}>{s.label}</option>)}
-        </select>
+        <LimitedField value={note} onChange={setNote} max={MAX_TASK_NOTE} placeholder="Note (optional)" textarea />
+        <div className="flex gap-2 flex-wrap">
+          <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)} title="Time-bound: earns half points if not completed by this time"
+            className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+          <select value={slot} onChange={e => setSlot(e.target.value as Slot)}
+            className="flex-1 min-w-[120px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            {SLOTS.map(s => <option key={s.val} value={s.val}>{s.label}</option>)}
+          </select>
+        </div>
+        {deadline && <div className="text-[11px] text-[var(--text3)] -mt-1">⏳ Time-bound — earns half points if not done by the selected time.</div>}
+        <label className="flex items-center gap-2 text-[12px] text-[var(--text2)] cursor-pointer border-t border-[var(--border)] pt-2.5">
+          <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)} />
+          🔁 Make this recurring (auto-adds it every day)
+        </label>
       </div>
 
       <div className="flex gap-2 justify-end mt-4">
         <button onClick={onClose} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
-        <button onClick={handleSave} className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
-          Save Changes
-        </button>
-      </div>
-    </Modal>
-  )
-}
-
-function AddRecurForm({ zones, onAdd }: { zones: any[]; onAdd: (r: any) => void }) {
-  const [title, setTitle] = useState('')
-  const [zoneId, setZoneId] = useState(zones[0]?.id ?? '')
-  const [priority, setPriority] = useState<Priority>('high')
-  const [slot, setSlot] = useState<Slot>('')
-  const [level, setLevel] = useState<Level>('')
-  const [note, setNote] = useState('')
-
-  return (
-    <div className="card">
-      <div className="flex gap-2 flex-wrap mb-2">
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Recurring task name..."
-          className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
-        <select value={zoneId} onChange={e => setZoneId(e.target.value)} className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
-          {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
-        </select>
-        <select value={priority} onChange={e => setPriority(e.target.value as Priority)} className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
-          {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.label}</option>)}
-        </select>
-        <select value={level} onChange={e => setLevel(e.target.value as Level)} className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
-          {LEVELS.map(l => <option key={l.val} value={l.val}>{l.label}</option>)}
-        </select>
-      </div>
-      <div className="flex gap-2 flex-wrap items-center">
-        <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note" className="flex-1 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
-        <select value={slot} onChange={e => setSlot(e.target.value as Slot)} className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
-          {SLOTS.map(s => <option key={s.val} value={s.val}>{s.label}</option>)}
-        </select>
-        <button onClick={() => { if (!title.trim()) return; onAdd({ title: title.trim(), note: note.trim(), zone: zoneId, priority, slot, level, isSpecial: priority === 'special', specialPts: 30 }); setTitle(''); setNote('') }}
-          className="px-3.5 py-2 rounded-md text-xs font-semibold bg-[var(--green-bg)] text-[var(--green)] border-[1.5px] border-[var(--green-mid)]">
+        <button onClick={handleAdd} disabled={!canAdd}
+          className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-40">
           + Add Task
         </button>
       </div>
-    </div>
+    </Modal>
   )
 }

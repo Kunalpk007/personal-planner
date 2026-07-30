@@ -41,9 +41,14 @@ export function getMoodMult(mood: string | undefined, cfg: Pick<AppConfig, 'mood
   return 1.0
 }
 
-export function todayEarned(doneTasks: Task[], mood: string | undefined, cfg: AppConfig): number {
+/** goalPtsToday — points from goals completed on this date (see
+ *  lib/engine/goals.ts#goalPtsEarnedOn), added on top of the mood-adjusted
+ *  task total so goal completions count toward the daily submit-gate too.
+ *  Goal points aren't mood-scaled — that multiplier is a task-specific rule,
+ *  and goal points already have their own deadline-based reduction. */
+export function todayEarned(doneTasks: Task[], mood: string | undefined, cfg: AppConfig, goalPtsToday = 0): number {
   const raw = doneTasks.reduce((sum, t) => sum + calcPts(t), 0)
-  return Math.round(raw * getMoodMult(mood, cfg))
+  return Math.round(raw * getMoodMult(mood, cfg)) + goalPtsToday
 }
 
 export function todayTarget(tasks: Task[]): number {
@@ -56,8 +61,8 @@ export function walletPtsFor(taskPts: number): number {
 
 export function getMinPts(dateStr: string, cfg: AppConfig): number {
   const d = new Date(`${dateStr}T12:00:00`)
-  const isWknd = d.getDay() === 0 || d.getDay() === 6
-  return isWknd ? (cfg.weekendPts ?? 20) : (cfg.minPts ?? 70)
+  const isLightDay = (cfg.lightDays ?? [0, 6]).includes(d.getDay())
+  return isLightDay ? (cfg.weekendPts ?? 20) : (cfg.minPts ?? 70)
 }
 
 /** Returns the mood-adjusted minimum pts threshold for a given day.

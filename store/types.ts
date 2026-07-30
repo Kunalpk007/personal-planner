@@ -126,7 +126,16 @@ export interface GoalChecklistItem {
   id:    string
   title: string
   done:  boolean
+  /** Per-subtask points, only meaningful when the goal's pointsMode is
+   *  'perSubtask' — each completed subtask awards these points. */
+  points?: number
 }
+
+/** How a goal awards points on completion:
+ *  - 'whole'      → one point value for finishing the whole goal (Goal.points)
+ *  - 'perSubtask' → each subtask carries its own points (GoalChecklistItem.points),
+ *                   awarded as each is checked off. */
+export type GoalPointsMode = 'whole' | 'perSubtask'
 
 /** A user-defined Goal — Section 3 of docs/PHASE2_SOCIAL_LIFE_OS.md.
  *  Only the *definition* is stored here. Progress is always derived at
@@ -158,6 +167,27 @@ export interface Goal {
   /** Set when this goal was created from an accepted friend challenge —
    *  mirrors Task.challengedBy, purely cosmetic. */
   challengedBy?: string
+
+  // ── Goals-as-tasks (Session 8 revamp) ──────────────────────────────────
+  /** How this goal scores. Undefined behaves like 'whole' for back-compat. */
+  pointsMode?: GoalPointsMode
+  /** Whole-goal points (pointsMode 'whole'): awarded once the goal completes. */
+  points?: number
+  /** Points earned if the goal is completed AFTER its deadline. For friend
+   *  challenge goals the giver sets this; for own goals it defaults to half
+   *  of the full points. */
+  delayPoints?: number
+  /** Free-text note attached to the goal (editable from the goal tile). */
+  note?: string
+  /** ISO timestamp when the goal was completed (all subtasks done + confirmed),
+   *  or null/undefined while still open. A goal cannot complete until every
+   *  checklist item is done. */
+  completedAt?: string | null
+  /** Rank XP actually awarded at completion (post deadline-reduction) —
+   *  snapshotted so later date-scoped lookups (e.g. today's submit-gate
+   *  total) don't have to re-derive it, which would drift once the deadline
+   *  has since passed. */
+  awardedPts?: number
 }
 
 export interface Badge {
@@ -202,6 +232,9 @@ export type FontScale = 'normal' | 'large' | 'xlarge'
 export interface AppConfig {
   minPts:       number
   weekendPts:   number
+  /** Day-of-week indices (0=Sun..6=Sat) that use the reduced `weekendPts`
+   *  target instead of `minPts` — user-configurable, defaults to Sat/Sun. */
+  lightDays:    number[]
   cutoffHour:   number
   tone:         Tone
   managerName:  string
@@ -260,13 +293,11 @@ export interface AppStateData {
   journalEncryptionToken: string | null
 
   mood:            Record<string, Mood>
-  moodLockedUntil: Record<string, string>
   eodMood:         Record<string, EodMood>
 
   pinnedTaskId:          string | null
   engagementDays:        Record<string, boolean>
   weeklyReviewDone:      Record<string, { reflection: string; at: string }>
-  lastActiveDayForDecay: string | null
   morningQuoteShown:     Record<string, boolean>
   appFirstUsed:          string | null
   overnightMsg:          string | null
@@ -344,12 +375,25 @@ export interface AppActions {
   addGoal:    (g: Omit<Goal, 'id' | 'createdAt'>) => void
   removeGoal: (id: string) => void
   editGoal:   (id: string, updates: Partial<Omit<Goal, 'id' | 'createdAt'>>) => void
-  toggleGoalChecklistItem: (goalId: string, itemId: string) => void
+  /** Flips a checklist item's done state. If this reopens an already-completed
+   *  goal (unchecking one of its subtasks), also claws back the awarded
+   *  pts/walletPts and returns them — otherwise null. */
+  toggleGoalChecklistItem: (goalId: string, itemId: string) => { pts: number; walletPts: number } | null
+  setGoalNote: (goalId: string, note: string) => void
+  /** Complete a goal — only succeeds when every checklist item is done.
+   *  Awards points (whole or summed per-subtask), halved to delayPoints if
+   *  past the deadline. Returns the awarded pts/walletPts, or null if it
+   *  couldn't complete (subtasks pending / already complete). */
+  completeGoal: (goalId: string) => { pts: number; walletPts: number } | null
+  /** Reverses a completed goal back to incomplete, clawing back the
+   *  previously-awarded pts/walletPts (clamped at 0). Null if not completed. */
+  uncompleteGoal: (goalId: string) => { pts: number; walletPts: number } | null
 
   // A goal added to your own list because a friend challenged you to it —
   // same idea as addChallengeTask, but for the multi-task/time-bound case
-  // (see store/social/social.store.ts#acceptChallenge).
-  addChallengeGoal: (title: string, taskTitles: string[], endDate: string | undefined, challengedBy: string) => string
+  // (see store/social/social.store.ts#acceptChallenge). The giver declares
+  // the completion points and the (reduced) delay points.
+  addChallengeGoal: (title: string, taskTitles: string[], endDate: string | undefined, challengedBy: string, points: number, delayPoints: number) => string
 
   // Reward approvals (Section 1.5 / 6.4 of docs/PHASE2_SOCIAL_LIFE_OS.md) —
   // local mirror only; the real approve/reject write happens in Firestore
@@ -373,6 +417,7 @@ export interface AppActions {
   setMood:      (today: string, mood: Mood) => void
   setEodMood:   (today: string, mood: string) => void
   setPinnedTask: (id: string | null) => void
+  claimShowedUpBonus: (today: string) => number | null
 
   // UI
   clearOvernightMsg:     () => void

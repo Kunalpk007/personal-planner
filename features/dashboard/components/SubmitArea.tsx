@@ -4,6 +4,7 @@ import { usePlannerStore }  from '@/store'
 import { Modal }            from '@/ui/Modal'
 import { showToast }        from '@/ui/Toast'
 import { todayEarned, getMoodAdjustedMinPts } from '@/lib/engine/scoring'
+import { goalPtsEarnedOn }  from '@/lib/engine/goals'
 import { getDayKey }        from '@/lib/engine/cutoff'
 import { getDailyQuote }    from '@/lib/engine/quotes'
 import { writeBackupFile }  from '@/lib/persistence/fsBackup'
@@ -21,7 +22,7 @@ const EOD_MOODS = [
   { key: 'sad',        label: '😢 Sad',        style: { borderColor: '#6b7280', color: '#6b7280' } },
 ]
 
-export function SubmitArea({ today }: { today: string }) {
+export function SubmitArea({ today, pinned }: { today: string; pinned?: boolean }) {
   const cfg          = usePlannerStore(s => s.cfg)
   const allTasks     = usePlannerStore(s => s.tasks)
   const tasks        = useMemo(() => allTasks.filter(t => t.date === today), [allTasks, today])
@@ -35,12 +36,14 @@ export function SubmitArea({ today }: { today: string }) {
 
   const submitDay    = usePlannerStore(s => s.submitDay)
   const setEodMood   = usePlannerStore(s => s.setEodMood)
+  const goals        = usePlannerStore(s => s.goals)
 
   const [modalOpen, setModalOpen]     = useState(false)
   const [eodMood, setEodMoodLocal]    = useState<EodMood | ''>('')
   const [eveningQuote, setEveningQuote] = useState(false)
 
-  const earned = todayEarned(done, mood, cfg)
+  const goalPtsToday = goalPtsEarnedOn(goals, today)
+  const earned = todayEarned(done, mood, cfg, goalPtsToday)
   const minPts = getMoodAdjustedMinPts(today, mood, cfg)
   const diff   = minPts - earned
   const canSubmit = diff <= 0
@@ -84,9 +87,16 @@ export function SubmitArea({ today }: { today: string }) {
     syncNow()
   }
 
+  const wrapClass = pinned
+    ? 'fixed-bottom-bar'
+    : 'mt-4 pt-3.5 border-t border-[var(--border)]'
+  const activeWrapClass = pinned
+    ? 'fixed-bottom-bar bg-[var(--bg)] border border-[var(--border)] rounded-[14px] p-3 shadow-lg'
+    : 'mt-4 pt-3.5 border-t border-[var(--border)]'
+
   if (isSubmitted) {
     return (
-      <div className="mt-4 pt-3.5 border-t border-[var(--border)]">
+      <div className={wrapClass}>
         <div className="w-full py-3 rounded-[10px] text-sm font-semibold text-center bg-[var(--bg3)] text-[var(--text3)] border border-[var(--border2)] opacity-50">
           ✓ Day submitted
         </div>
@@ -95,7 +105,7 @@ export function SubmitArea({ today }: { today: string }) {
   }
 
   return (
-    <div className="mt-4 pt-3.5 border-t border-[var(--border)]">
+    <div className={activeWrapClass}>
       <div className="text-xs text-[var(--text2)] mb-2.5 min-h-[18px]">
         {canSubmit
           ? `✅ ${earned} pts — ready to submit! (min ${minPts})`

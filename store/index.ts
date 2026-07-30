@@ -87,6 +87,19 @@ export const usePlannerStore = create<AppState>()(
       name:    STORAGE_KEY,
       storage: createJSONStorage(() => recoveringStorage),
       version: 2,
+      // Default persist merge shallow-merges only top-level keys, so a `cfg`
+      // object saved before a new AppConfig field existed (e.g. lightDays)
+      // would replace the default cfg wholesale and leave that field
+      // undefined. Deep-merge cfg specifically so old persisted data always
+      // picks up new config defaults.
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState ?? {}) as Partial<AppState>
+        return {
+          ...currentState,
+          ...persisted,
+          cfg: { ...currentState.cfg, ...(persisted.cfg ?? {}) },
+        }
+      },
     }
   )
 )

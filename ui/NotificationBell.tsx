@@ -5,10 +5,15 @@ import { useRouter } from 'next/navigation'
 import { useSocialStore } from '@/store/social/social.store'
 
 interface NotifItem {
-  id:   string   // stable across renders — used as the "seen" key
-  text: string
-  at:   string   // ISO — used for sort order
+  id:    string   // stable across renders — used as the "seen" key
+  text:  string
+  at:    string   // ISO — used for sort order
+  route: string   // where clicking this item navigates
 }
+
+const FRIENDS_ROUTE          = '/tasks?mode=friends'
+const CHALLENGES_GIVEN_ROUTE = '/tasks?mode=challenges&sub=given'
+const MY_CHALLENGES_ROUTE    = '/tasks?mode=challenges&sub=accepted'
 
 function seenKey(uid: string): string {
   return `kp_notif_seen:${uid}`
@@ -100,36 +105,41 @@ export function NotificationBell() {
   const items = useMemo<NotifItem[]>(() => {
     const list: NotifItem[] = []
     for (const r of incomingRequests) {
-      list.push({ id: `freq:${r.id}`, text: `${r.fromName} sent you a friend request`, at: r.createdAt })
+      list.push({ id: `freq:${r.id}`, text: `${r.fromName} sent you a friend request`, at: r.createdAt, route: FRIENDS_ROUTE })
     }
     for (const v of validationsToReview) {
-      list.push({ id: `valreq:${v.id}`, text: `${v.ownerName} needs you to validate "${v.taskTitle}"`, at: v.createdAt })
+      list.push({ id: `valreq:${v.id}`, text: `${v.ownerName} needs you to validate "${v.taskTitle}"`, at: v.createdAt, route: FRIENDS_ROUTE })
     }
     for (const c of incomingChallenges) {
-      list.push({ id: `chalin:${c.id}`, text: `${c.ownerName} challenged you: "${c.title}"`, at: c.createdAt })
+      list.push({ id: `chalin:${c.id}`, text: `${c.ownerName} challenged you: "${c.title}"`, at: c.createdAt, route: MY_CHALLENGES_ROUTE })
+      // Owner nudged us to accept/start a still-pending challenge.
+      const reminderAt = uid ? c.reminderSentAt?.[uid] : undefined
+      if (reminderAt) {
+        list.push({ id: `chalrem:${c.id}:${reminderAt}`, text: `${c.ownerName} sent you a reminder: "${c.title}"`, at: reminderAt, route: MY_CHALLENGES_ROUTE })
+      }
     }
     for (const a of approvalsToReview) {
-      list.push({ id: `apprreq:${a.id}`, text: `Approve "${a.rewardTitle}" redemption (${a.cost}pts)?`, at: a.createdAt })
+      list.push({ id: `apprreq:${a.id}`, text: `Approve "${a.rewardTitle}" redemption (${a.cost}pts)?`, at: a.createdAt, route: FRIENDS_ROUTE })
     }
     for (const v of myOwnValidations) {
       if (v.status === 'rejected') {
-        list.push({ id: `valres:${v.id}`, text: `Your task "${v.taskTitle}" was rejected${v.note ? `: ${v.note}` : ''}`, at: v.resolvedAt ?? v.createdAt })
+        list.push({ id: `valres:${v.id}`, text: `Your task "${v.taskTitle}" was rejected${v.note ? `: ${v.note}` : ''}`, at: v.resolvedAt ?? v.createdAt, route: FRIENDS_ROUTE })
       }
     }
     for (const a of myOwnApprovals) {
       if (a.status === 'rejected') {
-        list.push({ id: `apprres:${a.id}`, text: `Your "${a.rewardTitle}" redemption was rejected${a.note ? `: ${a.note}` : ''}`, at: a.resolvedAt ?? a.createdAt })
+        list.push({ id: `apprres:${a.id}`, text: `Your "${a.rewardTitle}" redemption was rejected${a.note ? `: ${a.note}` : ''}`, at: a.resolvedAt ?? a.createdAt, route: FRIENDS_ROUTE })
       }
     }
     for (const c of sentChallenges) {
       const friendUid = c.participantUids[0]
       const status = c.perUserStatus[friendUid]
-      if (status === 'accepted') list.push({ id: `chalacc:${c.id}`, text: `Your challenge "${c.title}" was accepted`, at: c.createdAt })
-      if (status === 'declined') list.push({ id: `chaldec:${c.id}`, text: `Your challenge "${c.title}" was declined`, at: c.createdAt })
-      if (status === 'done')     list.push({ id: `chaldone:${c.id}`, text: `Your challenge "${c.title}" was completed 🎉`, at: c.createdAt })
+      if (status === 'accepted') list.push({ id: `chalacc:${c.id}`, text: `Your challenge "${c.title}" was accepted`, at: c.createdAt, route: CHALLENGES_GIVEN_ROUTE })
+      if (status === 'declined') list.push({ id: `chaldec:${c.id}`, text: `Your challenge "${c.title}" was declined`, at: c.createdAt, route: CHALLENGES_GIVEN_ROUTE })
+      if (status === 'done')     list.push({ id: `chaldone:${c.id}`, text: `Your challenge "${c.title}" was completed 🎉`, at: c.createdAt, route: CHALLENGES_GIVEN_ROUTE })
     }
     return list.sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? ''))).slice(0, 30)
-  }, [incomingRequests, validationsToReview, incomingChallenges, approvalsToReview, myOwnValidations, myOwnApprovals, sentChallenges])
+  }, [uid, incomingRequests, validationsToReview, incomingChallenges, approvalsToReview, myOwnValidations, myOwnApprovals, sentChallenges])
 
   const unseenCount = items.filter(i => !seen.has(i.id)).length
 
@@ -197,7 +207,7 @@ export function NotificationBell() {
             items.map(i => (
               <button
                 key={i.id}
-                onClick={() => { setOpen(false); router.push('/tasks?mode=friends') }}
+                onClick={() => { setOpen(false); router.push(i.route) }}
                 style={{
                   display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px',
                   fontSize: 12, border: 'none', borderBottom: '1px solid var(--border)',

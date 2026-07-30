@@ -7,18 +7,19 @@ import { showToast }       from '@/ui/Toast'
 import { PinPad }          from '@/ui/PinPad'
 import { PinSetup }        from '@/ui/PinSetup'
 import { exportJSON, importJSON } from '@/lib/persistence/export'
-import { pad, uid } from '@/lib/engine/cutoff'
+import { pad } from '@/lib/engine/cutoff'
 import { PIN_LENGTH, PIN_LOCKOUT_THRESHOLD } from '@/constants/points'
 import { getBackupFolderName, pickBackupFolder, fsBackupSupported } from '@/lib/persistence/fsBackup'
-import { deleteAllUserData } from '@/lib/firebase/firestore'
+import { deleteAllUserData, submitBugReport } from '@/lib/firebase/firestore'
 import { getClientAuth } from '@/lib/firebase/client'
 import { signOut, deleteUser } from 'firebase/auth'
 import { syncNow, destroySync } from '@/lib/sync/sync'
 import { setUserScope } from '@/store/userScope'
 import { STORAGE_KEY, INITIAL_STATE } from '@/store/defaults'
 import pkg from '@/package.json'
-import type { AppConfig, GoalCadence, GoalTargetType } from '@/store/types'
+import type { AppConfig } from '@/store/types'
 import { FLAGS } from '@/constants/feature-flags'
+import { APP_URL, APP_SHARE_MESSAGE } from '@/constants/social'
 
 const SUPPORT_EMAIL = 'kunalpk007@gmail.com'
 const MAX_ZONE_NAME = 15
@@ -32,9 +33,6 @@ export default function SettingsPage() {
   const addZone     = usePlannerStore(s => s.addZone)
   const removeZone  = usePlannerStore(s => s.removeZone)
   const setZoneWeight = usePlannerStore(s => s.setZoneWeight)
-  const goals       = usePlannerStore(s => s.goals)
-  const addGoal     = usePlannerStore(s => s.addGoal)
-  const removeGoal  = usePlannerStore(s => s.removeGoal)
   const streak      = usePlannerStore(s => s.streak)
   const bestStreak  = usePlannerStore(s => s.bestStreak)
   const daysActive  = usePlannerStore(s => s.daysActive)
@@ -63,21 +61,6 @@ export default function SettingsPage() {
 
   const [zoneName,   setZoneName]  = useState('')
   const [zoneColor,  setZoneColor] = useState('#639922')
-  const [goalTitle,      setGoalTitle]      = useState('')
-  const [goalCadence,    setGoalCadence]    = useState<GoalCadence>('weekly')
-  const [goalZoneId,     setGoalZoneId]     = useState('')
-  const [goalTargetType, setGoalTargetType] = useState<GoalTargetType>('taskCount')
-  const [goalTarget,     setGoalTarget]     = useState(5)
-  const [goalChecklist,  setGoalChecklist]  = useState<string[]>([])
-  const [goalChecklistDraft, setGoalChecklistDraft] = useState('')
-  const [goalEndDate,    setGoalEndDate]    = useState('')
-  // Goal/challenge end dates: today through +2 months, matching the "End
-  // date not more than 2 months" rule for goal-type friend challenges.
-  const minGoalEndDate = `${new Date().getFullYear()}-${pad(new Date().getMonth() + 1)}-${pad(new Date().getDate())}`
-  const maxGoalEndDate = (() => {
-    const d = new Date(); d.setMonth(d.getMonth() + 2)
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-  })()
   const [pauseReason, setPauseReason] = useState('')
   const [pauseOpen,  setPauseOpen] = useState(false)
   const [invText,    setInvText]   = useState('')
@@ -238,8 +221,29 @@ export default function SettingsPage() {
             <SettingRow label="Min points to submit" sub={`Currently: ${draft.minPts} pts required to submit a weekday`}>
               <input type="number" value={draft.minPts} onChange={e => setDraft(d => ({ ...d, minPts: +e.target.value }))} min={20} max={200} className="setting-input" />
             </SettingRow>
-            <SettingRow label="Week-off Hours (Light Day) minimum" sub={`Currently: ${draft.weekendPts} pts required to submit on Sat/Sun`}>
+            <SettingRow label="Light Day minimum" sub={`Currently: ${draft.weekendPts} pts required to submit on a Light Day`}>
               <input type="number" value={draft.weekendPts} onChange={e => setDraft(d => ({ ...d, weekendPts: +e.target.value }))} min={5} max={60} className="setting-input" />
+            </SettingRow>
+            <SettingRow label="Light Days" sub={`${draft.lightDays.length}/2 selected — these days use the Light Day minimum above instead of the regular one`}>
+              <div className="flex gap-1">
+                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((label, i) => {
+                  const active = draft.lightDays.includes(i)
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setDraft(d => {
+                        if (d.lightDays.includes(i)) return { ...d, lightDays: d.lightDays.filter(x => x !== i) }
+                        if (d.lightDays.length >= 2) return d
+                        return { ...d, lightDays: [...d.lightDays, i].sort((a, b) => a - b) }
+                      })}
+                      className={`w-8 h-8 rounded-md text-[11px] font-medium border ${active ? 'bg-[var(--green-bg)] text-[var(--green)] border-[var(--green-mid)]' : 'border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)]'}`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
             </SettingRow>
             <SettingRow label="Day-end time" sub={`Your "day" ends and resets at ${draft.cutoffHour}:00 AM — set this later for night-shift schedules`}>
               <input
@@ -352,118 +356,27 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {FLAGS.GOALS && (
-            <>
-              <SectionLabel>Goals</SectionLabel>
-              <div className="mb-3">
-                {goals.map(g => {
-                  const zoneName = g.zoneId ? zones.find(z => z.id === g.zoneId)?.name : null
-                  const detail = g.targetType === 'checklist'
-                    ? `${g.checklist?.length ?? 0} tasks${g.endDate ? ` · by ${g.endDate}` : ''}`
-                    : g.targetType === 'points' ? `${g.target} pts` : `${g.target} tasks`
-                  return (
-                    <div key={g.id} className="flex items-center gap-2.5 p-2.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] mb-2">
-                      <span className="flex-1 text-[13px]">
-                        {g.title}
-                        <span className="text-[var(--text3)]"> · {g.cadence} · {detail}{zoneName ? ` · ${zoneName}` : ''}{g.challengedBy ? ` · from ${g.challengedBy}` : ''}</span>
-                      </span>
-                      <button onClick={() => removeGoal(g.id)} className="btn-icon danger">×</button>
-                    </div>
-                  )
-                })}
-                <div className="flex gap-2 flex-wrap items-center mt-2">
-                  <input value={goalTitle} onChange={e => setGoalTitle(e.target.value)} placeholder="Goal title..."
-                    className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
-                  <select value={goalCadence} onChange={e => setGoalCadence(e.target.value as GoalCadence)} className="setting-input">
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                  <select value={goalTargetType} onChange={e => setGoalTargetType(e.target.value as GoalTargetType)} className="setting-input">
-                    <option value="taskCount">Tasks completed</option>
-                    <option value="points">Points earned</option>
-                    <option value="checklist">Checklist (multiple tasks)</option>
-                  </select>
-                  {goalTargetType === 'taskCount' && (
-                    <select value={goalZoneId} onChange={e => setGoalZoneId(e.target.value)} className="setting-input">
-                      <option value="">All zones</option>
-                      {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
-                    </select>
-                  )}
-                  {goalTargetType !== 'checklist' && (
-                    <input type="number" value={goalTarget} onChange={e => setGoalTarget(+e.target.value)} min={1} style={{ width: 80 }}
-                      className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
-                  )}
-                  {goalTargetType !== 'checklist' && (
-                    <button
-                      onClick={() => {
-                        if (!goalTitle.trim() || goalTarget < 1) { showToast('Give the goal a title and a target > 0.'); return }
-                        addGoal({
-                          title: goalTitle.trim(), cadence: goalCadence, targetType: goalTargetType, target: goalTarget,
-                          ...(goalTargetType === 'taskCount' && goalZoneId ? { zoneId: goalZoneId } : {}),
-                        })
-                        setGoalTitle(''); setGoalZoneId(''); setGoalTarget(5)
-                        showToast('Goal added.')
-                      }}
-                      className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
-                      + Add goal
-                    </button>
-                  )}
-                </div>
-
-                {goalTargetType === 'checklist' && (
-                  <div className="mt-2 p-2.5 rounded-[10px] border border-[var(--border2)] bg-[var(--bg2)]">
-                    <div className="flex gap-2 flex-wrap items-center">
-                      <input
-                        value={goalChecklistDraft}
-                        onChange={e => setGoalChecklistDraft(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key !== 'Enter' || !goalChecklistDraft.trim()) return
-                          setGoalChecklist(l => [...l, goalChecklistDraft.trim()]); setGoalChecklistDraft('')
-                        }}
-                        placeholder="Task in this goal... (Enter to add)"
-                        className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] outline-none" />
-                      <button
-                        onClick={() => { if (!goalChecklistDraft.trim()) return; setGoalChecklist(l => [...l, goalChecklistDraft.trim()]); setGoalChecklistDraft('') }}
-                        className="px-3 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)]">
-                        + Add task
-                      </button>
-                    </div>
-                    {goalChecklist.length > 0 && (
-                      <div className="flex gap-1.5 flex-wrap mt-2">
-                        {goalChecklist.map((t, i) => (
-                          <span key={i} className="text-[12px] px-2 py-1 rounded-full border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] flex items-center gap-1.5">
-                            {t}
-                            <button onClick={() => setGoalChecklist(l => l.filter((_, idx) => idx !== i))} className="text-[var(--text3)]">×</button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex gap-2 flex-wrap items-center mt-2.5">
-                      <label className="text-[12px] text-[var(--text3)]">End date (optional, max 2 months out):</label>
-                      <input type="date" value={goalEndDate} onChange={e => setGoalEndDate(e.target.value)}
-                        min={minGoalEndDate} max={maxGoalEndDate}
-                        className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] outline-none" />
-                    </div>
-                    <button
-                      onClick={() => {
-                        if (!goalTitle.trim() || goalChecklist.length === 0) { showToast('Give the goal a title and at least one task.'); return }
-                        addGoal({
-                          title: goalTitle.trim(), cadence: goalCadence, targetType: 'checklist', target: goalChecklist.length,
-                          checklist: goalChecklist.map(t => ({ id: uid(), title: t, done: false })),
-                          ...(goalEndDate ? { endDate: goalEndDate } : {}),
-                        })
-                        setGoalTitle(''); setGoalChecklist([]); setGoalChecklistDraft(''); setGoalEndDate('')
-                        showToast('Goal added.')
-                      }}
-                      className="mt-2.5 px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
-                      + Add goal
-                    </button>
-                  </div>
-                )}
-                <p className="text-[11px] text-[var(--text3)] mt-2">Progress is shown on the Dashboard. Zone-scoped goals only support &quot;Tasks completed&quot; — per-task points aren&apos;t tracked per zone.</p>
+          <SectionLabel>Refer the app</SectionLabel>
+          <SettingCard>
+            <SettingRow label="Share Personal Planner" sub="Sends the app URL">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(APP_URL); showToast('App link copied.')
+                  }}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+                  Copy link
+                </button>
+                <button
+                  onClick={() => {
+                    window.open(`https://wa.me/?text=${encodeURIComponent(APP_SHARE_MESSAGE)}`, '_blank', 'noopener,noreferrer')
+                  }}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[#25D366]">
+                  📱 Send App URL via WhatsApp
+                </button>
               </div>
-            </>
-          )}
+            </SettingRow>
+          </SettingCard>
 
           <SectionLabel>Account</SectionLabel>
           <SettingCard>
@@ -668,11 +581,16 @@ export default function SettingsPage() {
             <p className="text-[12px] text-[var(--text2)] mb-2.5 leading-relaxed">
               Can&apos;t find your answer below, or hit a bug? Reach out directly — screenshots and steps to reproduce help the most.
             </p>
-            <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Kunal's Planner — support request")}`}
+            <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Personal Planner — support request")}`}
               className="inline-flex items-center gap-1.5 text-[13px] px-3.5 py-2 rounded-md font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
               ✉️ Email {SUPPORT_EMAIL}
             </a>
           </div>
+
+          <SectionLabel>Report a bug or complaint</SectionLabel>
+          <SettingCard>
+            <BugReportForm />
+          </SettingCard>
 
           <SectionLabel>Sync & devices</SectionLabel>
           <Accordion title="Why don't my tasks/streak show up on another device?" defaultOpen>
@@ -886,6 +804,56 @@ export default function SettingsPage() {
           </button>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+function BugReportForm() {
+  const [category, setCategory] = useState('bug')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  async function submit() {
+    if (!message.trim()) { showToast('Describe the issue first.'); return }
+    setBusy(true)
+    try {
+      const user = getClientAuth().currentUser
+      await submitBugReport(user?.uid ?? 'anon', user?.email ?? '', category, message.trim())
+      setSent(true); setMessage('')
+      showToast('Thanks! Your report was sent.')
+    } catch {
+      showToast('Could not send — check your connection.')
+    }
+    setBusy(false)
+  }
+
+  if (sent) {
+    return (
+      <div className="py-2 text-[13px] text-[var(--text2)]">
+        ✓ Report received — thank you. <button onClick={() => setSent(false)} className="text-[var(--green)] underline">Send another</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2.5 py-1">
+      <p className="text-[11px] text-[var(--text3)]">Found a bug or want to complain about something? Send it straight to the app admin.</p>
+      <select value={category} onChange={e => setCategory(e.target.value)} className="setting-input">
+        <option value="bug">🐞 Bug</option>
+        <option value="complaint">😕 Complaint</option>
+        <option value="feature">💡 Feature request</option>
+        <option value="other">Other</option>
+      </select>
+      <textarea value={message} onChange={e => setMessage(e.target.value.slice(0, 1000))}
+        placeholder="What happened? Steps to reproduce help a lot…"
+        className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none min-h-[80px] resize-y" />
+      <div className="flex justify-end">
+        <button onClick={submit} disabled={busy || !message.trim()}
+          className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-40">
+          {busy ? 'Sending…' : 'Send report'}
+        </button>
+      </div>
     </div>
   )
 }
