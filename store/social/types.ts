@@ -75,6 +75,16 @@ export interface SharedTask {
   /** Goal-type challenges only — denormalized task titles that become the
    *  goal's checklist items on accept. */
   checklist?:       string[]
+  /** Goal-type challenges only — the giver declares how many points the
+   *  friend earns for completing the goal, and the reduced points if they
+   *  finish after the deadline. */
+  completionPoints?: number
+  delayPoints?:      number
+  /** Set by the owner tapping "Send Reminder" on a still-pending sent
+   *  challenge — keyed per participant uid, ISO timestamp of the most recent
+   *  reminder. Drives the recipient's in-app reminder notification; no
+   *  WhatsApp/external send involved. */
+  reminderSentAt?:   Record<string, string>
 }
 
 // ─── Task validation ──────────────────────────────────────────────────────────

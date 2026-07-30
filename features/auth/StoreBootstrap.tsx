@@ -2,13 +2,27 @@
 import { useEffect } from 'react'
 import { usePlannerStore }   from '@/store'
 import { setUserScope, scopedStorageKey } from '@/store/userScope'
-import { STORAGE_KEY, INITIAL_STATE } from '@/store/defaults'
-import { loadFromFirestore, loadJournalEntries, migrateJournalFromState, saveToFirestore } from '@/lib/firebase/firestore'
+import { STORAGE_KEY, INITIAL_STATE, DEFAULT_CFG } from '@/store/defaults'
+import { loadFromFirestore, loadJournalEntries, migrateJournalFromState, saveToFirestore, writePublicProfile, writeUserIndex } from '@/lib/firebase/firestore'
 import { waitForAuth, getClientAuth } from '@/lib/firebase/client'
 import { initSync, destroySync } from '@/lib/sync/sync'
 import { useSocialStore } from '@/store/social/social.store'
 import { FLAGS } from '@/constants/feature-flags'
 import { setSyncStatus } from '@/lib/sync-status'
+
+/** `cfg` is a nested object, so the top-level spreads below (INITIAL_STATE /
+ *  savedState / cloudData) replace it wholesale from whichever source has
+ *  it, instead of picking up new AppConfig fields (e.g. lightDays) from
+ *  DEFAULT_CFG when an older saved/cloud snapshot predates them. Deep-merge
+ *  cfg separately, applying sources in the same precedence order as the
+ *  surrounding spread (later args win). */
+function mergeCfg(...sources: Array<unknown>) {
+  return Object.assign(
+    {},
+    DEFAULT_CFG,
+    ...sources.map(s => (s && typeof s === 'object') ? s : {})
+  )
+}
 
 function readCookie(name: string): string | null {
   if (typeof document === 'undefined') return null
@@ -210,9 +224,16 @@ export function StoreBootstrap({ onReady }: Props) {
           const merged = preferCloud
             ? { ...INITIAL_STATE, ...(savedState ?? {}), ...cloudData }
             : { ...INITIAL_STATE, ...cloudData, ...(savedState ?? {}) }
+          merged.cfg = preferCloud
+            ? mergeCfg((savedState as Record<string, unknown> | null)?.cfg, (cloudData as Record<string, unknown>)?.cfg)
+            : mergeCfg((cloudData as Record<string, unknown>)?.cfg, (savedState as Record<string, unknown> | null)?.cfg)
           usePlannerStore.setState({ ...merged, journal: journalEntries })
         } else {
-          usePlannerStore.setState({ ...INITIAL_STATE, ...(savedState ?? {}) })
+          usePlannerStore.setState({
+            ...INITIAL_STATE,
+            ...(savedState ?? {}),
+            cfg: mergeCfg((savedState as Record<string, unknown> | null)?.cfg),
+          })
         }
 
         // Cloud-heal push. Root cause of the "desktop/Netlify shows no
@@ -256,6 +277,15 @@ export function StoreBootstrap({ onReady }: Props) {
           } catch (e) {
             console.error('[bootstrap] sync init error:', e)
           }
+          // Publish a small friends-readable profile (name + rankXP) and the
+          // admin user-index row. Best-effort — never blocks bootstrap.
+          try {
+            const authUser = getClientAuth().currentUser
+            const name = authUser?.displayName || authUser?.email || 'Anonymous'
+            const snap = usePlannerStore.getState()
+            writePublicProfile(safeUid, name, snap.rankXP ?? 0).catch(() => {})
+            writeUserIndex(safeUid, name, authUser?.email ?? '', snap.rankXP ?? 0, snap.streak ?? 0).catch(() => {})
+          } catch {}
           // Friends is a separate, non-persisted, online-only store (see
           // store/social/social.store.ts) — it doesn't share the planner
           // store's offline-first cache/merge logic above, it just needs a

@@ -76,6 +76,37 @@ export async function removeFriend(uid: string, friendUid: string): Promise<void
   await deleteDoc(friendDoc(uid, friendUid))
 }
 
+/** Direct mutual add — no request/approval step. Used by the "add a friend"
+ *  box and the shared invite link: if someone shares their code they clearly
+ *  want to be friends, so accepting writes BOTH friend docs at once (the
+ *  security rule on users/{uid}/friends/{friendUid} allows `friendUid` to
+ *  create the reciprocal entry). Idempotent-ish: re-adding just re-writes the
+ *  same docs. */
+export async function addFriendDirect(
+  myUid: string, myName: string, friendUid: string, friendName: string
+): Promise<void> {
+  const batch = writeBatch(getClientDb())
+  const now = new Date().toISOString()
+  const mine: Friend     = { uid: friendUid, displayName: friendName || 'Friend', tags: [], isNotary: false, addedAt: now }
+  const theirs: Friend   = { uid: myUid,     displayName: myName || 'Friend',     tags: [], isNotary: false, addedAt: now }
+  batch.set(friendDoc(myUid, friendUid), mine)
+  batch.set(friendDoc(friendUid, myUid), theirs)
+  await batch.commit()
+}
+
+/** Whether the other person still has ME in their friend list. The read rule
+ *  on users/{friendUid}/friends/{myUid} permits reading the doc that
+ *  references me, so I can tell if they've removed me (doc gone) and offer a
+ *  re-add. Returns true if reciprocal, false if they removed me. */
+export async function isReciprocalFriend(friendUid: string, myUid: string): Promise<boolean> {
+  try {
+    const snap = await getDoc(friendDoc(friendUid, myUid))
+    return snap.exists()
+  } catch {
+    return true // on error, assume ok — don't nag with a false "removed you"
+  }
+}
+
 // ─── Friend requests: root collection friendRequests/{id} ────────────────────
 
 function friendRequestsCol() {
@@ -286,14 +317,15 @@ export async function sendTaskChallenge(
  *  see social.store.ts#acceptChallenge, which branches on `type`. */
 export async function sendGoalChallenge(
   ownerUid: string, ownerName: string, friendUid: string,
-  title: string, taskTitles: string[], endDate: string
+  title: string, taskTitles: string[], endDate: string,
+  completionPoints: number, delayPoints: number
 ): Promise<string> {
   const ref = doc(sharedTasksCol())
   const task: SharedTask = {
     id: ref.id, ownerUid, ownerName, title, note: '', zone: '', priority: 'med', requiresProof: false,
     participantUids: [friendUid], perUserStatus: { [friendUid]: 'pending' },
     createdAt: new Date().toISOString(),
-    type: 'goal', endDate, checklist: taskTitles,
+    type: 'goal', endDate, checklist: taskTitles, completionPoints, delayPoints,
   }
   await setDoc(ref, { ...task, createdAt: serverTimestamp() })
   return ref.id
@@ -320,6 +352,15 @@ export function listenSentChallenges(ownerUid: string, cb: (challenges: SharedTa
 export async function respondToChallenge(challengeId: string, friendUid: string, accept: boolean): Promise<void> {
   await updateDoc(doc(sharedTasksCol(), challengeId), {
     [`perUserStatus.${friendUid}`]: accept ? 'accepted' : 'declined',
+  })
+}
+
+/** Owner nudging a still-pending recipient — in-app only, no external send.
+ *  Recipient's NotificationBell picks this up via their existing
+ *  incomingChallenges subscription (same doc, no new listener needed). */
+export async function sendChallengeReminder(challengeId: string, friendUid: string): Promise<void> {
+  await updateDoc(doc(sharedTasksCol(), challengeId), {
+    [`reminderSentAt.${friendUid}`]: new Date().toISOString(),
   })
 }
 

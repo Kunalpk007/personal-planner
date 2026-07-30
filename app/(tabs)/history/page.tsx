@@ -2,7 +2,9 @@
 import dynamic              from 'next/dynamic'
 import { usePlannerStore }  from '@/store'
 import { Accordion }        from '@/ui/Accordion'
-import { formatDate }       from '@/lib/engine/cutoff'
+import { Pagination }       from '@/ui/Pagination'
+import { usePagination }    from '@/hooks/usePagination'
+import { formatDateShort }  from '@/lib/engine/cutoff'
 import { FLAGS }            from '@/constants/feature-flags'
 
 const HistoryChartsSection = dynamic(() => import('@/features/history/components/HistoryChartsSection'), {
@@ -10,17 +12,18 @@ const HistoryChartsSection = dynamic(() => import('@/features/history/components
   loading: () => <div className="text-[12px] text-[var(--text3)] py-4 text-center">Loading charts…</div>,
 })
 
-const MOOD_LABELS: Record<string, string> = {
-  motivated: '⚡ Motivated', neutral: '😐 Neutral', sick: '🤒 Sick',
-}
 const EOD_LABELS: Record<string, string> = {
-  motivated: '⚡ Motivated', neutral: '😐 Neutral', tired: '😤 Tired', content: '😌 Content',
+  motivated: '⚡ Motivated', proud: '💪 Proud', content: '😌 Content', neutral: '😐 Neutral',
+  tired: '😴 Tired', frustrated: '😤 Frustrated', anxious: '😰 Anxious', sad: '😢 Sad',
 }
+
+const PAGE_SIZE = 8
 
 export default function HistoryPage() {
   const history     = usePlannerStore(s => s.history)
   const redemptions = usePlannerStore(s => s.rewardRedemptions)
-  const sorted  = [...history].reverse().slice(0, 60)
+  const sorted  = [...history].reverse()
+  const { page, totalPages, pageItems, hasPrev, hasNext, prevPage, nextPage } = usePagination(sorted, PAGE_SIZE)
 
   return (
     <div>
@@ -29,7 +32,7 @@ export default function HistoryPage() {
       {sorted.length === 0 && (
         <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No history yet. Submit your first day.</div>
       )}
-      {sorted.map(e => {
+      {pageItems.map(e => {
         const dayTasks   = e.tasks ?? []
         const dayRewards = [
           ...(e.rewards ?? []).map(title => ({ title, cost: null as number | null })),
@@ -39,18 +42,11 @@ export default function HistoryPage() {
         <Accordion
           key={e.date}
           title={
-            <div className="flex items-center gap-2 flex-wrap flex-1">
-              <span className="font-semibold min-w-[160px]">
-                {formatDate(e.date)}
-                {e.auto && <span className="ml-1.5 text-[10px] text-[var(--amber)] bg-[var(--amber-bg)] px-1.5 py-0.5 rounded">Auto</span>}
-                {e.late && <span className="ml-1.5 text-[10px] text-[var(--red)] bg-[var(--red-bg)] px-1.5 py-0.5 rounded">Late</span>}
-              </span>
-              <span className="text-xs text-[var(--text2)]">{e.done}/{e.total}</span>
-              {e.mood    && <span className="text-[11px] text-[var(--text3)]">{MOOD_LABELS[e.mood]}</span>}
-              {e.eodMood && <span className="text-[11px] text-[var(--text3)]">→{EOD_LABELS[e.eodMood]}</span>}
-              <span className="text-[13px] font-semibold text-[var(--green)]">+{e.rxp} RXP</span>
-              {e.frozen && <span className="text-[var(--blue)]">❄</span>}
-              {e.rest   && <span className="text-[var(--amber)]">🟡</span>}
+            <div className="flex items-center gap-1.5 flex-nowrap overflow-hidden text-[12px] sm:text-[13px]">
+              <span className="font-semibold whitespace-nowrap">{formatDateShort(e.date)}</span>
+              <span className="text-[var(--text2)] whitespace-nowrap">{e.done}/{e.total}</span>
+              {e.eodMood && <span className="text-[var(--text3)] truncate">{EOD_LABELS[e.eodMood]}</span>}
+              <span className="font-semibold text-[var(--green)] whitespace-nowrap ml-auto">+{e.rxp}XP</span>
             </div>
           }
         >
@@ -85,6 +81,7 @@ export default function HistoryPage() {
         </Accordion>
         )
       })}
+      <Pagination page={page} totalPages={totalPages} hasPrev={hasPrev} hasNext={hasNext} onPrev={prevPage} onNext={nextPage} />
     </div>
   )
 }

@@ -4,7 +4,8 @@ import { checkStreakMilestone } from '@/lib/engine/streak'
 import { getWeekMonday, getNextDayKey } from '@/lib/engine/cutoff'
 import { uid }                 from '@/lib/engine/cutoff'
 import { getMinPts }           from '@/lib/engine/scoring'
-import { MAX_PAUSE_DAYS, MAX_BOUGHT_FREEZES, FREEZE_COST, WALLET_RATIO, MAX_CARRY } from '@/constants/points'
+import { restOrLightXpPenalty } from '@/lib/engine/xpPenalty'
+import { MAX_PAUSE_DAYS, MAX_BOUGHT_FREEZES, FREEZE_COST, FREEZE_USED_XP_PENALTY, WALLET_RATIO, MAX_CARRY } from '@/constants/points'
 
 export interface StreakSlice {
   submitDay:        (entry: HistoryEntry) => { freezeBonus: number; milestoneStreak: number | null }
@@ -66,7 +67,6 @@ export const createStreakSlice: StateCreator<AppState, [], [], StreakSlice> = (s
       history:       [...s.history, entry],
       tasks:         carried.length ? [...s.tasks, ...carried] : s.tasks,
       rankXP:        s.rankXP + overflowXP,
-      lastActiveDayForDecay: entry.date,
     })
 
     return { freezeBonus: bonus, milestoneStreak: bonus > 0 ? newStreak : null }
@@ -82,6 +82,10 @@ export const createStreakSlice: StateCreator<AppState, [], [], StreakSlice> = (s
       freezesUsed:   s.freezesUsed + 1,
       frozenDays:    { ...s.frozenDays,    [today]: true },
       submittedDays: { ...s.submittedDays, [today]: true },
+      // Any streak-freeze spend costs a flat XP penalty — always this rate,
+      // no sick exemption (spending a freeze is a deliberate choice distinct
+      // from the mood-driven target reduction).
+      rankXP: Math.max(0, s.rankXP - FREEZE_USED_XP_PENALTY),
       history: [...s.history, {
         date: today, done: 0, total: 0, pct: 0, rxp: 0,
         mood: '', eodMood: '', frozen: true, rest: false,
@@ -144,11 +148,13 @@ export const createStreakSlice: StateCreator<AppState, [], [], StreakSlice> = (s
     // A rest day protects an existing streak — with streak at 0 there's nothing to protect.
     if (s0.streak <= 0) return
     const mon = getWeekMonday(today)
+    const penalty = restOrLightXpPenalty(today, s0.cfg, s0.mood)
     set(s => ({
       weekRestUsed:  { ...s.weekRestUsed, [mon]: true },
       restDays:      { ...s.restDays,     [today]: true },
       submittedDays: { ...s.submittedDays,[today]: true },
       daysActive:    s.daysActive + 1,
+      rankXP:        Math.max(0, s.rankXP - penalty),
       history: [...s.history, {
         date: today, done: 0, total: 0, pct: 0, rxp: 0,
         mood: s.mood[today] ?? '', eodMood: '', frozen: false,

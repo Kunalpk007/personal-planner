@@ -25,7 +25,7 @@ describe('addTask', () => {
 })
 
 describe('toggleTask', () => {
-  it('marks a task done, awards rank XP and wallet points, and sets lastActiveDayForDecay', () => {
+  it('marks a task done and awards rank XP and wallet points', () => {
     usePlannerStore.getState().addTask(taskInput({ priority: 'high', date: '2024-01-08' }))
     const id = usePlannerStore.getState().tasks[0].id
 
@@ -37,7 +37,6 @@ describe('toggleTask', () => {
     expect(state.tasks[0].completedAt).toBeTruthy()
     expect(state.rankXP).toBe(20)
     expect(state.rewardWallet).toBe(10)
-    expect(state.lastActiveDayForDecay).toBe('2024-01-08')
   })
 
   it('reverses rank XP and wallet points when un-completing a task', () => {

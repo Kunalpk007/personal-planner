@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { usePlannerStore } from '@/store'
 import { resetStore } from './helpers'
 
@@ -15,27 +15,15 @@ describe('setConfig', () => {
 })
 
 describe('setMood', () => {
-  afterEach(() => vi.restoreAllMocks())
-
   it('sets the mood for the given day', () => {
     usePlannerStore.getState().setMood('2024-01-08', 'motivated')
     expect(usePlannerStore.getState().mood['2024-01-08']).toBe('motivated')
   })
 
-  it('uses a 5s lock window when hour is >= 12 (after noon)', () => {
-    vi.spyOn(Date.prototype, 'getHours').mockReturnValue(14)
-    const before = Date.now()
-    usePlannerStore.getState().setMood('2024-01-08', 'neutral')
-    const locked = usePlannerStore.getState().moodLockedUntil['2024-01-08']
-    expect(new Date(locked).getTime()).toBeLessThan(before + 10_000) // ~5s window
-  })
-
-  it('uses a 2hr lock window when hour is < 12 (before noon)', () => {
-    vi.spyOn(Date.prototype, 'getHours').mockReturnValue(9)
-    const before = Date.now()
+  it('overwrites a previously set mood for the same day (editable all day)', () => {
+    usePlannerStore.getState().setMood('2024-01-08', 'motivated')
     usePlannerStore.getState().setMood('2024-01-08', 'sick')
-    const locked = usePlannerStore.getState().moodLockedUntil['2024-01-08']
-    expect(new Date(locked).getTime()).toBeGreaterThan(before + 3_600_000) // > 1hr
+    expect(usePlannerStore.getState().mood['2024-01-08']).toBe('sick')
   })
 })
 
@@ -43,6 +31,24 @@ describe('setEodMood', () => {
   it('records the end-of-day mood', () => {
     usePlannerStore.getState().setEodMood('2024-01-08', 'content')
     expect(usePlannerStore.getState().eodMood['2024-01-08']).toBe('content')
+  })
+})
+
+describe('claimShowedUpBonus', () => {
+  it('awards ceil(5% of the mood-adjusted minPts) to the wallet, not XP', () => {
+    usePlannerStore.setState({ rankXP: 0, rewardWallet: 0 })
+    // 2024-01-08 is a Monday -> minPts 70, no mood set -> mult 1.0 -> 5% = 3.5 -> ceil 4
+    const bonus = usePlannerStore.getState().claimShowedUpBonus('2024-01-08')
+    expect(bonus).toBe(4)
+    expect(usePlannerStore.getState().rewardWallet).toBe(4)
+    expect(usePlannerStore.getState().rankXP).toBe(0)
+  })
+
+  it('returns null and awards nothing if the day was already an engagement day', () => {
+    usePlannerStore.setState({ rewardWallet: 0, engagementDays: { '2024-01-08': true } })
+    const bonus = usePlannerStore.getState().claimShowedUpBonus('2024-01-08')
+    expect(bonus).toBeNull()
+    expect(usePlannerStore.getState().rewardWallet).toBe(0)
   })
 })
 

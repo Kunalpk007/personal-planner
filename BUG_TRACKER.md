@@ -408,6 +408,65 @@
 
 ---
 
+## SESSION 8 — large feature batch (COMPLETE)
+> Decisions confirmed with user: Admin login = Firebase admin account + Firestore rules (uid allowlist); Voice journal = speech-to-text **and** stored audio (needs Firebase Storage enabled). All four clusters delivered: Challenges + Goals revamp (FEAT-027/028/029), Friends revamp (FEAT-030), Tasks/UX polish (FEAT-031/032), Admin + bug reporting (FEAT-033), Voice journal (FEAT-034), History graph (FEAT-035), challenge notifications verified (FEAT-036). Full pipeline green: tsc, 297 tests, production build (incl. new /admin route).
+> **User action items to fully activate:** (1) set `NEXT_PUBLIC_ADMIN_UID` and replace `REPLACE_WITH_ADMIN_UID` in firestore.rules with your admin uid, then deploy `firestore.rules`; (2) to store journal audio, enable Firebase Storage and deploy `storage.rules`.
+
+### FEAT-027 — Life Score algorithm improved (recency-weighted, stable window, fair pooling)
+**Status:** 🟢 Done
+**Area:** `lib/engine/goals.ts` (`computeZoneScore`, `computeLifeScore`), tests in `tests/unit/goals.test.ts`
+**What it was:** Each zone scored `activeDays / recent.length × 100` where `recent = history.slice(-30)` (last 30 *entries*), then a weighted average across ALL zones. Weaknesses: (1) dividing by entry count made early scores volatile and could mix month-old days into a "last 30" when history is sporadic; (2) every day weighted equally, so a streak three weeks ago counted as much as this week; (3) a freshly-created, never-used zone scored 0 and dragged the whole Life Score down.
+**What changed:** (1) Trailing *calendar* window anchored on the most recent recorded day (gaps no longer pull in stale days). (2) Linear **recency weighting** — recent days count more than older ones, so the score reflects current momentum. (3) The overall score now pools only zones you've *ever* engaged: a never-used zone is shown at 0 individually but excluded from the total, while a zone you used before and are now neglecting stays in the pool and still lowers the score (preserving the life-balance signal). Manual zone weights still apply. Tests updated to cover recency direction, the never-used exclusion, and the neglected-but-engaged case.
+
+### FEAT-028 — Goals revamped as first-class tiles in Today's Tasks
+**Status:** 🟢 Done
+**Area:** `store/types.ts`, `store/slices/goals.slice.ts`, `features/goals/GoalsInTasks.tsx` (new), `app/(tabs)/tasks/page.tsx`
+**Change:** Goals now render as tiles inline in the Today's Tasks list (not a separate tab/dashboard card), styled like task tiles. New model: a goal awards points either **per subtask** or **for the whole goal** (chosen at creation). Subtasks are listed inside the tile with checkboxes; the goal's complete button only enables once **every subtask is done**. Each tile has an add/edit **note** (saved on the goal). Points are only reduced once the **deadline is crossed** (down to a `delayPoints` value; own goals default to half) — carry-forward never deducts. Completing a goal awards rankXP + wallet points. A "🎯 Add Goal" button sits next to "+ Add Task"; a create/edit modal handles the points model, subtasks, deadline, and note. Store gained `completeGoal`, `setGoalNote`; `addChallengeGoal` now carries giver points. New store + engine tests cover completion gating, per-subtask summing, deadline reduction, and notes.
+
+### FEAT-029 — "Challenges" tab replaces the Goals tab (Given / Accepted)
+**Status:** 🟢 Done
+**Area:** `features/challenges/ChallengesPanel.tsx` (new), `app/(tabs)/tasks/page.tsx`, `store/social/*`, `lib/firebase/social.ts`
+**Change:** The Tasks-page tab strip now has "Challenges" (was "Goals"), with two sub-tabs: **Challenges given** (everything you've sent — tasks + goals — with status and, for goals, the points you declared) and **Challenges accepted** (incoming ones to accept/decline, plus the challenge tasks/goals already on your list with their progress). When challenging a friend to a **goal**, the giver now declares the **completion points** and the **reduced late points**; these are carried on the shared challenge and applied to the goal the friend receives on accept. Old `?mode=goals` deep links redirect to Challenges.
+
+### FEAT-027 (cont.) — Life Score (recorded above in this session)
+
+### FEAT-030 — Friends revamp: instant invite link, minimal sections, friend tiles + history
+**Status:** 🟢 Done
+**Area:** `lib/firebase/social.ts`, `store/social/social.store.ts`, `features/friends/components/FriendsPageContent.tsx`, `constants/social.ts`, `app/(tabs)/settings/page.tsx`, `firestore.rules`, `lib/firebase/firestore.ts`
+**Change:** Replaced the request/approval flow with **direct mutual add** — sharing your invite link (`/tasks?mode=friends&code=…&name=…`) lets the recipient tap Add Friend + confirm and you're instantly friends both ways (`addFriendDirect` writes both friend docs). Friends section is now just: your code/invite link (with WhatsApp share), add-a-friend, and your friends. Each friend tile shows name, type (Mentor/Rival/… via a type selector), and XP (from a new friends-readable `users/{uid}/public/profile` doc), a red circled × remove with confirmation, and opens a **challenge-history modal** (what you sent them / they sent you, with status + points). If the other person removes you, a reciprocity check surfaces a re-add ("Send request") button. Added a "Refer the app" share (login link) in Settings. Challenge category **Fitness → Career**.
+
+### FEAT-031 — Add Task modal + Recurring folded in; recurring tab removed
+**Status:** 🟢 Done
+**Area:** `app/(tabs)/tasks/page.tsx`
+**Change:** The inline add-task form is now a green **"+ Add Task"** button (with "🎯 Add Goal" and "Challenge a friend" beside it) that opens a full modal with all fields plus a **"🔁 Make this recurring"** checkbox. The standalone Recurring tab is gone — recurring templates are created from that checkbox instead.
+
+### FEAT-032 — Mobile notification icon, mood collapse, morning mood, swipe guard, login title, rewards spacing
+**Status:** 🟢 Done
+**Area:** `app/(tabs)/dashboard/page.tsx`, `features/dashboard/components/MoodBar.tsx`, `features/dashboard/components/MorningQuoteOverlay.tsx`, `app/(tabs)/layout.tsx`, `app/login/page.tsx`, `app/(tabs)/rewards/page.tsx`
+**Change:** The notification bell now shows on mobile (the top nav is hidden there) — surfaced in the dashboard header just before the streak icon. Once a mood is locked in, the bar collapses to just the chosen mood. The morning "Start my day" modal has a quick mood check-in. Swipe-to-change-tabs is disabled while a modal is open or while interacting with a field, so an accidental swipe can't lose typed input. Login subtitle is now "Personal Planner". Rewards tab gets top padding on mobile so the wallet/freeze row isn't jammed against the top.
+
+### FEAT-033 — Bug/complaint reporting + Admin dashboard
+**Status:** 🟢 Done
+**Area:** `lib/firebase/firestore.ts`, `app/(tabs)/settings/page.tsx`, `app/admin/page.tsx` (new), `firestore.rules`
+**Change:** Settings → FAQ & Help has a **Report a bug / complaint** form that writes to a Firestore `bugReports` collection. A new **`/admin`** route shows a read-only dashboard: user count / active streaks / total XP / open bugs, a user roster (from a new `userIndex` collection each client maintains for its own row), and the bug reports. **How admin login works:** the admin signs in normally with their Firebase account; the page (and the Firestore rules) check `uid == NEXT_PUBLIC_ADMIN_UID` / the `REPLACE_WITH_ADMIN_UID` placeholder in `firestore.rules`. Set `NEXT_PUBLIC_ADMIN_UID` (env) and replace the rules placeholder with your admin uid, then deploy the rules — access is enforced by Firestore, not just hidden in the UI. Journal stays private (admin has no read access to it).
+
+### FEAT-034 — Voice journal (dictation + voice notes)
+**Status:** 🟢 Done (audio upload requires Firebase Storage to be enabled)
+**Area:** `features/journal/VoiceControls.tsx` (new), `app/(tabs)/journal/page.tsx`, `lib/firebase/client.ts`, `lib/firebase/storage.ts` (new), `storage.rules` (new)
+**Change:** The journal write view has **🎤 Dictate** (browser speech-to-text — transcribes speech into the entry, no infra needed) and **🎙️ Record voice** (captures audio, plays back locally, and uploads to Firebase Storage, appending a voice-note link to the entry). Audio upload is best-effort: if Storage isn't enabled it degrades gracefully to local playback + dictation. Added `storage.rules` (per-user `journalAudio/{uid}/…`) to deploy once Storage is on.
+
+### FEAT-035 — History trend graph redesigned for clarity
+**Status:** 🟢 Done
+**Area:** `features/history/components/DailyTrendChart.tsx`
+**Change:** Added a legend (hit-goal / below-goal / daily-goal line), y-axis value labels, x-axis date labels (start/mid/end), rounded bars, a "N/M days hit" summary, clearer selected-day detail, and a tap hint — so the trend is actually readable.
+
+### FEAT-036 — Challenge-completion notifications (verified)
+**Status:** 🟢 Verified
+**Area:** `ui/NotificationBell.tsx`
+**Finding:** The bell already surfaces incoming challenges given to you and, for challenges you gave, a "completed 🎉" notice when the friend finishes — no change needed.
+
+---
+
 ## PRODUCTION GAPS (Not bugs, but blockers for prod)
 
 ### PROD-001 — Firestore security rules not set

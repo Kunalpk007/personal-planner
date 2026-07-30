@@ -48,13 +48,11 @@ export const INITIAL_STATE: AppStateData = {
   journalEncryptionToken: null,
 
   mood:            {},
-  moodLockedUntil: {},
   eodMood:         {},
 
   pinnedTaskId:          null,
   engagementDays:        {},
   weeklyReviewDone:      {},
-  lastActiveDayForDecay: null,
   morningQuoteShown:     {},
   appFirstUsed:          null,
   overnightMsg:          null,

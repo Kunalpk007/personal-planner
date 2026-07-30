@@ -1,15 +1,11 @@
 'use client'
 import { useState } from 'react'
 import { DailyTrendChart }      from './DailyTrendChart'
-import { MoodCorrelationChart } from './MoodCorrelationChart'
 import { ZoneBreakdownChart }   from './ZoneBreakdownChart'
-import { CalendarHeatmap }      from './CalendarHeatmap'
 
 const TABS = [
   { key: 'trend',  label: '📈 Trend' },
-  { key: 'mood',   label: '⚡ Mood' },
   { key: 'zones',  label: '🧭 Zones' },
-  { key: 'heat',   label: '🗓 Heatmap' },
 ] as const
 
 type TabKey = typeof TABS[number]['key']
@@ -37,9 +33,7 @@ export default function HistoryChartsSection() {
         ))}
       </div>
       {tab === 'trend' && <DailyTrendChart />}
-      {tab === 'mood'  && <MoodCorrelationChart />}
       {tab === 'zones' && <ZoneBreakdownChart />}
-      {tab === 'heat'  && <CalendarHeatmap />}
     </div>
   )
 }

@@ -1,14 +1,17 @@
 'use client'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { usePlannerStore } from '@/store'
 import { computeLifeScore } from '@/lib/engine/goals'
 import { FLAGS } from '@/constants/feature-flags'
 
+const LIFE_SCORE_PERIODS = [7, 15, 30, 60, 90] as const
+
 export function LifeScoreCard() {
   const zones   = usePlannerStore(s => s.zones)
   const history = usePlannerStore(s => s.history)
+  const [periodDays, setPeriodDays] = useState<number>(30)
 
-  const { total, byZone } = useMemo(() => computeLifeScore(zones, history, 30), [zones, history])
+  const { total, byZone } = useMemo(() => computeLifeScore(zones, history, periodDays), [zones, history, periodDays])
 
   if (!FLAGS.LIFE_SCORE) return null
 
@@ -17,7 +20,18 @@ export function LifeScoreCard() {
       <div className="flex items-center gap-1.5 mb-2.5">
         <span className="text-[15px]">🧭</span>
         <span className="text-[10px] font-semibold text-[var(--text3)] uppercase tracking-wide">Life Score</span>
-        <span className="text-[11px] text-[var(--text3)] ml-auto">last 30 days</span>
+        <label className="ml-auto flex items-center gap-1 text-[11px] text-[var(--text3)]">
+          Last
+          <select
+            value={periodDays}
+            onChange={e => setPeriodDays(Number(e.target.value))}
+            className="bg-transparent text-[var(--text2)] border border-[var(--border)] rounded px-1 py-0.5 text-[11px]"
+          >
+            {LIFE_SCORE_PERIODS.map(d => (
+              <option key={d} value={d}>{d}D</option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="flex items-center gap-3 mb-3">
         <div className="text-[28px] font-semibold">{total}</div>

@@ -60,6 +60,12 @@ export function formatDate(dateStr: string): string {
   return `${DAY_ABBR[d.getDay()]}, ${d.getDate()} ${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`
 }
 
+/** Same as formatDate but without the year — for compact one-line UI (e.g. History tiles). */
+export function formatDateShort(dateStr: string): string {
+  const d = new Date(`${dateStr}T12:00:00`)
+  return `${DAY_ABBR[d.getDay()]}, ${d.getDate()} ${MONTH_ABBR[d.getMonth()]}`
+}
+
 export function daysBetween(fromStr: string, toStr: string): number {
   const from = new Date(`${fromStr}T12:00:00`)
   const to   = new Date(`${toStr}T12:00:00`)
