@@ -10,14 +10,7 @@ import { getStoredTheme, applyTheme } from '@/lib/theme'
  */
 export function GlobalThemeApplier() {
   useEffect(() => {
-    const theme = getStoredTheme()
-    applyTheme(theme)
-
-    if (theme !== 'system') return
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = () => applyTheme('system')
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
+    applyTheme(getStoredTheme())
   }, [])
 
   return null

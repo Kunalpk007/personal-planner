@@ -32,6 +32,7 @@ export const INITIAL_STATE: AppStateData = {
   bufferLog: [],
   rewardRedemptions: [],
   pendingRewardApprovals: [],
+  focusSessions: [],
 
   badges:     [],
   badgeDates: {},
@@ -43,12 +44,16 @@ export const INITIAL_STATE: AppStateData = {
   journalPin: null,
   journalPinQuestion:   null,
   journalPinAnswerHash: null,
+  journalPinLength:  null,
   pinFailedAttempts: 0,
   pinLockoutUntil:   null,
   journalEncryptionToken: null,
 
   mood:            {},
   eodMood:         {},
+  moodCheckins:    0,
+  moodChangeLog:   [],
+  waterMl:         {},
 
   pinnedTaskId:          null,
   engagementDays:        {},
@@ -56,6 +61,7 @@ export const INITIAL_STATE: AppStateData = {
   morningQuoteShown:     {},
   appFirstUsed:          null,
   overnightMsg:          null,
+  lastShowedUpBonus:     null,
 
   changeLog: [],
 

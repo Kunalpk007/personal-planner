@@ -81,7 +81,7 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
 
     if (patch.submittedDays![mk] || patch.restDays![mk] || patch.frozenDays![mk]) continue
 
-    const dayTasks  = state.tasks.filter(t => t.date === mk)
+    const dayTasks  = state.tasks.filter(t => t.date === mk && !t.cancelledAt)
     const doneTasks = dayTasks.filter(t => t.done)
     const earned    = todayEarned(doneTasks, state.mood[mk], state.cfg, goalPtsEarnedOn(state.goals, mk))
     const minPts    = getMinPts(mk, state.cfg)
@@ -95,11 +95,14 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
     }
 
     // Carry forward incomplete tasks to the next day (mirrors carryTask), up
-    // to the max carry-day cap, so auto-submitted days don't silently drop work.
+    // to the max carry-day cap, so auto-submitted days don't silently drop
+    // work. Recurring-origin tasks (`recurId` set) are excluded — they're
+    // already recreated fresh for the next day by `injectRecurring`, so
+    // carrying them forward too would create a duplicate.
     const nd = new Date(`${mk}T12:00:00`)
     nd.setDate(nd.getDate() + 1)
     const nextKey = `${nd.getFullYear()}-${pad(nd.getMonth() + 1)}-${pad(nd.getDate())}`
-    for (const t of dayTasks.filter(t => !t.done)) {
+    for (const t of dayTasks.filter(t => !t.done && !t.recurId && !t.cancelledAt)) {
       // Blocked tasks carry forward without incrementing the penalty counter
       const newCarried = t.blocked ? (t.carriedDays ?? 0) : (t.carriedDays ?? 0) + 1
       if (t.blocked || newCarried <= MAX_CARRY) {
@@ -171,7 +174,8 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
   // We handle that case explicitly here.
   if (gap === 1) {
     const prevDay = lastDate // yesterday in the typical case
-    for (const t of state.tasks.filter(t => t.date === prevDay && !t.done)) {
+    // Recurring-origin and cancelled tasks excluded here too — same reason as above.
+    for (const t of state.tasks.filter(t => t.date === prevDay && !t.done && !t.recurId && !t.cancelledAt)) {
       // Blocked tasks carry without penalty; unblocked tasks respect MAX_CARRY
       const newCarried = t.blocked ? (t.carriedDays ?? 0) : (t.carriedDays ?? 0) + 1
       if (!t.blocked && newCarried > MAX_CARRY) continue

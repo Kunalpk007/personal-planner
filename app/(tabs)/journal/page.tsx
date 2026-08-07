@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { useDayKey }       from '@/hooks/useDayKey'
 import { formatDate }      from '@/lib/engine/cutoff'
 import { usePlannerStore } from '@/store'
@@ -192,7 +193,7 @@ export default function JournalPage() {
     if (!byDay[day]) { byDay[day] = []; dayOrder.push(day) }
     byDay[day].push(k)
   })
-  const JOURNAL_PAGE_SIZE = 8
+  const JOURNAL_PAGE_SIZE = 10
   const { page: historyPage, totalPages: historyTotalPages, pageItems: dayOrderPage, hasPrev, hasNext, prevPage, nextPage } = usePagination(dayOrder, JOURNAL_PAGE_SIZE)
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -202,7 +203,7 @@ export default function JournalPage() {
     <div>
       {/* Privacy badge */}
       {encToken && (
-        <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-[8px] text-[11px] border border-[var(--green-mid)] bg-[var(--green-bg)] text-[var(--green)]">
+        <div className="vx-tile vx-accent-l flex items-center gap-1.5 mb-3 px-2.5 py-1.5 text-[11px]" data-tone="cyan" style={{ color: 'var(--vx-emerald)' }}>
           <span>🔒</span>
           <span>End-to-end encrypted. The developer cannot read your entries.</span>
         </div>
@@ -211,7 +212,7 @@ export default function JournalPage() {
       {/* Loading state — key loaded, still decrypting */}
       {waitingDecrypt && (
         <div className="flex justify-center items-end min-h-[80vh] pb-20">
-          <div className="text-sm text-[var(--text3)]">Decrypting journal entries…</div>
+          <div className="text-sm" style={{ color: 'var(--vx-fg-4)' }}>Decrypting journal entries…</div>
         </div>
       )}
 
@@ -220,7 +221,7 @@ export default function JournalPage() {
         <div className="flex justify-center items-end min-h-[80vh] pb-20">
           <div className="w-full max-w-sm text-center">
             <div className="text-[15px] font-semibold mb-1">Journal Encryption</div>
-            <div className="text-xs text-[var(--text3)] mb-4">
+            <div className="text-xs mb-4" style={{ color: 'var(--vx-fg-4)' }}>
               Enter your encryption passphrase to decrypt journal entries.
             </div>
             <input
@@ -229,47 +230,48 @@ export default function JournalPage() {
               onChange={e => setEncPass(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleEncUnlock()}
               placeholder="Encryption passphrase"
-              className="w-full text-[13px] p-2.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none mb-2"
+              className="w-full vx-field mb-2"
             />
-            <div className="text-xs text-red-500 h-4 mb-2">{encError}</div>
+            <div className="text-xs h-4 mb-2" style={{ color: 'var(--red)' }}>{encError}</div>
             <button
               onClick={handleEncUnlock}
               disabled={encBusy || !encPass}
-              className="w-full px-3.5 py-2 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-40"
+              className="vx-btn vx-btn-primary w-full py-2 text-sm disabled:opacity-40"
             >
               {encBusy ? 'Decrypting…' : 'Unlock Journal'}
             </button>
             {!showDisable && (
               <button
                 onClick={() => setShowDisable(true)}
-                className="mt-2 text-xs text-[var(--text3)] underline"
+                className="mt-2 text-xs underline"
+                style={{ color: 'var(--vx-fg-4)' }}
               >
                 Disable encryption
               </button>
             )}
             {showDisable && (
               <div className="mt-3 text-left">
-                <div className="text-xs text-[var(--text3)] mb-2">Enter passphrase to decrypt all entries and disable encryption:</div>
+                <div className="text-xs mb-2" style={{ color: 'var(--vx-fg-4)' }}>Enter passphrase to decrypt all entries and disable encryption:</div>
                 <input
                   type="password"
                   value={disablePass}
                   onChange={e => setDisablePass(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleDisableEnc()}
                   placeholder="Current passphrase"
-                  className="w-full text-[13px] p-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none mb-1"
+                  className="w-full vx-field mb-1"
                 />
-                <div className="text-xs text-red-500 h-4 mb-1">{disableError}</div>
+                <div className="text-xs h-4 mb-1" style={{ color: 'var(--red)' }}>{disableError}</div>
                 <div className="flex gap-2">
                   <button
                     onClick={handleDisableEnc}
                     disabled={disableBusy || !disablePass}
-                    className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium bg-red-500/10 text-red-500 border border-red-500/30 disabled:opacity-40"
+                    className="vx-btn vx-btn-danger flex-1 text-xs disabled:opacity-40"
                   >
                     {disableBusy ? 'Decrypting…' : 'Disable Encryption'}
                   </button>
                   <button
                     onClick={() => { setShowDisable(false); setDisablePass(''); setDisableError('') }}
-                    className="px-3 py-1.5 rounded-md text-xs border border-[var(--border2)] text-[var(--text3)]"
+                    className="vx-btn vx-btn-ghost text-xs"
                   >
                     Cancel
                   </button>
@@ -282,9 +284,9 @@ export default function JournalPage() {
 
       {/* Encryption setup form */}
       {encSetup && (
-        <div className="max-w-sm mx-auto mb-4 p-3 rounded-[10px] border border-[var(--border2)] bg-[var(--bg2)]">
+        <div className="vx-tile max-w-sm mx-auto mb-4 p-3">
           <div className="text-[13px] font-semibold mb-1">Set encryption passphrase</div>
-          <div className="text-[11px] text-[var(--text3)] mb-3">
+          <div className="text-[11px] mb-3" style={{ color: 'var(--vx-fg-4)' }}>
             Min 8 characters, at least one capital letter. Existing entries will be encrypted.
           </div>
           <input
@@ -292,27 +294,27 @@ export default function JournalPage() {
             value={encSetupPass}
             onChange={e => setEncSetupPass(e.target.value)}
             placeholder="Passphrase"
-            className="w-full text-[13px] p-2 rounded-md border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] outline-none mb-2"
+            className="w-full vx-field mb-2"
           />
           <input
             type="password"
             value={encSetupConfirm}
             onChange={e => setEncSetupConfirm(e.target.value)}
             placeholder="Confirm passphrase"
-            className="w-full text-[13px] p-2 rounded-md border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] outline-none mb-2"
+            className="w-full vx-field mb-2"
           />
-          <div className="text-xs text-red-500 h-4 mb-1">{encSetupError}</div>
+          <div className="text-xs h-4 mb-1" style={{ color: 'var(--red)' }}>{encSetupError}</div>
           <div className="flex gap-2">
             <button
               onClick={handleEncSetup}
               disabled={encBusy}
-              className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-40"
+              className="vx-btn vx-btn-primary flex-1 text-xs disabled:opacity-40"
             >
               {encBusy ? 'Encrypting…' : 'Enable Encryption'}
             </button>
             <button
               onClick={() => { setEncSetup(false); setEncSetupError(''); setEncSetupPass(''); setEncSetupConfirm('') }}
-              className="px-3 py-1.5 rounded-md text-xs border border-[var(--border2)] text-[var(--text3)]"
+              className="vx-btn vx-btn-ghost text-xs"
             >
               Cancel
             </button>
@@ -325,11 +327,13 @@ export default function JournalPage() {
         <>
           {mode === 'history' && (
             <>
-              <div className="inline-flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5">
+              <div className="vx-modeswitch mb-3.5 w-auto inline-flex">
                 {[{k:'write',l:'Write'},{k:'history',l:'Past entries'}].map(m => (
-                  <button key={m.k} onClick={() => setMode(m.k as any)}
-                    className={`px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${mode === m.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
-                    {m.l}
+                  <button key={m.k} onClick={() => setMode(m.k as any)} className={`vx-modeswitch-item px-4 py-1.5 text-[13px] ${mode === m.k ? 'vx-active' : ''}`}>
+                    {mode === m.k && (
+                      <motion.div layoutId="vx-journal-mode-indicator" className="vx-modeswitch-indicator" transition={{ type: 'spring', stiffness: 420, damping: 32 }} />
+                    )}
+                    <span className="relative z-10">{m.l}</span>
                   </button>
                 ))}
               </div>
@@ -337,7 +341,8 @@ export default function JournalPage() {
                 <div className="flex justify-end mb-3">
                   <button
                     onClick={() => setEncSetup(true)}
-                    className="px-3 py-1.5 rounded-md text-xs font-semibold border-[1.5px] border-[var(--green-mid)] bg-[var(--green-bg)] text-[var(--green)]"
+                    className="vx-pill vx-tinted text-xs font-semibold"
+                    data-tone="emerald"
                   >
                     🔒 Encrypt Journal
                   </button>
@@ -348,11 +353,13 @@ export default function JournalPage() {
 
           {mode === 'write' && (
             <div className="flex flex-col justify-center min-h-[70vh]">
-              <div className="inline-flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5 self-start">
+              <div className="vx-modeswitch mb-3.5 w-auto inline-flex self-start">
                 {[{k:'write',l:'Write'},{k:'history',l:'Past entries'}].map(m => (
-                  <button key={m.k} onClick={() => setMode(m.k as any)}
-                    className={`px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${mode === m.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
-                    {m.l}
+                  <button key={m.k} onClick={() => setMode(m.k as any)} className={`vx-modeswitch-item px-4 py-1.5 text-[13px] ${mode === m.k ? 'vx-active' : ''}`}>
+                    {mode === m.k && (
+                      <motion.div layoutId="vx-journal-mode-indicator" className="vx-modeswitch-indicator" transition={{ type: 'spring', stiffness: 420, damping: 32 }} />
+                    )}
+                    <span className="relative z-10">{m.l}</span>
                   </button>
                 ))}
               </div>
@@ -360,13 +367,14 @@ export default function JournalPage() {
                 <div className="flex justify-end mb-3">
                   <button
                     onClick={() => setEncSetup(true)}
-                    className="px-3 py-1.5 rounded-md text-xs font-semibold border-[1.5px] border-[var(--green-mid)] bg-[var(--green-bg)] text-[var(--green)]"
+                    className="vx-pill vx-tinted text-xs font-semibold"
+                    data-tone="emerald"
                   >
                     🔒 Encrypt Journal
                   </button>
                 </div>
               )}
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--vx-fg-4)' }}>
                 {editKey ? `Editing: ${formatDate(editKey.slice(0, 10))} at ${editKey.slice(11)}` : `Today's entry — ${formatDate(today)}`}
               </div>
               <VoiceControls dateKey={today} onAppendText={(t) => setText(prev => (prev ? prev.replace(/\s*$/, ' ') : '') + t)} />
@@ -374,20 +382,20 @@ export default function JournalPage() {
                 value={text}
                 onChange={e => setText(e.target.value)}
                 placeholder="What's on your mind today? Thoughts, wins, blockers, reflections..."
-                className="w-full min-h-[140px] text-[13px] p-3 rounded-[10px] border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] outline-none font-sans leading-relaxed resize-y"
+                className="w-full min-h-[140px] vx-field leading-relaxed"
               />
               <div className="flex gap-2 mt-2.5 items-center flex-wrap">
-                <button onClick={requestSave} className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+                <button onClick={requestSave} className="vx-btn vx-btn-primary text-xs">
                   {editKey ? 'Update entry' : 'Save entry (+5 XP)'}
                 </button>
                 <button
                   onClick={() => { setText(''); setEditKey(null) }}
-                  className="px-3.5 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]"
+                  className="vx-btn vx-btn-ghost text-xs"
                 >
                   ↺ Reset
                 </button>
                 {todayEntries.length > 0 && (
-                  <span className="text-xs text-[var(--text3)]">
+                  <span className="text-xs" style={{ color: 'var(--vx-fg-4)' }}>
                     Saved {todayEntries.length} entr{todayEntries.length === 1 ? 'y' : 'ies'} today ✓
                   </span>
                 )}
@@ -397,20 +405,20 @@ export default function JournalPage() {
 
           {mode === 'history' && (
             <>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">All journal entries</div>
-              {dayOrder.length === 0 && <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No entries yet.</div>}
+              <div className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--vx-fg-4)' }}>All journal entries</div>
+              {dayOrder.length === 0 && <div className="text-[13px] py-3.5 text-center" style={{ color: 'var(--vx-fg-4)' }}>No entries yet.</div>}
               {dayOrderPage.map(day => (
-                <Accordion key={day} title={<span className="font-semibold">{formatDate(day)} <span className="text-[11px] text-[var(--text3)] font-normal ml-2">{byDay[day].length} entr{byDay[day].length === 1 ? 'y' : 'ies'}</span></span>}>
+                <Accordion key={day} variant="vx" title={<span className="font-semibold">{formatDate(day)} <span className="text-[11px] font-normal ml-2" style={{ color: 'var(--vx-fg-4)' }}>{byDay[day].length} entr{byDay[day].length === 1 ? 'y' : 'ies'}</span></span>}>
                   {byDay[day].map(key => (
-                    <div key={key} className="border-t border-[var(--border)] py-2.5">
+                    <div key={key} className="py-2.5" style={{ borderTop: '1px solid var(--vx-border)' }}>
                       <div className="flex justify-between items-center mb-1.5">
-                        <span className="text-[11px] text-[var(--text3)] font-semibold">{key.slice(11) || key}</span>
+                        <span className="text-[11px] font-semibold" style={{ color: 'var(--vx-fg-4)' }}>{key.slice(11) || key}</span>
                         <div className="flex gap-1.5">
-                          <button onClick={() => handleEdit(key)} className="btn-icon">✏</button>
-                          <button onClick={() => confirmDelete(key)} className="btn-icon danger">🗑</button>
+                          <button onClick={() => handleEdit(key)} className="vx-btn vx-btn-icon">✏</button>
+                          <button onClick={() => confirmDelete(key)} className="vx-btn vx-btn-icon vx-danger">🗑</button>
                         </div>
                       </div>
-                      <p className="text-[13px] text-[var(--text2)] leading-relaxed whitespace-pre-wrap">{displayEntries[key]}</p>
+                      <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--vx-fg-1)' }}>{displayEntries[key]}</p>
                     </div>
                   ))}
                 </Accordion>
@@ -419,32 +427,32 @@ export default function JournalPage() {
             </>
           )}
 
-          <Modal open={confirmSaveOpen} onClose={() => setConfirmSaveOpen(false)} title={editKey ? 'Update entry?' : 'Save entry?'}>
-            <p className="text-sm text-[var(--text2)] mb-4">
+          <Modal open={confirmSaveOpen} onClose={() => setConfirmSaveOpen(false)} title={editKey ? 'Update entry?' : 'Save entry?'} variant="vx">
+            <p className="text-sm mb-4" style={{ color: 'var(--vx-fg-2)' }}>
               {editKey
                 ? 'Save your changes to this journal entry?'
                 : 'Save this journal entry for today?'}
             </p>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setConfirmSaveOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+              <button onClick={() => setConfirmSaveOpen(false)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
               <button
                 onClick={handleSave}
-                className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]"
+                className="vx-btn vx-btn-primary text-sm"
               >
                 {editKey ? 'Update' : 'Save'}
               </button>
             </div>
           </Modal>
 
-          <Modal open={!!deleteKey} onClose={() => setDeleteKey(null)} title="Delete entry?">
-            <p className="text-sm text-[var(--text2)] mb-4">
+          <Modal open={!!deleteKey} onClose={() => setDeleteKey(null)} title="Delete entry?" variant="vx">
+            <p className="text-sm mb-4" style={{ color: 'var(--vx-fg-2)' }}>
               This journal entry will be permanently deleted. This cannot be undone.
             </p>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setDeleteKey(null)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+              <button onClick={() => setDeleteKey(null)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
               <button
                 onClick={handleDelete}
-                className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-red-500/10 text-red-500 border border-red-500/30"
+                className="vx-btn vx-btn-danger text-sm"
               >
                 Delete
               </button>

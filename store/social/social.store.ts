@@ -29,6 +29,7 @@ import {
   sendTaskChallenge as sendTaskChallengeApi,
   sendGoalChallenge as sendGoalChallengeApi,
   listenIncomingChallenges, listenSentChallenges, respondToChallenge, markChallengeCompletion,
+  markChallengeCancelled,
   sendChallengeReminder as sendChallengeReminderApi,
 } from '@/lib/firebase/social'
 
@@ -112,11 +113,13 @@ interface SocialState {
 
 let unsubs: Array<() => void> = []
 
-// Tracks the last-known `done` state per challengeId for tasks created from
-// an accepted challenge, so the recipient's device can tell Firestore about
-// a completion (or un-completion) exactly once per transition, rather than
-// re-writing on every unrelated planner-store change. Reset in teardown().
-let _challengeDoneState: Record<string, boolean> = {}
+// Tracks the last-known status per challengeId for tasks AND goals created
+// from an accepted challenge, so the recipient's device can tell Firestore
+// about a completion/un-completion/cancellation exactly once per real
+// transition, rather than re-writing on every unrelated planner-store
+// change. Reset in teardown().
+type ChallengeLocalStatus = 'accepted' | 'done' | 'cancelled'
+let _challengeState: Record<string, ChallengeLocalStatus> = {}
 
 export const useSocialStore = create<SocialState>((set, get) => ({
   uid: null, displayName: '', friends: [], incomingRequests: [], outgoingRequests: [], loaded: false,
@@ -190,23 +193,38 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     unsubs.push(listenIncomingChallenges(uid, incomingChallenges => set({ incomingChallenges })))
     unsubs.push(listenSentChallenges(uid, sentChallenges => set({ sentChallenges })))
 
-    // Seed known done-state from whatever challenge-derived tasks already
+    // Seed known status from whatever challenge-derived tasks/goals already
     // exist locally, WITHOUT writing anything back — only a real transition
     // after this point should fire a Firestore update. Real-time delivery:
     // this is a plain Zustand subscribe on the local planner store, not a
-    // poll — a completion is written the instant toggleTask flips `done`,
-    // same as everything else in this store (no batching/interval anywhere).
+    // poll — a completion/cancellation is written the instant toggleTask/
+    // cancelTask/completeGoal/cancelGoal flips the relevant field, same as
+    // everything else in this store (no batching/interval anywhere).
     for (const t of usePlannerStore.getState().tasks) {
-      if (t.challengeId) _challengeDoneState[t.challengeId] = t.done
+      if (t.challengeId) _challengeState[t.challengeId] = t.cancelledAt ? 'cancelled' : t.done ? 'done' : 'accepted'
+    }
+    for (const g of usePlannerStore.getState().goals) {
+      if (g.challengeId) _challengeState[g.challengeId] = g.cancelledAt ? 'cancelled' : g.completedAt ? 'done' : 'accepted'
     }
     unsubs.push(usePlannerStore.subscribe(() => {
       const currentUid = get().uid
       if (!currentUid) return
-      for (const t of usePlannerStore.getState().tasks) {
+      const state = usePlannerStore.getState()
+      for (const t of state.tasks) {
         if (!t.challengeId) continue
-        if (_challengeDoneState[t.challengeId] === t.done) continue
-        _challengeDoneState[t.challengeId] = t.done
-        markChallengeCompletion(t.challengeId, currentUid, t.done).catch(() => {})
+        const next: ChallengeLocalStatus = t.cancelledAt ? 'cancelled' : t.done ? 'done' : 'accepted'
+        if (_challengeState[t.challengeId] === next) continue
+        _challengeState[t.challengeId] = next
+        if (next === 'cancelled') markChallengeCancelled(t.challengeId, currentUid, t.cancelReason ?? '').catch(() => {})
+        else markChallengeCompletion(t.challengeId, currentUid, next === 'done').catch(() => {})
+      }
+      for (const g of state.goals) {
+        if (!g.challengeId) continue
+        const next: ChallengeLocalStatus = g.cancelledAt ? 'cancelled' : g.completedAt ? 'done' : 'accepted'
+        if (_challengeState[g.challengeId] === next) continue
+        _challengeState[g.challengeId] = next
+        if (next === 'cancelled') markChallengeCancelled(g.challengeId, currentUid, g.cancelReason ?? '').catch(() => {})
+        else markChallengeCompletion(g.challengeId, currentUid, next === 'done').catch(() => {})
       }
     }))
   },
@@ -214,7 +232,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   teardown() {
     unsubs.forEach(u => u())
     unsubs = []
-    _challengeDoneState = {}
+    _challengeState = {}
     set({
       uid: null, displayName: '', friends: [], incomingRequests: [], outgoingRequests: [], loaded: false,
       approvalsToReview: [], myOwnApprovals: [],
@@ -337,7 +355,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       const full = challenge.completionPoints ?? 20
       usePlannerStore.getState().addChallengeGoal(
         challenge.title, challenge.checklist ?? [], challenge.endDate, challenge.ownerName,
-        full, challenge.delayPoints ?? Math.round(full * 0.5)
+        full, challenge.delayPoints ?? Math.round(full * 0.5), challenge.id
       )
     } else {
       usePlannerStore.getState().addChallengeTask({

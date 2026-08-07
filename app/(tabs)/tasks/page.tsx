@@ -1,6 +1,7 @@
 'use client'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { useDayKey }       from '@/hooks/useDayKey'
 import { usePlannerStore } from '@/store'
 import { Modal }           from '@/ui/Modal'
@@ -17,6 +18,7 @@ import { FriendsPageContent } from '@/features/friends/components/FriendsPageCon
 import { SubmitArea } from '@/features/dashboard/components/SubmitArea'
 import { GoalTile, GoalFormModal } from '@/features/goals/GoalsInTasks'
 import { ChallengesPanel } from '@/features/challenges/ChallengesPanel'
+import { TaskActionFab } from '@/features/tasks/TaskActionFab'
 
 // Input length caps — enforced with an inline red error, not a hard maxLength,
 // so the user sees *why* they can't add/save (see LimitedField below).
@@ -59,11 +61,11 @@ function Countdown({ deadline, done }: { deadline: string; done: boolean }) {
   }
   return (
     <span
-      className="px-1.5 py-0.5 rounded-full border whitespace-nowrap"
+      className="vx-chip"
       style={{
-        background: overdue ? 'var(--red-bg)' : 'var(--amber-bg)',
-        color:      overdue ? 'var(--red)'    : 'var(--amber)',
-        borderColor: overdue ? '#E24B4A' : '#EF9F27',
+        background: overdue ? 'rgba(248,113,113,0.12)' : 'rgba(251,191,36,0.12)',
+        color:      overdue ? 'var(--red)' : 'var(--vx-amber)',
+        borderColor: overdue ? 'rgba(248,113,113,0.4)' : 'rgba(251,191,36,0.4)',
       }}
     >
       ⏳ {label}
@@ -87,8 +89,7 @@ function LimitedField({
   onEnter?: () => void
 }) {
   const over = value.length > max
-  const border = over ? '#E24B4A' : 'var(--border2)'
-  const common = `text-[13px] px-2.5 py-2 rounded-md bg-[var(--bg2)] text-[var(--text)] outline-none w-full ${className ?? ''}`
+  const common = `vx-field ${over ? 'vx-error' : ''} ${className ?? ''}`
   return (
     <div className="w-full">
       {textarea ? (
@@ -96,8 +97,7 @@ function LimitedField({
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
-          style={{ borderWidth: 1, borderStyle: 'solid', borderColor: border }}
-          className={`${common} min-h-[60px] resize-y`}
+          className={common}
         />
       ) : (
         <input
@@ -106,11 +106,10 @@ function LimitedField({
           onChange={e => onChange(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && onEnter && !over) onEnter() }}
           placeholder={placeholder}
-          style={{ borderWidth: 1, borderStyle: 'solid', borderColor: border }}
           className={common}
         />
       )}
-      {over && <div className="text-[11px] text-[var(--red)] mt-0.5">Max length {max}</div>}
+      {over && <div className="text-[11px] mt-0.5" style={{ color: 'var(--red)' }}>Max length {max}</div>}
     </div>
   )
 }
@@ -148,6 +147,14 @@ const DELETE_REASONS = [
   "Won't get to it — moving on",
 ]
 
+const CANCEL_REASONS = [
+  'Changed my mind',
+  'No longer relevant',
+  'Too ambitious for now',
+  'Ran out of time',
+  'Other',
+]
+
 function priBadgeClass(t: Task) {
   if (t.isSpecial) return 'badge-special'
   return ({ high: 'badge-high', med: 'badge-medium', low: 'badge-low', special: 'badge-special' } as Record<string,string>)[t.priority] ?? 'badge-low'
@@ -167,19 +174,23 @@ export default function TasksPage() {
 function TasksPageInner() {
   const { today }    = useDayKey()
   const searchParams = useSearchParams()
-  const [mode, setMode] = useState<'normal' | 'recur' | 'challenges' | 'friends'>('normal')
+  const [mode, setMode] = useState<'normal' | 'challenges' | 'friends'>('normal')
 
   // Friends & Challenges are modes here, deep-linkable via ?mode=friends /
   // ?mode=challenges (see the redirect in app/(tabs)/friends/page.tsx and the
   // notification bell). Goals now live inline in the normal Today's Tasks list.
   useEffect(() => {
     const m = searchParams.get('mode')
-    if (m === 'recur' || m === 'friends' || m === 'challenges') setMode(m)
+    if (m === 'friends' || m === 'challenges') setMode(m)
     if (m === 'goals') setMode('challenges') // old deep-link → Challenges
+    // The standalone "Recurring" tab was removed — recurring is now just a
+    // checkbox on a task itself (Add/Edit Task modal). Old ?mode=recur
+    // deep-links (if any survive in a stale bookmark) fall back to normal.
+    if (m === 'recur') setMode('normal')
   }, [searchParams])
 
   const allTasks  = usePlannerStore(s => s.tasks)
-  const tasks     = useMemo(() => allTasks.filter(t => t.date === today), [allTasks, today])
+  const tasks     = useMemo(() => allTasks.filter(t => t.date === today && !t.cancelledAt), [allTasks, today])
   const zones     = usePlannerStore(s => s.zones)
   const submitted = usePlannerStore(s => !!s.submittedDays[today])
   const pinned    = usePlannerStore(s => s.pinnedTaskId)
@@ -201,11 +212,12 @@ function TasksPageInner() {
   const [challengeOpen, setChallengeOpen] = useState(false)
 
   // Goals now live inline in the Today's Tasks list (Session 8 revamp).
-  // Completed goals stay visible (struck-through, like completed tasks) —
-  // sunk to the bottom rather than filtered out entirely.
+  // Once a goal is completed it's removed from this current-goals list
+  // entirely (per explicit user request) — it isn't shown struck-through
+  // here anymore, it's just gone from the active list once done.
   const allGoals   = usePlannerStore(s => s.goals)
   const sortedGoals = useMemo(
-    () => [...allGoals].sort((a, b) => Number(!!a.completedAt) - Number(!!b.completedAt)),
+    () => allGoals.filter(g => !g.completedAt && !g.cancelledAt),
     [allGoals]
   )
   const [goalFormOpen, setGoalFormOpen] = useState(false)
@@ -233,48 +245,47 @@ function TasksPageInner() {
   return (
     <div>
       {/* Mode toggle */}
-      <div className="flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5">
+      <div className="vx-modeswitch mb-3.5">
         {[
           { k: 'normal', l: "Today's Tasks" },
           ...(FLAGS.FRIENDS ? [{ k: 'challenges', l: 'Challenges' }] : []),
           ...(FLAGS.FRIENDS ? [{ k: 'friends',    l: 'Friends' }]    : []),
         ].map(m => (
           <button key={m.k} onClick={() => setMode(m.k as any)}
-            className={`flex-1 text-center px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${mode === m.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
-            {m.l}
+            className={`vx-modeswitch-item ${mode === m.k ? 'vx-active' : ''}`}>
+            {mode === m.k && (
+              <motion.div layoutId="vx-tasks-mode-indicator" className="vx-modeswitch-indicator"
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }} />
+            )}
+            <span className="relative z-10">{m.l}</span>
           </button>
         ))}
       </div>
 
       {mode === 'normal' && (
         <>
-          {/* Add row — buttons share one line and shrink together on narrow screens */}
-          <div className="flex gap-2 items-stretch mb-4">
-            <button onClick={() => setAddTaskOpen(true)}
-              className="flex-1 min-w-0 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-md text-[12px] sm:text-[13px] font-semibold bg-[var(--green-bg)] text-[var(--green)] border-[1.5px] border-[var(--green-mid)] truncate">
-              + Add Task
-            </button>
-            {FLAGS.GOALS && (
-              <button onClick={() => setGoalFormOpen(true)} className="flex-1 min-w-0 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-md text-[12px] sm:text-[13px] font-semibold bg-[var(--blue-bg)] text-[var(--blue)] border-[1.5px] border-[var(--blue)] truncate">
-                🎯 Add Goal
-              </button>
-            )}
-            {FLAGS.FRIENDS && friends.length > 0 && (
-              <button onClick={() => setChallengeOpen(true)} className="flex-1 min-w-0 px-2 sm:px-3 py-2 rounded-md text-[12px] sm:text-[13px] font-semibold bg-[var(--purple-bg)] text-[var(--purple)] border-[1.5px] border-[#CECBF6] truncate">
-                ⚔️ Challenge Friend
-              </button>
-            )}
-          </div>
+          {/* Add Task / Add Goal / Challenge Friend now live behind a single
+              floating "+" button (bottom-right, fixed) instead of an
+              always-visible button row — see TaskActionFab. */}
+          <TaskActionFab
+            onAddTask={() => setAddTaskOpen(true)}
+            onAddGoal={FLAGS.GOALS ? () => setGoalFormOpen(true) : undefined}
+            onChallengeFriend={FLAGS.FRIENDS && friends.length > 0 ? () => setChallengeOpen(true) : undefined}
+          />
 
           <AddTaskModal
             open={addTaskOpen}
             onClose={() => setAddTaskOpen(false)}
             zones={zones}
             onAdd={(t, recurring) => {
-              const id = addTask({ ...t, date: today })
-              if (recurring) {
-                addRecurring({ title: t.title, note: t.note, zone: t.zone, priority: t.priority, slot: t.slot, level: t.level, isSpecial: t.isSpecial, specialPts: t.specialPts })
-              }
+              // If "recurring" is checked, create the template first so the
+              // task created right now can be linked to it via recurId —
+              // that's how the Edit Task modal's own recurring checkbox
+              // later knows this task is already recurring.
+              const recurId = recurring
+                ? addRecurring({ title: t.title, note: t.note, zone: t.zone, priority: t.priority, slot: t.slot, level: t.level, isSpecial: t.isSpecial, specialPts: t.specialPts })
+                : undefined
+              const id = addTask({ ...t, date: today, ...(recurId ? { recurId } : {}) })
               showToast(recurring ? 'Task added + set to recur daily.' : 'Task added.')
               return id
             }}
@@ -282,7 +293,7 @@ function TasksPageInner() {
 
           {/* Task + Goal list */}
           <div className="mb-4">
-            {filtered.length === 0 && sortedGoals.length === 0 && <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No tasks yet. Add one above.</div>}
+            {filtered.length === 0 && sortedGoals.length === 0 && <div className="text-[13px] py-3.5 text-center" style={{ color: 'var(--vx-fg-4)' }}>No tasks yet. Add one above.</div>}
             {FLAGS.GOALS && sortedGoals.map(g => <GoalTile key={g.id} goal={g} />)}
             {filtered.map(t => (
               <TaskRow key={t.id} task={t} zones={zones} pinned={pinned === t.id}
@@ -341,9 +352,12 @@ function TaskRow({ task, zones, pinned, locked, onToggle, onRequestValidation, o
   otherTasks: Task[]; addTask: (t: Omit<Task, 'id' | 'createdAt' | 'done' | 'completedAt' | 'subtasks'>) => string;
   friends: { uid: string; displayName: string }[];
 }) {
+  const cancelTask = usePlannerStore(s => s.cancelTask)
   const [editOpen, setEditOpen] = useState(false)
   const [delOpen, setDelOpen]   = useState(false)
   const [blockOpen, setBlockOpen] = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
   const zone = resolveZone(task.zone, zones)
 
   // Time-bound: a task with a deadline that has passed but isn't done earns
@@ -368,14 +382,20 @@ function TaskRow({ task, zones, pinned, locked, onToggle, onRequestValidation, o
     onToggle()
   }
 
+  const tone = task.blocked ? 'red' : (pinned && !task.done) ? 'purple' : (task.carriedDays ? 'amber' : undefined)
+
   return (
     <>
-      <div className={`flex items-start gap-2.5 p-3 rounded-[10px] border mb-2 ${task.done ? 'opacity-45' : ''} ${pinned && !task.done ? 'border-l-[3px] !border-l-[var(--purple)] bg-[var(--purple-bg)]' : 'bg-[var(--bg)] border-[var(--border)]'} ${task.carriedDays && !task.blocked ? 'border-l-[3px] !border-l-[var(--amber)] bg-[var(--amber-bg)]' : ''} ${task.blocked ? 'border-l-[3px] !border-l-[var(--red)] bg-[var(--red-bg)]' : ''}`}>
+      <motion.div
+        layout
+        className={`vx-tile vx-accent-l flex items-start gap-2.5 mb-2 ${task.done ? 'opacity-45' : ''}`}
+        data-tone={tone}
+      >
         <button
           onClick={handleCheckboxClick}
           disabled={(locked && !task.done) || isPendingValidation}
           title={isPendingValidation ? `Awaiting ${task.validatorName}` : awaitingValidation ? `Tap to send to ${task.validatorName} for validation` : undefined}
-          className={`w-[21px] h-[21px] rounded-full border-[1.5px] flex-shrink-0 mt-0.5 flex items-center justify-center text-[11px] transition-all ${task.done ? 'bg-[var(--green-mid)] border-[var(--green-mid)] text-white' : isPendingValidation ? 'border-[var(--purple)] text-transparent' : 'border-[var(--border2)] text-transparent'}`}
+          className={`vx-check mt-0.5 ${task.done ? 'vx-done' : isPendingValidation ? 'vx-pending' : ''}`}
         >
           {task.done ? '✓' : isPendingValidation ? '⏳' : ''}
         </button>
@@ -385,49 +405,60 @@ function TaskRow({ task, zones, pinned, locked, onToggle, onRequestValidation, o
           {/* Title row: title (wraps) on the left, edit/delete pinned top-right */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center flex-wrap gap-1 min-w-0">
-              <span className={`text-[13px] break-words [overflow-wrap:anywhere] ${task.done ? 'line-through' : ''}`}>{task.title}</span>
+              <span className={`text-[13px] break-words [overflow-wrap:anywhere] ${task.done ? 'line-through' : ''}`} style={{ color: 'var(--vx-fg-1)' }}>{task.title}</span>
               <span className={priBadgeClass(task)}>{priLabel(task)}</span>
-              {task.level && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6]">{task.level}</span>}
+              {task.level && <span className="vx-chip" data-tone="violet">{task.level}</span>}
             </div>
+            {/* Tasks from an accepted friend challenge aren't editable/
+                deletable — only completing or cancelling (with a reason —
+                see below) is allowed (see the "Challenged by" chip in the
+                meta row below). */}
             {!locked && (
               <div className="flex items-center gap-0.5 flex-shrink-0">
-                <button onClick={() => setEditOpen(true)} className="btn-icon" title="Edit task" aria-label="Edit task"><EditIcon /></button>
-                <button onClick={() => setDelOpen(true)} className="btn-icon danger" title="Delete task" aria-label="Delete task">×</button>
+                {!task.challengedBy ? (
+                  <>
+                    <button onClick={() => setEditOpen(true)} className="vx-btn vx-btn-icon" title="Edit task" aria-label="Edit task"><EditIcon /></button>
+                    <button onClick={() => setDelOpen(true)} className="vx-btn vx-btn-icon vx-danger" title="Delete task" aria-label="Delete task">×</button>
+                  </>
+                ) : !task.done && (
+                  <button onClick={() => setCancelOpen(true)} className="vx-btn vx-btn-icon" title="Cancel task" aria-label="Cancel task">🚫</button>
+                )}
               </div>
             )}
           </div>
 
           {/* Meta row */}
-          <div className="flex flex-wrap gap-1.5 mt-0.5 text-[11px] text-[var(--text3)] min-w-0">
+          <div className="flex flex-wrap gap-1.5 mt-0.5 text-[11px] min-w-0" style={{ color: 'var(--vx-fg-4)' }}>
             {task.note && <span className="break-words [overflow-wrap:anywhere] min-w-0">{task.note}</span>}
             {task.deadline && !task.done && <Countdown deadline={task.deadline} done={task.done} />}
-            {task.deadline && task.done && <span className="px-1.5 py-0.5 rounded-full bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]">⏰ {new Date(task.deadline).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
+            {task.deadline && task.done && <span className="vx-chip" data-tone="amber">⏰ {new Date(task.deadline).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
             {task.slot && <span>📍{task.slot}</span>}
-            {task.challengedBy && <span className="px-1.5 py-0.5 rounded-full bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6]">🎯 Challenged by {task.challengedBy}</span>}
-            {isPendingValidation && <span className="px-1.5 py-0.5 rounded-full bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6]">⏳ Awaiting {task.validatorName}</span>}
+            {task.recurId && <span className="vx-chip" title="Recurring task — auto-added daily">🔁 Recurring</span>}
+            {task.challengedBy && <span className="vx-chip" data-tone="violet">🎯 Challenged by {task.challengedBy}</span>}
+            {isPendingValidation && <span className="vx-chip" data-tone="violet">⏳ Awaiting {task.validatorName}</span>}
             {task.validationStatus === 'rejected' && (
-              <span className="px-1.5 py-0.5 rounded-full bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">
+              <span className="vx-chip" data-tone="red">
                 ❌ Rejected{task.validationNote ? `: ${task.validationNote}` : ''} — tap to resend
               </span>
             )}
             {task.blocked ? (
-              <span className="text-[var(--red)] font-semibold break-words [overflow-wrap:anywhere]">🚫 Blocked by: {task.blockedByTitle ?? 'linked task'}</span>
+              <span className="font-semibold break-words [overflow-wrap:anywhere]" style={{ color: 'var(--red)' }}>🚫 Blocked by: {task.blockedByTitle ?? 'linked task'}</span>
             ) : task.carriedDays ? (
-              <span className="text-[var(--amber)] font-semibold">↩ carried {task.carriedDays}d (-{task.carriedDays * 2}pts)</span>
+              <span className="font-semibold" style={{ color: 'var(--vx-amber)' }}>↩ carried {task.carriedDays}d (-{task.carriedDays * 2}pts)</span>
             ) : null}
-            {task.completedAt && <span className="text-[var(--green)]">✓ {new Date(task.completedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
+            {task.completedAt && <span style={{ color: 'var(--vx-emerald)' }}>✓ {new Date(task.completedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
           </div>
 
           {/* Footer row: zone, points, focus star */}
           <div className="flex items-center justify-between gap-2 mt-1.5">
-            <span className="zpill" style={{ background: `${zone.color}22`, color: zone.color, borderColor: `${zone.color}88` }}>{zone.name}</span>
+            <span className="vx-chip" style={{ background: `${zone.color}22`, color: zone.color, borderColor: `${zone.color}88` }}>{zone.name}</span>
             <div className="flex items-center gap-0.5 flex-shrink-0">
-              <span className={`text-xs font-semibold whitespace-nowrap mr-0.5 ${task.done ? 'text-[var(--green)]' : overdue ? 'text-[var(--red)]' : 'text-[var(--text3)]'}`}>+{pts}{overdue ? ' ½' : ''}</span>
-              {!locked && <button onClick={onPin} className={`btn-icon ${pinned ? 'active' : ''}`} title={pinned ? 'Remove focus' : 'Select to focus this task'}>{pinned ? '★' : '☆'}</button>}
+              <span className="text-xs font-semibold whitespace-nowrap mr-0.5" style={{ color: task.done ? 'var(--vx-emerald)' : overdue ? 'var(--red)' : 'var(--vx-fg-4)' }}>+{pts}{overdue ? ' ½' : ''}</span>
+              {!locked && <button onClick={onPin} className="vx-btn vx-btn-icon" style={pinned ? { color: 'var(--vx-amber)' } : undefined} title={pinned ? 'Remove focus' : 'Select to focus this task'}>{pinned ? '★' : '☆'}</button>}
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
       <EditTaskModal
         open={editOpen}
         onClose={() => setEditOpen(false)}
@@ -446,21 +477,53 @@ function TaskRow({ task, zones, pinned, locked, onToggle, onRequestValidation, o
         addTask={addTask}
         onLink={(blockerId, blockerTitle) => onEdit({ blocked: true, blockedByTaskId: blockerId, blockedByTitle: blockerTitle })}
       />
-      <Modal open={delOpen} onClose={() => setDelOpen(false)} title="Delete task?">
+      <Modal open={delOpen} onClose={() => setDelOpen(false)} title="Delete task?" variant="vx">
         <p className="text-sm text-[var(--text2)] mb-3">Why are you deleting &ldquo;{task.title}&rdquo;?</p>
         <div className="flex flex-col gap-1.5 mb-3">
           {DELETE_REASONS.map(r => (
             <button
               key={r}
               onClick={() => { onRemove(r); setDelOpen(false) }}
-              className="text-left px-3 py-2 rounded-md text-[13px] border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] hover:bg-[var(--bg3)]"
+              className="vx-btn vx-btn-ghost text-left justify-start w-full text-[13px]"
             >
               {r}
             </button>
           ))}
         </div>
         <div className="flex justify-end">
-          <button onClick={() => setDelOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={() => setDelOpen(false)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
+        </div>
+      </Modal>
+
+      <Modal open={cancelOpen} onClose={() => { setCancelOpen(false); setCancelReason('') }} title="Cancel task?" variant="vx">
+        <p className="text-sm mb-3" style={{ color: 'var(--vx-fg-2)' }}>
+          Why are you cancelling &ldquo;{task.title}&rdquo;? {task.challengedBy} will be notified.
+        </p>
+        <div className="flex flex-col gap-1.5 mb-3">
+          {CANCEL_REASONS.map(r => (
+            <button
+              key={r}
+              onClick={() => setCancelReason(r)}
+              className={`vx-btn ${cancelReason === r ? 'vx-btn-primary' : 'vx-btn-ghost'} text-left justify-start w-full text-[13px]`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => { setCancelOpen(false); setCancelReason('') }} className="vx-btn vx-btn-ghost text-sm">Go back</button>
+          <button
+            onClick={() => {
+              if (!cancelReason) return
+              const ok = cancelTask(task.id, cancelReason)
+              setCancelOpen(false); setCancelReason('')
+              if (ok) showToast('Task cancelled.')
+            }}
+            disabled={!cancelReason}
+            className="vx-btn vx-btn-danger text-sm"
+          >
+            Cancel task
+          </button>
         </div>
       </Modal>
     </>
@@ -490,6 +553,22 @@ function EditTaskModal({ open, onClose, task, zones, onSave, friends, onOpenBloc
   const addSubtask    = usePlannerStore(s => s.addSubtask)
   const removeSubtask = usePlannerStore(s => s.removeSubtask)
 
+  // "Recurring task" checkbox — replaces the old standalone Recurring tab
+  // entirely (per explicit user feedback: it was only ever meant to be a
+  // checkbox on the task itself, not a separate management screen). A task
+  // is "recurring" when its `recurId` points at a live RecurringTemplate;
+  // `injectRecurring` (tasks.slice.ts) uses that template to auto-add a
+  // fresh copy of this task every day. Checking the box here creates the
+  // template (or updates it, if one already exists) from the task's current
+  // fields; unchecking deletes the template so no more copies get created —
+  // this task instance itself is untouched either way.
+  const recurringTemplates = usePlannerStore(s => s.recurring)
+  const addRecurring       = usePlannerStore(s => s.addRecurring)
+  const editRecurring      = usePlannerStore(s => s.editRecurring)
+  const removeRecurring    = usePlannerStore(s => s.removeRecurring)
+  const linkedTemplate = task.recurId ? recurringTemplates.find(r => r.id === task.recurId) : undefined
+  const [recurring, setRecurring] = useState(!!linkedTemplate)
+
   // Re-seed the draft whenever the modal is (re)opened for a task
   useEffect(() => {
     if (!open) return
@@ -499,6 +578,8 @@ function EditTaskModal({ open, onClose, task, zones, onSave, friends, onOpenBloc
     setSpecialPts(task.specialPts)
     setNeedsValidation(!!task.needsValidation)
     setValidatorUid(task.validatorUid ?? '')
+    setRecurring(!!linkedTemplate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, task])
 
   const titleOver = title.length > MAX_TASK_NAME
@@ -508,10 +589,26 @@ function EditTaskModal({ open, onClose, task, zones, onSave, friends, onOpenBloc
     if (!title.trim()) return
     if (titleOver || noteOver) { showToast('Fix the highlighted fields first.'); return }
     const validator = friends.find(f => f.uid === validatorUid)
+    const templateFields = {
+      title: title.trim(), note: note.trim(), zone: zoneId || zones[0]?.id,
+      priority, slot, level, isSpecial: priority === 'special', specialPts,
+    }
+    let nextRecurId: string | undefined = task.recurId
+    if (recurring && !linkedTemplate) {
+      nextRecurId = addRecurring(templateFields)
+      showToast('Task set to recur daily.')
+    } else if (recurring && linkedTemplate) {
+      editRecurring(linkedTemplate.id, templateFields) // keep template in sync with edits
+    } else if (!recurring && linkedTemplate) {
+      removeRecurring(linkedTemplate.id)
+      nextRecurId = undefined // clear the now-dangling link on this task
+      showToast('Task removed from recurring.')
+    }
     onSave({
       title: title.trim(), note: note.trim(), zone: zoneId || zones[0]?.id,
       priority, slot, level, deadline: deadline || null,
       isSpecial: priority === 'special', specialPts,
+      recurId: nextRecurId,
       ...(needsValidation && validator
         ? { needsValidation: true, validatorUid: validator.uid, validatorName: validator.displayName }
         : { needsValidation: false, validatorUid: undefined, validatorName: undefined, validationStatus: undefined, validationNote: undefined }),
@@ -520,21 +617,21 @@ function EditTaskModal({ open, onClose, task, zones, onSave, friends, onOpenBloc
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Edit Task">
+    <Modal open={open} onClose={onClose} title="Edit Task" variant="vx">
       <div className="flex flex-col gap-2.5">
         <LimitedField value={title} onChange={setTitle} max={MAX_TASK_NAME} placeholder="Task name..." />
 
         <div className="flex gap-2 flex-wrap">
           <select value={zoneId} onChange={e => setZoneId(e.target.value)}
-            className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            className="flex-1 min-w-[100px] vx-field">
             {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
           </select>
           <select value={priority} onChange={e => setPriority(e.target.value as Priority)}
-            className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            className="flex-1 min-w-[100px] vx-field">
             {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.label}</option>)}
           </select>
           <select value={level} onChange={e => setLevel(e.target.value as Level)}
-            className="flex-1 min-w-[90px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            className="flex-1 min-w-[90px] vx-field">
             {LEVELS.map(l => <option key={l.val} value={l.val}>{l.label}</option>)}
           </select>
         </div>
@@ -543,7 +640,7 @@ function EditTaskModal({ open, onClose, task, zones, onSave, friends, onOpenBloc
           <div className="flex gap-2 flex-wrap items-center">
             <span className="text-xs text-[var(--text2)]">⭐ Pts:</span>
             <input type="number" value={specialPts} onChange={e => setSpecialPts(+e.target.value)} min={1} max={200}
-              className="w-20 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+              className="w-20 vx-field" />
           </div>
         )}
 
@@ -551,28 +648,30 @@ function EditTaskModal({ open, onClose, task, zones, onSave, friends, onOpenBloc
 
         <div className="flex gap-2 flex-wrap">
           <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)} title="Time-bound: earns half points if not completed by this time"
-            className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+            className="flex-1 min-w-[160px] vx-field" />
           <select value={slot} onChange={e => setSlot(e.target.value as Slot)}
-            className="flex-1 min-w-[120px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            className="flex-1 min-w-[120px] vx-field">
             {SLOTS.map(s => <option key={s.val} value={s.val}>{s.label}</option>)}
           </select>
         </div>
         {deadline && <div className="text-[11px] text-[var(--text3)] -mt-1">⏳ Time-bound — half points if not done by the selected time.</div>}
+
+        <label className="flex items-center gap-2 text-[12px] text-[var(--text2)] cursor-pointer border-t border-[var(--border)] pt-2.5">
+          <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)} />
+          🔁 Recurring task (auto-adds a fresh copy of this every day)
+        </label>
 
         {/* Block task — moved here from the tile; opens the dependency picker */}
         <div className="border-t border-[var(--border)] pt-2.5">
           {task.blocked ? (
             <div className="flex items-center justify-between gap-2">
               <span className="text-[12px] text-[var(--red)] break-words [overflow-wrap:anywhere] min-w-0">🚫 Blocked by: {task.blockedByTitle ?? 'linked task'}</span>
-              <button onClick={() => { onUnblock(); onClose() }}
-                className="flex-shrink-0 px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+              <button onClick={() => { onUnblock(); onClose() }} className="vx-btn vx-btn-ghost flex-shrink-0 text-xs">
                 Unblock
               </button>
             </div>
           ) : (
-            <button onClick={onOpenBlock}
-              className="px-3 py-1.5 rounded-md text-xs font-medium border transition-all"
-              style={{ background: 'var(--red-bg)', color: 'var(--red)', borderColor: '#E24B4A' }}>
+            <button onClick={onOpenBlock} className="vx-btn vx-btn-danger text-xs">
               🚫 Block this task
             </button>
           )}
@@ -587,7 +686,7 @@ function EditTaskModal({ open, onClose, task, zones, onSave, friends, onOpenBloc
             </label>
             {needsValidation && (
               <select value={validatorUid} onChange={e => setValidatorUid(e.target.value)}
-                className="w-full text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+                className="w-full vx-field">
                 <option value="">Choose a friend…</option>
                 {friends.map(f => <option key={f.uid} value={f.uid}>{f.displayName}</option>)}
               </select>
@@ -604,7 +703,7 @@ function EditTaskModal({ open, onClose, task, zones, onSave, friends, onOpenBloc
           {task.subtasks.length > 0 && (
             <div className="flex flex-col gap-1 mb-2">
               {task.subtasks.map(st => (
-                <div key={st.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)]">
+                <div key={st.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md vx-tile">
                   <button
                     onClick={() => toggleSubtask(task.id, st.id)}
                     className={`w-[16px] h-[16px] rounded-full border-[1.5px] flex-shrink-0 flex items-center justify-center text-[9px] transition-all ${st.done ? 'bg-[var(--green-mid)] border-[var(--green-mid)] text-white' : 'border-[var(--border2)] text-transparent'}`}
@@ -621,10 +720,10 @@ function EditTaskModal({ open, onClose, task, zones, onSave, friends, onOpenBloc
             <input value={subInput} onChange={e => setSubInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && subInput.trim()) { addSubtask(task.id, subInput.trim()); setSubInput('') } }}
               placeholder="Add subtask..."
-              className="flex-1 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+              className="flex-1 vx-field" />
             <button
               onClick={() => { if (subInput.trim()) { addSubtask(task.id, subInput.trim()); setSubInput('') } }}
-              className="px-3 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]"
+              className="vx-btn vx-btn-ghost text-xs"
             >
               + Add
             </button>
@@ -633,9 +732,9 @@ function EditTaskModal({ open, onClose, task, zones, onSave, friends, onOpenBloc
       </div>
 
       <div className="flex gap-2 justify-end mt-4">
-        <button onClick={onClose} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+        <button onClick={onClose} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
         <button onClick={handleSave} disabled={titleOver || noteOver}
-          className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-40">
+          className="vx-btn vx-btn-primary text-sm">
           Save Changes
         </button>
       </div>
@@ -668,7 +767,7 @@ function BlockTaskModal({ open, onClose, task, otherTasks, addTask, onLink }: {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="🚫 Mark as blocked">
+    <Modal open={open} onClose={onClose} title="🚫 Mark as blocked" variant="vx">
       <p className="text-sm text-[var(--text2)] mb-3">
         Blocked tasks need a dependency to point to. Pick the task it&apos;s waiting on, or create a new one.
       </p>
@@ -678,7 +777,7 @@ function BlockTaskModal({ open, onClose, task, otherTasks, addTask, onLink }: {
             <button
               key={t.id}
               onClick={() => linkExisting(t)}
-              className="text-left px-3 py-2 rounded-md text-[13px] border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] hover:bg-[var(--bg3)]"
+              className="vx-btn vx-btn-ghost text-left justify-start w-full text-[13px]"
             >
               {t.title}
             </button>
@@ -696,18 +795,18 @@ function BlockTaskModal({ open, onClose, task, otherTasks, addTask, onLink }: {
             onChange={e => setNewTitle(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && createAndLink()}
             placeholder="New task name..."
-            className="flex-1 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none"
+            className="flex-1 vx-field"
           />
           <button
             onClick={createAndLink}
-            className="px-3.5 py-2 rounded-md text-xs font-semibold bg-[var(--green-bg)] text-[var(--green)] border-[1.5px] border-[var(--green-mid)]"
+            className="vx-btn vx-btn-primary text-xs"
           >
             + Create &amp; Link
           </button>
         </div>
       </div>
       <div className="flex justify-end mt-4">
-        <button onClick={onClose} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+        <button onClick={onClose} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
       </div>
     </Modal>
   )
@@ -765,14 +864,14 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
   const canSend = !!friendUid && !!title.trim() && title.length <= MAX_TASK_NAME && (mode === 'task' || goalTasks.length > 0)
 
   return (
-    <Modal open={open} onClose={onClose} title="🎯 Challenge a friend">
+    <Modal open={open} onClose={onClose} title="🎯 Challenge a friend" variant="vx">
       <div className="flex gap-1.5 mb-3">
         <button onClick={() => setMode('task')}
-          className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium border ${mode === 'task' ? 'bg-[var(--purple-bg)] text-[var(--purple)] border-[#CECBF6]' : 'border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)]'}`}>
+          className={`vx-pill flex-1 justify-center text-xs ${mode === 'task' ? 'vx-tinted' : ''}`} data-tone={mode === 'task' ? 'violet' : undefined}>
           Single task
         </button>
         <button onClick={() => setMode('goal')}
-          className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium border ${mode === 'goal' ? 'bg-[var(--purple-bg)] text-[var(--purple)] border-[#CECBF6]' : 'border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)]'}`}>
+          className={`vx-pill flex-1 justify-center text-xs ${mode === 'goal' ? 'vx-tinted' : ''}`} data-tone={mode === 'goal' ? 'violet' : undefined}>
           Goal (multiple tasks)
         </button>
       </div>
@@ -783,7 +882,7 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
       </p>
       <div className="flex flex-col gap-2.5">
         <select value={friendUid} onChange={e => setFriendUid(e.target.value)}
-          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+          className="vx-field">
           <option value="">Choose a friend…</option>
           {friends.map(f => <option key={f.uid} value={f.uid}>{f.displayName}</option>)}
         </select>
@@ -793,18 +892,18 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
           <>
             <div className="flex gap-2 flex-wrap">
               <select value={zoneId} onChange={e => setZoneId(e.target.value)}
-                className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+                className="flex-1 min-w-[100px] vx-field">
                 {/* Fixed set, not the challenger's own custom zones — see
                     resolveZone()/CHALLENGE_ZONES above for why. */}
                 {CHALLENGE_ZONES.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
               </select>
               <select value={priority} onChange={e => setPriority(e.target.value as Priority)}
-                className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+                className="flex-1 min-w-[100px] vx-field">
                 {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.label}</option>)}
               </select>
             </div>
             <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)"
-              className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none min-h-[60px] resize-y" />
+              className="vx-field min-h-[60px] resize-y" />
           </>
         ) : (
           <>
@@ -819,14 +918,14 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
               <button
                 onClick={() => { if (!goalTaskDraft.trim() || goalTaskDraft.length > MAX_TASK_NAME) return; setGoalTasks(l => [...l, goalTaskDraft.trim()]); setGoalTaskDraft('') }}
                 disabled={!goalTaskDraft.trim() || goalTaskDraft.length > MAX_TASK_NAME}
-                className="px-3 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] disabled:opacity-40">
+                className="vx-btn vx-btn-ghost text-xs">
                 + Add task
               </button>
             </div>
             {goalTasks.length > 0 && (
               <div className="flex gap-1.5 flex-wrap">
                 {goalTasks.map((t, i) => (
-                  <span key={i} className="text-[12px] px-2 py-1 rounded-full border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] flex items-center gap-1.5">
+                  <span key={i} className="vx-chip flex items-center gap-1.5" data-tone="violet">
                     {t}
                     <button onClick={() => setGoalTasks(l => l.filter((_, idx) => idx !== i))} className="text-[var(--text3)]">×</button>
                   </span>
@@ -837,28 +936,28 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
               <label className="text-[12px] text-[var(--text3)]">End date (max 2 months out):</label>
               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
                 min={minEndDate} max={maxEndDate}
-                className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                className="vx-field" />
             </div>
             <div className="flex gap-2 items-center flex-wrap text-[12px] text-[var(--text3)]">
               <label>Points on completion:</label>
               <input type="number" min={0} max={500} value={completionPts} onChange={e => setCompletionPts(e.target.value)}
-                className="w-20 text-[13px] px-2 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                className="w-20 vx-field" />
               <label>if late:</label>
               <input type="number" min={0} max={500} value={delayPts} onChange={e => setDelayPts(e.target.value)}
-                className="w-20 text-[13px] px-2 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                className="w-20 vx-field" />
             </div>
           </>
         )}
       </div>
       <div className="flex gap-2 justify-end mt-4">
-        <button onClick={onClose} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+        <button onClick={onClose} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
         <button onClick={() => setConfirmOpen(true)} disabled={!canSend}
-          className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6] disabled:opacity-40">
+          className="vx-btn vx-btn-accent text-sm">
           Send Challenge
         </button>
       </div>
 
-      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Confirm challenge">
+      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Confirm challenge" variant="vx">
         <p className="text-sm text-[var(--text2)] mb-3">
           Send {mode === 'goal' ? 'goal' : 'task'} <strong>&ldquo;{title.trim()}&rdquo;</strong> to <strong>{friend?.displayName}</strong>?
         </p>
@@ -872,8 +971,8 @@ function ChallengeModal({ open, onClose, friends, onSend, onSendGoal }: {
           </p>
         )}
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setConfirmOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
-          <button onClick={confirmSend} className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6]">
+          <button onClick={() => setConfirmOpen(false)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
+          <button onClick={confirmSend} className="vx-btn vx-btn-accent text-sm">
             Confirm &amp; Send
           </button>
         </div>
@@ -890,9 +989,14 @@ interface NewTaskFields {
 /** Full Add Task form in a modal. A "Make this recurring" checkbox folds in
  *  the old Recurring-templates feature — the daily task is added now, and (if
  *  checked) a recurring template is created so it auto-populates future days. */
-function AddTaskModal({ open, onClose, zones, onAdd }: {
+function AddTaskModal({ open, onClose, zones, onAdd, initialRecurring }: {
   open: boolean; onClose: () => void; zones: any[];
   onAdd: (t: NewTaskFields, recurring: boolean) => string
+  /** Pre-checks the recurring checkbox — used when this modal is opened from
+   *  the Recurring panel's "+ Add recurring task" button, so that entry point
+   *  defaults to recurring=true while the normal "+ Add Task" button (no prop
+   *  passed) still defaults to false. */
+  initialRecurring?: boolean
 }) {
   const [title, setTitle]       = useState('')
   const [note, setNote]         = useState('')
@@ -902,12 +1006,12 @@ function AddTaskModal({ open, onClose, zones, onAdd }: {
   const [level, setLevel]       = useState<Level>('')
   const [deadline, setDeadline] = useState('')
   const [specialPts, setSpecialPts] = useState(30)
-  const [recurring, setRecurring] = useState(false)
+  const [recurring, setRecurring] = useState(!!initialRecurring)
 
   useEffect(() => {
     if (!open) return
     setTitle(''); setNote(''); setZoneId(zones[0]?.id ?? ''); setPriority('high')
-    setSlot(''); setLevel(''); setDeadline(''); setSpecialPts(30); setRecurring(false)
+    setSlot(''); setLevel(''); setDeadline(''); setSpecialPts(30); setRecurring(!!initialRecurring)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -926,20 +1030,20 @@ function AddTaskModal({ open, onClose, zones, onAdd }: {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Task">
+    <Modal open={open} onClose={onClose} title="Add Task" variant="vx">
       <div className="flex flex-col gap-2.5">
         <LimitedField value={title} onChange={setTitle} max={MAX_TASK_NAME} placeholder="Task name..." autoFocus />
         <div className="flex gap-2 flex-wrap">
           <select value={zoneId} onChange={e => setZoneId(e.target.value)}
-            className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            className="flex-1 min-w-[100px] vx-field">
             {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
           </select>
           <select value={priority} onChange={e => setPriority(e.target.value as Priority)}
-            className="flex-1 min-w-[100px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            className="flex-1 min-w-[100px] vx-field">
             {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.label}</option>)}
           </select>
           <select value={level} onChange={e => setLevel(e.target.value as Level)}
-            className="flex-1 min-w-[90px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            className="flex-1 min-w-[90px] vx-field">
             {LEVELS.map(l => <option key={l.val} value={l.val}>{l.label}</option>)}
           </select>
         </div>
@@ -947,15 +1051,15 @@ function AddTaskModal({ open, onClose, zones, onAdd }: {
           <div className="flex gap-2 flex-wrap items-center">
             <span className="text-xs text-[var(--text2)]">⭐ Pts:</span>
             <input type="number" value={specialPts} onChange={e => setSpecialPts(+e.target.value)} min={1} max={200}
-              className="w-20 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+              className="w-20 vx-field" />
           </div>
         )}
         <LimitedField value={note} onChange={setNote} max={MAX_TASK_NOTE} placeholder="Note (optional)" textarea />
         <div className="flex gap-2 flex-wrap">
           <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)} title="Time-bound: earns half points if not completed by this time"
-            className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+            className="flex-1 min-w-[160px] vx-field" />
           <select value={slot} onChange={e => setSlot(e.target.value as Slot)}
-            className="flex-1 min-w-[120px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none">
+            className="flex-1 min-w-[120px] vx-field">
             {SLOTS.map(s => <option key={s.val} value={s.val}>{s.label}</option>)}
           </select>
         </div>
@@ -967,12 +1071,13 @@ function AddTaskModal({ open, onClose, zones, onAdd }: {
       </div>
 
       <div className="flex gap-2 justify-end mt-4">
-        <button onClick={onClose} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+        <button onClick={onClose} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
         <button onClick={handleAdd} disabled={!canAdd}
-          className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-40">
+          className="vx-btn vx-btn-primary text-sm">
           + Add Task
         </button>
       </div>
     </Modal>
   )
 }
+

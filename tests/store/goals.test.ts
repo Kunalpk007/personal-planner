@@ -453,6 +453,68 @@ describe('checklist goals', () => {
   })
 })
 
+describe('cancelGoal', () => {
+  it('cancels an active goal with a reason and drops it from the active-goal state, leaving other goals untouched', () => {
+    usePlannerStore.getState().addGoal({
+      title: 'Abandon me', cadence: 'weekly', targetType: 'checklist', target: 1,
+      pointsMode: 'whole', points: 20, completedAt: null,
+      checklist: [{ id: 'a', title: 'x', done: false }],
+    })
+    usePlannerStore.getState().addGoal({
+      title: 'Leave me alone', cadence: 'weekly', targetType: 'checklist', target: 1,
+      pointsMode: 'whole', points: 15, completedAt: null,
+      checklist: [{ id: 'b', title: 'y', done: false }],
+    })
+    const [g1, g2] = usePlannerStore.getState().goals
+    const ok = usePlannerStore.getState().cancelGoal(g1.id, 'Changed my mind')
+    expect(ok).toBe(true)
+    const goal = usePlannerStore.getState().goals.find(g => g.id === g1.id)
+    expect(goal?.cancelledAt).not.toBeNull()
+    expect(goal?.cancelReason).toBe('Changed my mind')
+    const other = usePlannerStore.getState().goals.find(g => g.id === g2.id)
+    expect(other?.cancelledAt).toBeUndefined()
+  })
+
+  it('returns false and no-ops for a goal that does not exist', () => {
+    expect(usePlannerStore.getState().cancelGoal('nope', 'reason')).toBe(false)
+  })
+
+  it('returns false and no-ops for an already-completed goal', () => {
+    usePlannerStore.getState().addGoal({
+      title: 'Done already', cadence: 'weekly', targetType: 'checklist', target: 1,
+      pointsMode: 'whole', points: 20, completedAt: null,
+      checklist: [{ id: 'a', title: 'x', done: true }],
+    })
+    const gid = usePlannerStore.getState().goals[0].id
+    usePlannerStore.getState().completeGoal(gid)
+    expect(usePlannerStore.getState().cancelGoal(gid, 'reason')).toBe(false)
+  })
+
+  it('returns false and no-ops for an already-cancelled goal', () => {
+    usePlannerStore.getState().addGoal({
+      title: 'Cancel twice', cadence: 'weekly', targetType: 'checklist', target: 1,
+      pointsMode: 'whole', points: 20, completedAt: null,
+      checklist: [{ id: 'a', title: 'x', done: false }],
+    })
+    const gid = usePlannerStore.getState().goals[0].id
+    usePlannerStore.getState().cancelGoal(gid, 'first reason')
+    expect(usePlannerStore.getState().cancelGoal(gid, 'second reason')).toBe(false)
+    expect(usePlannerStore.getState().goals.find(g => g.id === gid)?.cancelReason).toBe('first reason')
+  })
+})
+
+describe('addChallengeGoal challengeId', () => {
+  it('stores the passed challengeId on the created goal', () => {
+    const gid = usePlannerStore.getState().addChallengeGoal('Friend goal', ['sub 1'], undefined, 'Alex', 20, 10, 'chal-123')
+    expect(usePlannerStore.getState().goals.find(g => g.id === gid)?.challengeId).toBe('chal-123')
+  })
+
+  it('leaves challengeId undefined when not passed (back-compat)', () => {
+    const gid = usePlannerStore.getState().addChallengeGoal('Friend goal 2', ['sub 1'], undefined, 'Alex', 20, 10)
+    expect(usePlannerStore.getState().goals.find(g => g.id === gid)?.challengeId).toBeUndefined()
+  })
+})
+
 describe('setZoneWeight', () => {
   it('sets a weight on the targeted zone only', () => {
     usePlannerStore.getState().addZone('Health', '#111')

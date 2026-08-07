@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { usePlannerStore } from '@/store'
 import { useSocialStore } from '@/store/social/social.store'
 import { showToast } from '@/ui/Toast'
@@ -17,10 +18,10 @@ type AcceptedItem =
   | { kind: 'task';     key: string; data: Task }
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
-  pending:  { label: 'Pending',           color: 'var(--text3)' },
-  accepted: { label: 'Accepted',          color: 'var(--amber)' },
+  pending:  { label: 'Pending',           color: 'var(--vx-fg-4)' },
+  accepted: { label: 'Accepted',          color: 'var(--vx-amber)' },
   declined: { label: 'Declined',          color: 'var(--red)'   },
-  done:     { label: 'Completed ✓',       color: 'var(--green)' },
+  done:     { label: 'Completed ✓',       color: 'var(--vx-emerald)' },
 }
 
 /** Replaces the old Goals tab. Two sub-views:
@@ -71,33 +72,37 @@ export function ChallengesPanel() {
     <div>
       {/* Tasks a friend asked you to validate before they count */}
       {validationsToReview.length > 0 && (
-        <div className="rounded-[10px] border border-[var(--purple)] bg-[var(--bg)] p-3.5 mb-3">
+        <div className="vx-tile vx-accent-l p-3.5 mb-3" data-tone="purple">
           <div className="text-[13px] font-medium mb-2">Tasks to validate</div>
           {validationsToReview.map(v => (
             <div key={v.id} className="flex items-center gap-2 flex-wrap py-1.5 text-[12px]">
               <span className="flex-1 break-words [overflow-wrap:anywhere] min-w-0">{v.ownerName} did: &ldquo;{v.taskTitle}&rdquo;</span>
-              <button onClick={() => approveValidation(v.id)} className="text-[11px] px-2.5 py-1 rounded-full bg-[var(--green-mid)] text-white">Approve</button>
-              <button onClick={() => rejectValidation(v.id, null)} className="text-[11px] px-2.5 py-1 rounded-full border border-[var(--border2)] text-[var(--red)]">Reject</button>
+              <button onClick={() => approveValidation(v.id)} className="vx-btn vx-btn-primary text-[11px] px-2.5 py-1">Approve</button>
+              <button onClick={() => rejectValidation(v.id, null)} className="vx-btn vx-btn-danger text-[11px] px-2.5 py-1">Reject</button>
             </div>
           ))}
         </div>
       )}
 
-      <div className="flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5">
+      <div className="vx-modeswitch mb-3.5">
         {[
           { k: 'given',    l: 'Challenges given' },
           { k: 'accepted', l: 'My Challenges' },
         ].map(m => (
           <button key={m.k} onClick={() => setSub(m.k as 'given' | 'accepted')}
-            className={`flex-1 text-center px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${sub === m.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
-            {m.l}
+            className={`vx-modeswitch-item ${sub === m.k ? 'vx-active' : ''}`}>
+            {sub === m.k && (
+              <motion.div layoutId="vx-challenges-sub-indicator" className="vx-modeswitch-indicator"
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }} />
+            )}
+            <span className="relative z-10">{m.l}</span>
           </button>
         ))}
       </div>
 
       {sub === 'given' && (
         <>
-          {sortedSent.length === 0 && <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">You haven&apos;t sent any challenges yet.</div>}
+          {sortedSent.length === 0 && <div className="text-[13px] py-3.5 text-center" style={{ color: 'var(--vx-fg-4)' }}>You haven&apos;t sent any challenges yet.</div>}
           {given.pageItems.map(c => {
             const friendUid = c.participantUids[0]
             const friendName = friends.find(f => f.uid === friendUid)?.displayName ?? friendUid
@@ -105,15 +110,15 @@ export function ChallengesPanel() {
             const meta = STATUS_META[status] ?? STATUS_META.pending
             const isGoal = c.type === 'goal'
             return (
-              <div key={c.id} className="rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-3 mb-2">
+              <div key={c.id} className="vx-tile mb-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border mr-1 ${isGoal ? 'bg-[var(--blue-bg)] text-[var(--blue)] border-[var(--blue)]' : 'bg-[var(--purple-bg)] text-[var(--purple)] border-[#CECBF6]'}`}>{isGoal ? 'GOAL' : 'TASK'}</span>
+                    <span className="vx-chip mr-1" data-tone={isGoal ? 'cyan' : 'violet'}>{isGoal ? 'GOAL' : 'TASK'}</span>
                     <span className="text-[13px] break-words [overflow-wrap:anywhere]">{c.title}</span>
                   </div>
                   <span className="text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ color: meta.color, background: `${meta.color}1a` }}>{meta.label}</span>
                 </div>
-                <div className="text-[11px] text-[var(--text3)] mt-1 flex items-center gap-2 flex-wrap">
+                <div className="text-[11px] mt-1 flex items-center gap-2 flex-wrap" style={{ color: 'var(--vx-fg-4)' }}>
                   <span>
                     → {friendName}
                     {isGoal && <> · {c.checklist?.length ?? 0} subtasks{c.endDate ? ` · by ${c.endDate}` : ''}{c.completionPoints != null ? ` · +${c.completionPoints} pts (${c.delayPoints ?? Math.round(c.completionPoints * 0.5)} if late)` : ''}</>}
@@ -121,7 +126,7 @@ export function ChallengesPanel() {
                   {status === 'pending' && (
                     <button
                       onClick={() => { sendChallengeReminder(c.id, friendUid); showToast(`Reminder sent to ${friendName}.`) }}
-                      className="ml-auto text-[11px] px-2 py-0.5 rounded-full border border-[var(--border2)] text-[var(--text2)] flex items-center gap-1"
+                      className="vx-btn vx-btn-ghost ml-auto text-[11px] px-2 py-0.5"
                     >
                       🔔 Send Reminder
                     </button>
@@ -137,22 +142,22 @@ export function ChallengesPanel() {
       {sub === 'accepted' && (
         <>
           {acceptedItems.length === 0 && (
-            <div className="text-[13px] text-[var(--text3)] py-3.5 text-center">No challenges accepted yet.</div>
+            <div className="text-[13px] py-3.5 text-center" style={{ color: 'var(--vx-fg-4)' }}>No challenges accepted yet.</div>
           )}
           {accepted.pageItems.map(item => {
             if (item.kind === 'incoming') {
               const c = item.data
               return (
-                <div key={item.key} className="rounded-[10px] border border-[var(--purple)] bg-[var(--bg)] p-3 mb-2">
+                <div key={item.key} className="vx-tile vx-accent-l mb-2" data-tone="purple">
                   <div className="flex items-start justify-between gap-2 flex-wrap">
                     <span className="text-[12px] break-words [overflow-wrap:anywhere] min-w-0 flex-1">
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border mr-1 ${c.type === 'goal' ? 'bg-[var(--blue-bg)] text-[var(--blue)] border-[var(--blue)]' : 'bg-[var(--purple-bg)] text-[var(--purple)] border-[#CECBF6]'}`}>{c.type === 'goal' ? 'GOAL' : 'TASK'}</span>
+                      <span className="vx-chip mr-1" data-tone={c.type === 'goal' ? 'cyan' : 'violet'}>{c.type === 'goal' ? 'GOAL' : 'TASK'}</span>
                       {c.ownerName}: &ldquo;{c.title}&rdquo;
-                      {c.type === 'goal' && <span className="text-[var(--text3)]"> · {c.checklist?.length ?? 0} subtasks{c.endDate ? ` · by ${c.endDate}` : ''}{c.completionPoints != null ? ` · +${c.completionPoints} pts` : ''}</span>}
+                      {c.type === 'goal' && <span style={{ color: 'var(--vx-fg-4)' }}> · {c.checklist?.length ?? 0} subtasks{c.endDate ? ` · by ${c.endDate}` : ''}{c.completionPoints != null ? ` · +${c.completionPoints} pts` : ''}</span>}
                     </span>
                     <div className="flex gap-1.5 flex-shrink-0">
-                      <button onClick={() => { acceptChallenge(c); showToast('Challenge accepted.') }} className="text-[11px] px-2.5 py-1 rounded-full bg-[var(--purple)] text-white">Accept</button>
-                      <button onClick={() => declineChallenge(c.id)} className="text-[11px] px-2.5 py-1 rounded-full border border-[var(--border2)] text-[var(--text3)]">Decline</button>
+                      <button onClick={() => { acceptChallenge(c); showToast('Challenge accepted.') }} className="vx-btn vx-btn-accent text-[11px] px-2.5 py-1">Accept</button>
+                      <button onClick={() => declineChallenge(c.id)} className="vx-btn vx-btn-ghost text-[11px] px-2.5 py-1">Decline</button>
                     </div>
                   </div>
                 </div>
@@ -161,13 +166,13 @@ export function ChallengesPanel() {
             if (item.kind === 'goal') {
               const g = item.data
               return (
-                <div key={item.key} className="rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-3 mb-2">
+                <div key={item.key} className="vx-tile mb-2">
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-[12px] break-words [overflow-wrap:anywhere] min-w-0">
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--blue-bg)] text-[var(--blue)] border border-[var(--blue)] mr-1">GOAL</span>
-                      {g.title} <span className="text-[var(--text3)]">· from {g.challengedBy}</span>
+                      <span className="vx-chip mr-1" data-tone="cyan">GOAL</span>
+                      {g.title} <span style={{ color: 'var(--vx-fg-4)' }}>· from {g.challengedBy}</span>
                     </span>
-                    <span className="text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ color: g.completedAt ? 'var(--green)' : 'var(--amber)', background: g.completedAt ? 'var(--green-bg)' : 'var(--amber-bg)' }}>
+                    <span className="vx-chip flex-shrink-0" data-tone={g.completedAt ? 'emerald' : 'amber'}>
                       {g.completedAt ? 'Completed ✓' : 'In progress'}
                     </span>
                   </div>
@@ -176,13 +181,13 @@ export function ChallengesPanel() {
             }
             const t = item.data
             return (
-              <div key={item.key} className="rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-3 mb-2">
+              <div key={item.key} className="vx-tile mb-2">
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-[12px] break-words [overflow-wrap:anywhere] min-w-0">
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6] mr-1">TASK</span>
-                    {t.title} <span className="text-[var(--text3)]">· from {t.challengedBy}</span>
+                    <span className="vx-chip mr-1" data-tone="violet">TASK</span>
+                    {t.title} <span style={{ color: 'var(--vx-fg-4)' }}>· from {t.challengedBy}</span>
                   </span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ color: t.done ? 'var(--green)' : 'var(--amber)', background: t.done ? 'var(--green-bg)' : 'var(--amber-bg)' }}>
+                  <span className="vx-chip flex-shrink-0" data-tone={t.done ? 'emerald' : 'amber'}>
                     {t.done ? 'Completed ✓' : 'In progress'}
                   </span>
                 </div>

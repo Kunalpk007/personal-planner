@@ -40,9 +40,13 @@ export const createStreakSlice: StateCreator<AppState, [], [], StreakSlice> = (s
     // Carry forward any incomplete tasks from the submitted day, mirroring the
     // overnight auto-logic's carry-forward so manual submission doesn't silently
     // drop pending work (blocked tasks carry without penalty).
+    // Recurring-origin tasks (`recurId` set) are excluded — `injectRecurring`
+    // already creates a fresh instance of them for the next day, so carrying
+    // the incomplete one forward too would double them up. Cancelled tasks
+    // are excluded too — they were explicitly abandoned, not just missed.
     const nextKey = getNextDayKey(entry.date)
     const carried: Task[] = []
-    for (const t of s.tasks.filter(t => t.date === entry.date && !t.done)) {
+    for (const t of s.tasks.filter(t => t.date === entry.date && !t.done && !t.recurId && !t.cancelledAt)) {
       const newCarried = t.blocked ? (t.carriedDays ?? 0) : (t.carriedDays ?? 0) + 1
       if (!t.blocked && newCarried > MAX_CARRY) continue
       carried.push({

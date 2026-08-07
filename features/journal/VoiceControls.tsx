@@ -104,13 +104,19 @@ export function VoiceControls({ dateKey, onAppendText }: {
     <div className="flex items-center gap-2 flex-wrap mb-2">
       {srSupported && (
         <button type="button" onClick={toggleDictation}
-          className={`text-[12px] px-2.5 py-1.5 rounded-md border ${listening ? 'bg-[var(--red-bg)] text-[var(--red)] border-[#E24B4A]' : 'border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)]'}`}>
+          className="vx-chip text-[12px]"
+          style={listening
+            ? { background: 'rgba(239,68,68,0.12)', color: 'var(--red)', borderColor: 'rgba(239,68,68,0.4)' }
+            : { background: 'var(--vx-card)', color: 'var(--vx-fg-3)', borderColor: 'var(--vx-border)' }}>
           {listening ? '● Listening… tap to stop' : '🎤 Dictate'}
         </button>
       )}
       {recSupported && (
         <button type="button" onClick={toggleRecording} disabled={busy}
-          className={`text-[12px] px-2.5 py-1.5 rounded-md border disabled:opacity-50 ${recording ? 'bg-[var(--red-bg)] text-[var(--red)] border-[#E24B4A]' : 'border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)]'}`}>
+          className="vx-chip text-[12px] disabled:opacity-50"
+          style={recording
+            ? { background: 'rgba(239,68,68,0.12)', color: 'var(--red)', borderColor: 'rgba(239,68,68,0.4)' }
+            : { background: 'var(--vx-card)', color: 'var(--vx-fg-3)', borderColor: 'var(--vx-border)' }}>
           {busy ? 'Saving…' : recording ? '■ Stop recording' : '🎙️ Record voice'}
         </button>
       )}

@@ -57,6 +57,14 @@ export interface Task {
    *  any other task once completed. */
   challengedBy?: string
   challengeId?:  string
+
+  /** Set when a challenged task is cancelled (with a reason) rather than
+   *  completed or deleted — see cancelTask in store/slices/tasks.slice.ts.
+   *  Cancelled tasks drop out of the active day list, same as completed
+   *  goals, but the record (and reason) is kept for the challenger's
+   *  notification rather than being destroyed like a plain delete. */
+  cancelledAt?:  string | null
+  cancelReason?: string
 }
 
 export interface RecurringTemplate {
@@ -96,6 +104,17 @@ export interface Reward {
 
 export type RewardApprovalGate  = 'cost' | 'habit'
 export type PendingApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
+
+/** A completed Dashboard Focus Time session (see constants/points.ts's
+ *  FOCUS_REWARDS) — logged so today's total focus time/reward can be shown
+ *  and so a session can never be double-counted (see completeFocusSession). */
+export interface FocusSessionLog {
+  date:    string        // day-key the session was completed on
+  minutes: 25 | 45 | 60
+  pts:     number
+  xp:      number
+  at:      string        // ISO completion timestamp
+}
 
 /** Local (offline-first) mirror of the owner's own pending reward-approval
  *  requests — see store/slices/rewardApprovals.slice.ts. The authoritative
@@ -167,6 +186,17 @@ export interface Goal {
   /** Set when this goal was created from an accepted friend challenge —
    *  mirrors Task.challengedBy, purely cosmetic. */
   challengedBy?: string
+  /** The SharedTask doc id this goal was created from (mirrors
+   *  Task.challengeId) — lets social.store.ts push completion/cancellation
+   *  back to the challenger. Undefined for goals not created via a
+   *  challenge, or ones created before this field existed. */
+  challengeId?: string
+
+  /** Set when the goal is cancelled (with a reason) instead of completed —
+   *  see cancelGoal in store/slices/goals.slice.ts. A cancelled goal drops
+   *  out of the active goals list, same as a completed one. */
+  cancelledAt?:  string | null
+  cancelReason?: string
 
   // ── Goals-as-tasks (Session 8 revamp) ──────────────────────────────────
   /** How this goal scores. Undefined behaves like 'whole' for back-compat. */
@@ -226,7 +256,7 @@ export interface PausedStreak {
   streakAtPause: number
 }
 
-export type ThemeMode = 'light' | 'dark' | 'system'
+export type ThemeMode = 'light' | 'dark' | 'cream'
 export type FontScale = 'normal' | 'large' | 'xlarge'
 
 export interface AppConfig {
@@ -235,6 +265,10 @@ export interface AppConfig {
   /** Day-of-week indices (0=Sun..6=Sat) that use the reduced `weekendPts`
    *  target instead of `minPts` — user-configurable, defaults to Sat/Sun. */
   lightDays:    number[]
+  /** ISO timestamp of the last time `lightDays` was actually changed —
+   *  gates Settings to at most one change per Monday-start calendar week
+   *  (see lib/engine/cutoff.ts#isoWeekKey and Settings' light-day picker). */
+  lightDaysChangedAt: string | null
   cutoffHour:   number
   tone:         Tone
   managerName:  string
@@ -246,6 +280,10 @@ export interface AppConfig {
   autoExportEnabled: boolean
   theme:        ThemeMode
   fontScale:    FontScale
+  /** Daily water intake target, in millilitres — configurable in Settings.
+   *  Drives both the Water Intake stat tile's "of Xl" label and the
+   *  celebration animation shown once today's intake meets/exceeds it. */
+  waterTargetMl: number
 }
 
 // ─── State-only (persisted data) ─────────────────────────────────────────────
@@ -277,6 +315,7 @@ export interface AppStateData {
   bufferLog: Array<{ date: string; note: string; xp: string; type: string }>
   rewardRedemptions: Array<{ date: string; title: string; cost: number; at: string }>
   pendingRewardApprovals: PendingRewardApproval[]
+  focusSessions: FocusSessionLog[]
 
   badges:     Badge[]
   badgeDates: Record<string, string>
@@ -288,12 +327,33 @@ export interface AppStateData {
   journalPin: string | null
   journalPinQuestion:   string | null
   journalPinAnswerHash: string | null
+  /** Digit count the current journalPin hash was created with — used to
+   *  detect a pre-upgrade 5-digit PIN that needs the migrate-to-6-digit flow
+   *  in ui/PinGate.tsx. null (never set) is treated as legacy/5-digit for any
+   *  existing user with a pin from before this field existed. */
+  journalPinLength: number | null
   pinFailedAttempts: number
   pinLockoutUntil:   number | null
   journalEncryptionToken: string | null
 
   mood:            Record<string, Mood>
   eodMood:         Record<string, EodMood>
+  /** Running lifetime count of mood check-ins — incremented once per day for
+   *  the AM mood pick and once per day for the EOD (end-of-day) mood pick
+   *  (not on every re-selection within the same day, only the first time
+   *  each is set for a given date). Purely a tracked/displayed stat, no
+   *  scoring effect. */
+  moodCheckins:    number
+  /** Append-only log of every mood pick/change (unlike `mood`/`eodMood`,
+   *  which only keep the latest value per day) — every re-selection adds a
+   *  new entry, so this is the raw history for a future "mood over the day"
+   *  view. Purely informational, no scoring effect. */
+  moodChangeLog:   Array<{ date: string; kind: 'am' | 'pm'; mood: string; at: string }>
+
+  /** Cumulative water intake per day, in millilitres — see the Water Drank
+   *  dashboard tile (features/dashboard/components/WaterTrackerCard.tsx)
+   *  and addWater in store/slices/config.slice.ts. */
+  waterMl:         Record<string, number>
 
   pinnedTaskId:          string | null
   engagementDays:        Record<string, boolean>
@@ -301,6 +361,11 @@ export interface AppStateData {
   morningQuoteShown:     Record<string, boolean>
   appFirstUsed:          string | null
   overnightMsg:          string | null
+  /** The most recent "you showed up" wallet bonus claimed via
+   *  claimShowedUpBonus, so the MorningQuoteOverlay popup can display it
+   *  (progress % = bonus/minPts, per project.md Decision #8) without having
+   *  to recompute mood-adjusted minPts itself. */
+  lastShowedUpBonus: { date: string; bonus: number; minPts: number } | null
 
   changeLog: ChangeLogEntry[]
 
@@ -331,7 +396,7 @@ export interface AppActions {
   toggleSubtask:         (taskId: string, subId: string) => void
   addSubtask:            (taskId: string, title: string) => void
   removeSubtask:         (taskId: string, subId: string) => void
-  addRecurring:          (r: Omit<RecurringTemplate, 'id'>) => void
+  addRecurring:          (r: Omit<RecurringTemplate, 'id'>) => string
   removeRecurring:       (id: string) => void
   editRecurring:         (id: string, updates: Partial<RecurringTemplate>) => void
   injectRecurring:       (today: string) => void
@@ -349,6 +414,13 @@ export interface AppActions {
   // Task challenges — a task added to your own list because a friend
   // challenged you to it (see store/social/social.store.ts#acceptChallenge).
   addChallengeTask: (task: Omit<Task, 'id' | 'createdAt' | 'done' | 'completedAt' | 'subtasks'>, challengeId: string, challengedBy: string) => string
+  /** Cancels a task with a reason instead of deleting it outright — used for
+   *  challenged tasks (which can't otherwise be edited/deleted) so the
+   *  challenger can be notified why. Non-challenged tasks may also use this;
+   *  it just doesn't trigger a Firestore write for those. Cancelled tasks
+   *  drop out of the active day list. No-op (returns false) if already
+   *  done/cancelled. */
+  cancelTask: (taskId: string, reason: string) => boolean
 
   // Streak
   submitDay:         (entry: HistoryEntry) => { freezeBonus: number; milestoneStreak: number | null }
@@ -369,6 +441,10 @@ export interface AppActions {
   addZone:      (name: string, color: string) => void
   removeZone:   (id: string) => void
   setZoneWeight: (id: string, weight: number) => void
+
+  // Focus Time (Dashboard) — completing a full, uninterrupted session credits
+  // both the reward wallet and rank XP (see constants/points.ts FOCUS_REWARDS).
+  completeFocusSession: (today: string, minutes: 25 | 45 | 60) => { pts: number; xp: number }
 
   // Goals (Section 3 of docs/PHASE2_SOCIAL_LIFE_OS.md) — definitions only;
   // progress is always derived, never stored (see lib/engine/goals.ts).
@@ -393,7 +469,13 @@ export interface AppActions {
   // same idea as addChallengeTask, but for the multi-task/time-bound case
   // (see store/social/social.store.ts#acceptChallenge). The giver declares
   // the completion points and the (reduced) delay points.
-  addChallengeGoal: (title: string, taskTitles: string[], endDate: string | undefined, challengedBy: string, points: number, delayPoints: number) => string
+  addChallengeGoal: (title: string, taskTitles: string[], endDate: string | undefined, challengedBy: string, points: number, delayPoints: number, challengeId?: string) => string
+
+  /** Cancels an active (incomplete) goal with a reason. Mirrors cancelTask —
+   *  drops the goal from the active list; if it came from a challenge
+   *  (challengeId set), social.store.ts's watcher notifies the challenger.
+   *  No-op (returns false) if already completed/cancelled. */
+  cancelGoal: (goalId: string, reason: string) => boolean
 
   // Reward approvals (Section 1.5 / 6.4 of docs/PHASE2_SOCIAL_LIFE_OS.md) —
   // local mirror only; the real approve/reject write happens in Firestore
@@ -413,11 +495,15 @@ export interface AppActions {
   setJournalEncryptionToken: (token: string | null) => void
 
   // Config
-  setConfig:    (updates: Partial<AppConfig>) => void
+  setConfig:    (updates: Partial<AppConfig>) => { blockedLightDays?: boolean }
   setMood:      (today: string, mood: Mood) => void
   setEodMood:   (today: string, mood: string) => void
   setPinnedTask: (id: string | null) => void
   claimShowedUpBonus: (today: string) => number | null
+  /** Adds (or subtracts, via a negative delta) millilitres to today's water
+   *  log — clamped at 0. Also used by the +/- 250ml buttons on the Water
+   *  Drank dashboard tile. */
+  addWater: (today: string, deltaMl: number) => void
 
   // UI
   clearOvernightMsg:     () => void

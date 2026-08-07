@@ -51,7 +51,7 @@ export interface FriendRequest {
 // 'declined' = friend turned it down.
 // 'done' reserved for a future true multi-participant shared task where
 //   completion itself needs to be visible cross-user.
-export type SharedTaskStatus = 'pending' | 'accepted' | 'declined' | 'done'
+export type SharedTaskStatus = 'pending' | 'accepted' | 'declined' | 'done' | 'cancelled'
 
 export interface SharedTask {
   id:               string
@@ -80,6 +80,11 @@ export interface SharedTask {
    *  finish after the deadline. */
   completionPoints?: number
   delayPoints?:      number
+  /** Set by the recipient when they cancel the task/goal this challenge
+   *  created on their side (with a reason) instead of completing it — keyed
+   *  per participant uid. Drives the owner's "cancelled" notification (see
+   *  markChallengeCancelled in lib/firebase/social.ts). */
+  cancelReason?:    Record<string, string>
   /** Set by the owner tapping "Send Reminder" on a still-pending sent
    *  challenge — keyed per participant uid, ISO timestamp of the most recent
    *  reminder. Drives the recipient's in-app reminder notification; no

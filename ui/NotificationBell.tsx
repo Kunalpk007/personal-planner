@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useSocialStore } from '@/store/social/social.store'
 
 interface NotifItem {
@@ -32,6 +33,30 @@ function saveSeen(uid: string, seen: Set<string>): void {
   try {
     // Cap growth — only the most recent 200 seen-ids need to stick around.
     localStorage.setItem(seenKey(uid), JSON.stringify([...seen].slice(-200)))
+  } catch {}
+}
+
+// Dismissal is purely a local "hide this" concept — there's no notifications
+// collection to delete from (everything here is re-derived from live
+// subscriptions each render, see the big comment on NotificationBell below).
+// Dismissed ids are just filtered out of the derived list; if the same id's
+// underlying doc changes again later it's free to reappear, same as "seen".
+function dismissedKey(uid: string): string {
+  return `kp_notif_dismissed:${uid}`
+}
+
+function loadDismissed(uid: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(dismissedKey(uid))
+    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveDismissed(uid: string, dismissed: Set<string>): void {
+  try {
+    localStorage.setItem(dismissedKey(uid), JSON.stringify([...dismissed].slice(-200)))
   } catch {}
 }
 
@@ -67,7 +92,8 @@ export function NotificationBell() {
 
   const [open, setOpen] = useState(false)
   const [seen, setSeen] = useState<Set<string>>(new Set())
-  const [panelPos, setPanelPos] = useState({ top: 0, right: 0 })
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const [panelPos, setPanelPos] = useState({ top: 0, right: 0, maxHeight: 420 })
   const [mounted, setMounted] = useState(false)
   const btnRef   = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -75,7 +101,7 @@ export function NotificationBell() {
   useEffect(() => setMounted(true), [])
 
   useEffect(() => {
-    if (uid) setSeen(loadSeen(uid))
+    if (uid) { setSeen(loadSeen(uid)); setDismissed(loadDismissed(uid)) }
   }, [uid])
 
   useEffect(() => {
@@ -134,20 +160,40 @@ export function NotificationBell() {
     for (const c of sentChallenges) {
       const friendUid = c.participantUids[0]
       const status = c.perUserStatus[friendUid]
-      if (status === 'accepted') list.push({ id: `chalacc:${c.id}`, text: `Your challenge "${c.title}" was accepted`, at: c.createdAt, route: CHALLENGES_GIVEN_ROUTE })
-      if (status === 'declined') list.push({ id: `chaldec:${c.id}`, text: `Your challenge "${c.title}" was declined`, at: c.createdAt, route: CHALLENGES_GIVEN_ROUTE })
-      if (status === 'done')     list.push({ id: `chaldone:${c.id}`, text: `Your challenge "${c.title}" was completed 🎉`, at: c.createdAt, route: CHALLENGES_GIVEN_ROUTE })
+      if (status === 'accepted')  list.push({ id: `chalacc:${c.id}`, text: `Your challenge "${c.title}" was accepted`, at: c.createdAt, route: CHALLENGES_GIVEN_ROUTE })
+      if (status === 'declined')  list.push({ id: `chaldec:${c.id}`, text: `Your challenge "${c.title}" was declined`, at: c.createdAt, route: CHALLENGES_GIVEN_ROUTE })
+      if (status === 'done')      list.push({ id: `chaldone:${c.id}`, text: `Your challenge "${c.title}" was completed 🎉`, at: c.createdAt, route: CHALLENGES_GIVEN_ROUTE })
+      if (status === 'cancelled') {
+        const reason = c.cancelReason?.[friendUid]
+        list.push({ id: `chalcancel:${c.id}`, text: `Your challenge "${c.title}" was cancelled${reason ? `: ${reason}` : ''}`, at: c.createdAt, route: CHALLENGES_GIVEN_ROUTE })
+      }
     }
     return list.sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? ''))).slice(0, 30)
   }, [uid, incomingRequests, validationsToReview, incomingChallenges, approvalsToReview, myOwnValidations, myOwnApprovals, sentChallenges])
 
-  const unseenCount = items.filter(i => !seen.has(i.id)).length
+  // Dismissed items are hidden but not "gone" from the underlying data (there's
+  // nothing to delete — see the dismissedKey comment above), so both the badge
+  // count and the rendered list filter them out the same way.
+  const visibleItems = items.filter(i => !dismissed.has(i.id))
+  const unseenCount = visibleItems.filter(i => !seen.has(i.id)).length
 
   function handleToggle() {
     const next = !open
     if (next && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect()
-      setPanelPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) })
+      // Anchor below-right of the bell, like a normal app notification
+      // dropdown — clamped so it always stays fully on-screen (the panel's
+      // own width is also capped responsively via CSS, but `right` still
+      // needs a floor/ceiling so it can't be pushed past either edge on a
+      // narrow viewport) and height-capped to whatever room is actually
+      // left below the icon so it never runs off the bottom of the screen.
+      const PANEL_WIDTH = 320
+      const right = Math.min(
+        Math.max(8, window.innerWidth - rect.right),
+        Math.max(8, window.innerWidth - PANEL_WIDTH - 8)
+      )
+      const maxHeight = Math.max(160, Math.min(420, window.innerHeight - rect.bottom - 24))
+      setPanelPos({ top: rect.bottom + 8, right, maxHeight })
     }
     setOpen(next)
     if (next && uid) {
@@ -158,6 +204,22 @@ export function NotificationBell() {
     }
   }
 
+  function dismissOne(id: string) {
+    if (!uid) return
+    const next = new Set(dismissed)
+    next.add(id)
+    setDismissed(next)
+    saveDismissed(uid, next)
+  }
+
+  function dismissAll() {
+    if (!uid) return
+    const next = new Set(dismissed)
+    visibleItems.forEach(i => next.add(i.id))
+    setDismissed(next)
+    saveDismissed(uid, next)
+  }
+
   if (!uid) return null
 
   return (
@@ -166,60 +228,69 @@ export function NotificationBell() {
         ref={btnRef}
         onClick={handleToggle}
         aria-label="Notifications"
-        style={{
-          position: 'relative', background: 'none', border: 'none', cursor: 'pointer',
-          lineHeight: 1, padding: 4, color: 'inherit', display: 'flex',
-        }}
+        className="vx-bell-btn"
       >
         <BellIcon />
         {unseenCount > 0 && (
-          <span style={{
-            position: 'absolute', top: -2, right: -2, minWidth: 14, height: 14, padding: '0 3px',
-            borderRadius: 999, background: 'var(--red)', color: '#fff', fontSize: 9, fontWeight: 700,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
-          }}>
+          <span className="vx-bell-badge">
             {unseenCount > 9 ? '9+' : unseenCount}
           </span>
         )}
       </button>
 
-      {/* Portalled to <body> with fixed positioning — .nav-top scrolls
-          horizontally (overflow-x: auto), which clips any absolutely
-          positioned descendant that would otherwise render "behind" the
-          page content below it. A portal escapes that clipping entirely. */}
-      {mounted && open && createPortal(
-        <div
-          ref={panelRef}
-          style={{
-            position: 'fixed', top: panelPos.top, right: panelPos.right, width: 300, maxHeight: 360,
-            overflowY: 'auto', background: 'var(--bg)', border: '1px solid var(--border)',
-            borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 1000,
-          }}
-        >
-          <div style={{ padding: '10px 12px', fontSize: 12, fontWeight: 600, borderBottom: '1px solid var(--border)' }}>
-            Notifications
-          </div>
-          {items.length === 0 ? (
-            <div style={{ padding: 16, fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
-              Nothing yet.
-            </div>
-          ) : (
-            items.map(i => (
-              <button
-                key={i.id}
-                onClick={() => { setOpen(false); router.push(i.route) }}
-                style={{
-                  display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px',
-                  fontSize: 12, border: 'none', borderBottom: '1px solid var(--border)',
-                  background: seen.has(i.id) ? 'transparent' : 'var(--purple-bg, rgba(123,110,246,0.08))',
-                  color: 'var(--text)', cursor: 'pointer',
-                }}
-              >
-                {i.text}
-              </button>
-            ))
+      {/* A normal app-style dropdown anchored to the bell icon — not a
+          centered modal — portalled to <body> with fixed positioning.
+          .vx-nav-top scrolls horizontally (overflow-x: auto), which clips
+          any absolutely positioned descendant that would otherwise render
+          "behind" the page content below it; a portal escapes that clipping
+          entirely. Position is computed in handleToggle and clamped there
+          so the panel can never end up off-screen. */}
+      {mounted && createPortal(
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              ref={panelRef}
+              className="vx-notif-panel"
+              style={{ position: 'fixed', top: panelPos.top, right: panelPos.right, maxHeight: panelPos.maxHeight, zIndex: 1000 }}
+              initial={{ opacity: 0, scale: 0.94, y: -6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: -4 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+            >
+              <div className="vx-notif-header">
+                <span>Notifications</span>
+                {visibleItems.length > 0 && (
+                  <button onClick={dismissAll} className="vx-notif-dismiss-all">
+                    Dismiss all
+                  </button>
+                )}
+              </div>
+              {visibleItems.length === 0 ? (
+                <div className="vx-notif-empty">Nothing yet.</div>
+              ) : (
+                <div className="vx-notif-list">
+                  {visibleItems.map(i => (
+                    <div key={i.id} className={`vx-notif-item ${seen.has(i.id) ? '' : 'vx-unseen'}`}>
+                      <button
+                        onClick={() => { setOpen(false); router.push(i.route) }}
+                        className="vx-notif-item-text"
+                      >
+                        {i.text}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); dismissOne(i.id) }}
+                        aria-label="Dismiss"
+                        className="vx-notif-item-dismiss"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
           )}
-        </div>,
+        </AnimatePresence>,
         document.body
       )}
     </div>

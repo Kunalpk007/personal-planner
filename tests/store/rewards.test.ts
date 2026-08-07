@@ -256,3 +256,28 @@ describe('addReward / removeReward', () => {
     expect(rewards.find(r => r.id === id)).toBeUndefined()
   })
 })
+
+describe('completeFocusSession', () => {
+  it('credits wallet + rankXP per the FOCUS_REWARDS table and logs the session', () => {
+    usePlannerStore.setState({ rewardWallet: 0, rankXP: 0, focusSessions: [] })
+
+    const reward = usePlannerStore.getState().completeFocusSession('2024-01-08', 25)
+
+    expect(reward).toEqual({ pts: 2, xp: 4 })
+    expect(usePlannerStore.getState().rewardWallet).toBe(2)
+    expect(usePlannerStore.getState().rankXP).toBe(4)
+    expect(usePlannerStore.getState().focusSessions).toHaveLength(1)
+    expect(usePlannerStore.getState().focusSessions[0]).toMatchObject({ date: '2024-01-08', minutes: 25, pts: 2, xp: 4 })
+  })
+
+  it('scales rewards up for longer sessions and accumulates across sessions', () => {
+    usePlannerStore.setState({ rewardWallet: 0, rankXP: 0, focusSessions: [] })
+
+    usePlannerStore.getState().completeFocusSession('2024-01-08', 45)
+    usePlannerStore.getState().completeFocusSession('2024-01-08', 60)
+
+    expect(usePlannerStore.getState().rewardWallet).toBe(5 + 10)
+    expect(usePlannerStore.getState().rankXP).toBe(10 + 20)
+    expect(usePlannerStore.getState().focusSessions).toHaveLength(2)
+  })
+})

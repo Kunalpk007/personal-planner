@@ -7,9 +7,9 @@ import {
 import type { HistoryEntry, AppConfig } from '@/store/types'
 
 const CFG: AppConfig = {
-  minPts: 70, weekendPts: 20, lightDays: [0, 6], cutoffHour: 1, tone: 'balanced', managerName: 'Manager',
+  minPts: 70, weekendPts: 20, lightDays: [0, 6], lightDaysChangedAt: null, cutoffHour: 1, tone: 'balanced', managerName: 'Manager',
   moodMot: 1.2, moodSick: 0.5, pomoDuration: 25, quoteMorning: true, quoteEvening: true,
-  autoExportEnabled: false, theme: 'dark', fontScale: 'normal',
+  autoExportEnabled: false, theme: 'dark', fontScale: 'normal', waterTargetMl: 2000,
 }
 
 function makeEntry(date: string, overrides: Partial<HistoryEntry> = {}): HistoryEntry {

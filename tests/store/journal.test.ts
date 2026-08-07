@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { usePlannerStore } from '@/store'
 import { resetStore } from './helpers'
-import { JOURNAL_XP, WALLET_RATIO, PIN_LOCKOUT_THRESHOLD } from '@/constants/points'
+import { JOURNAL_XP, WALLET_RATIO, PIN_LOCKOUT_THRESHOLD, PIN_LENGTH } from '@/constants/points'
 
 beforeEach(resetStore)
 
@@ -87,26 +87,29 @@ describe('setJournalEncryptionToken', () => {
 })
 
 describe('setJournalPin / setJournalSecurity / recordPinFailure / resetPinFailures', () => {
-  it('sets a journal PIN hash', () => {
+  it('sets a journal PIN hash and stamps journalPinLength with the current PIN_LENGTH', () => {
     usePlannerStore.getState().setJournalPin('abc123')
     expect(usePlannerStore.getState().journalPin).toBe('abc123')
+    expect(usePlannerStore.getState().journalPinLength).toBe(PIN_LENGTH)
   })
 
-  it('clears the PIN and related security fields when null is passed', () => {
+  it('clears the PIN and related security fields (incl. journalPinLength) when null is passed', () => {
     usePlannerStore.getState().setJournalPin('abc123')
     usePlannerStore.getState().setJournalPin(null)
     const state = usePlannerStore.getState()
     expect(state.journalPin).toBeNull()
     expect(state.journalPinQuestion).toBeNull()
     expect(state.journalPinAnswerHash).toBeNull()
+    expect(state.journalPinLength).toBeNull()
   })
 
-  it('setJournalSecurity stores all three fields together', () => {
+  it('setJournalSecurity stores all fields together, including journalPinLength', () => {
     usePlannerStore.getState().setJournalSecurity('hash', 'What is your pet name?', 'answerhash')
     const state = usePlannerStore.getState()
     expect(state.journalPin).toBe('hash')
     expect(state.journalPinQuestion).toBe('What is your pet name?')
     expect(state.journalPinAnswerHash).toBe('answerhash')
+    expect(state.journalPinLength).toBe(PIN_LENGTH)
   })
 
   it('records pin failures and increments the counter', () => {

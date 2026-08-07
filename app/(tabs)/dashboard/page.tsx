@@ -1,11 +1,12 @@
 'use client'
 import { useMemo, useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { useDayKey }       from '@/hooks/useDayKey'
 import { usePlannerStore } from '@/store'
 import { MoodBar }         from '@/features/dashboard/components/MoodBar'
 import { StatGrid }        from '@/features/dashboard/components/StatGrid'
 import { RankProgress }    from '@/features/dashboard/components/RankProgress'
-import { ProgressBar }     from '@/ui/ProgressBar'
+import { GradientRing }    from '@/ui/GradientRing'
 import { SubmitArea }      from '@/features/dashboard/components/SubmitArea'
 import { Accordion }       from '@/ui/Accordion'
 import { showToast }       from '@/ui/Toast'
@@ -17,6 +18,9 @@ import { getManagerMessage } from '@/lib/engine/manager'
 import { StreakHistoryModal } from '@/features/dashboard/components/StreakHistoryModal'
 import { MorningQuoteOverlay } from '@/features/dashboard/components/MorningQuoteOverlay'
 import { LifeScoreCard }   from '@/features/dashboard/components/LifeScoreCard'
+import { FocusTimeCard }   from '@/features/dashboard/components/FocusTimeCard'
+import { WaterTrackerCard } from '@/features/dashboard/components/WaterTrackerCard'
+import { CalmDownButton }  from '@/features/wellness/CalmDownButton'
 import { NotificationBell } from '@/ui/NotificationBell'
 import { FLAGS }           from '@/constants/feature-flags'
 
@@ -38,15 +42,25 @@ function useDisplayName(): string {
   return name
 }
 
+function useGreeting(): string {
+  const [g, setG] = useState('Good day')
+  useEffect(() => {
+    const h = new Date().getHours()
+    setG(h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening')
+  }, [])
+  return g
+}
+
 export default function DashboardPage() {
   const { today }     = useDayKey()
   const now           = new Date()
   const displayName   = useDisplayName()
+  const greeting      = useGreeting()
 
   const overnightMsg = usePlannerStore(s => s.overnightMsg)
   const clearMsg     = usePlannerStore(s => s.clearOvernightMsg)
   const allTasks     = usePlannerStore(s => s.tasks)
-  const tasks        = useMemo(() => allTasks.filter(t => t.date === today), [allTasks, today])
+  const tasks        = useMemo(() => allTasks.filter(t => t.date === today && !t.cancelledAt), [allTasks, today])
   const done         = tasks.filter(t => t.done)
   const mood         = usePlannerStore(s => s.mood[today])
   const cfg          = usePlannerStore(s => s.cfg)
@@ -83,159 +97,214 @@ export default function DashboardPage() {
   const managerMsg = getManagerMessage(pct, tasks.length, cfg.tone, mood, today)
 
   return (
-    <div>
-      <MorningQuoteOverlay today={today} />
-      {/* Overnight banner */}
-      {overnightMsg && (
-        <div className="bg-[var(--blue-bg)] border border-[var(--blue)] rounded-[10px] p-3 mb-3.5 text-xs text-[var(--blue)] flex justify-between items-center">
-          <span>{overnightMsg}</span>
-          <button onClick={clearMsg} className="btn-icon">×</button>
-        </div>
-      )}
+    <div className="relative">
+      {/* Ambient aurora background now lives once in app/(tabs)/layout.tsx,
+          shared across every tab as the rollout proceeds (see project.md's
+          "UI Redesign Initiative") — no longer duplicated per-page here. */}
+      <div className="relative" style={{ zIndex: 1 }}>
+        <MorningQuoteOverlay today={today} />
+        {/* Overnight banner */}
+        {overnightMsg && (
+          <div className="bg-[var(--blue-bg)] border border-[var(--blue)] rounded-[10px] p-3 mb-3.5 text-xs text-[var(--blue)] flex justify-between items-center">
+            <span>{overnightMsg}</span>
+            <button onClick={clearMsg} className="btn-icon">×</button>
+          </div>
+        )}
 
-      {/* Open Day header */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-[19px] font-semibold">{displayName ? `${displayName}'s Planner` : 'My Planner'}</h1>
-            <p className="text-xs text-[var(--text2)] mt-0.5">
-              {DAYS[now.getDay()]}, {now.getDate()} {MONTHS[now.getMonth()]} {now.getFullYear()}
-            </p>
+        {/* Header */}
+        <motion.div
+          className="mb-4"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="vx-eyebrow">{greeting}</div>
+              <h1 className="text-[26px] font-extrabold tracking-tight vx-text-hero" style={{ fontFamily: 'inherit' }}>
+                {displayName ? `${displayName}'s Planner` : 'My Planner'}
+              </h1>
+              <p className="text-xs text-[var(--text2)] mt-0.5">
+                {DAYS[now.getDay()]}, {now.getDate()} {MONTHS[now.getMonth()]} {now.getFullYear()}
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5 flex-shrink-0">
+              {FLAGS.FRIENDS && (
+                <div className="lg:hidden flex items-center">
+                  <NotificationBell />
+                </div>
+              )}
+              <button
+                onClick={() => setStreakHistoryOpen(true)}
+                className="vx-streak-orb"
+                title="View streak history"
+              >
+                <span className="vx-flame">🔥</span>
+                <span className="vx-n vx-text-amber">{streak}</span>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {/* Notification bell — the top nav is hidden on mobile, so surface
-                it here (just before the streak icon) on small screens. */}
-            {FLAGS.FRIENDS && (
-              <div className="lg:hidden flex items-center">
-                <NotificationBell />
-              </div>
-            )}
-            <button
-              onClick={() => setStreakHistoryOpen(true)}
-              className="relative flex items-center justify-center w-14 h-14 rounded-full bg-[var(--bg3)] border border-[var(--border)] transition-transform active:scale-90 hover:brightness-110 cursor-pointer"
-              title="View streak history"
-            >
-              <span className="absolute text-[34px] opacity-25 select-none leading-none">🔥</span>
-              <span className="relative text-[20px] font-bold">{streak}</span>
-            </button>
-          </div>
-        </div>
-        <p className="text-[11px] italic text-[var(--text3)] mt-2 leading-relaxed">
-          &ldquo;{quote.t}&rdquo; <span className="opacity-70">— {quote.a}</span>
-        </p>
-      </div>
-
-      {/* Yesterday reconciliation — grace window until next cutoff */}
-      {showRetroFix && (
-        <Accordion title={
-          <div className="flex items-center justify-between flex-1 gap-2">
-            <span>📝 Yesterday ({prevDay}) — Fix Missed Check-offs</span>
-            <span
-              role="button"
-              onClick={(e) => { e.stopPropagation(); setFixDismissed(true) }}
-              className="btn-icon"
-            >
-              ×
-            </span>
-          </div>
-        }>
-          <p className="text-xs text-[var(--text2)] mb-2.5">
-            Forgot to tick something off before the cutoff? Toggle it here, then submit to update yesterday&apos;s history, streak and XP.
+          <p className="text-[11.5px] italic mt-2.5 leading-relaxed max-w-[480px]" style={{ color: 'var(--vx-fg-3)' }}>
+            &ldquo;{quote.t}&rdquo; <span style={{ color: 'var(--vx-fg-4)' }}>— {quote.a}</span>
           </p>
-          {yesterdayTasks.map(t => (
-            <div key={t.id} className="flex items-center gap-2.5 p-2.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] mb-1.5">
+        </motion.div>
+
+        {/* Yesterday reconciliation — grace window until next cutoff */}
+        {showRetroFix && (
+          <Accordion variant="vx" title={
+            <div className="flex items-center justify-between flex-1 gap-2">
+              <span>📝 Yesterday ({prevDay}) — Fix Missed Check-offs</span>
+              <span
+                role="button"
+                onClick={(e) => { e.stopPropagation(); setFixDismissed(true) }}
+                className="btn-icon"
+              >
+                ×
+              </span>
+            </div>
+          }>
+            <p className="text-xs text-[var(--text2)] mb-2.5">
+              Forgot to tick something off before the cutoff? Toggle it here, then submit to update yesterday&apos;s history, streak and XP.
+            </p>
+            {yesterdayTasks.map(t => (
+              <div key={t.id} className="flex items-center gap-2.5 p-2.5 rounded-[10px] border border-[var(--vx-border)] bg-[var(--vx-surface-tint)] mb-1.5">
+                <button
+                  onClick={() => {
+                    const result = toggleTaskRetro(t.id)
+                    if (result) showToast(`+${result.pts} RXP · +${result.walletPts} 🪙`)
+                    else showToast('Unchecked — points reversed.')
+                  }}
+                  className={`w-[21px] h-[21px] rounded-full border-[1.5px] flex-shrink-0 flex items-center justify-center text-[11px] transition-all ${t.done ? 'bg-[var(--vx-emerald)] border-[var(--vx-emerald)] text-white' : 'border-[var(--border2)] text-transparent'}`}
+                >
+                  {t.done ? '✓' : ''}
+                </button>
+                <span className={`text-[13px] flex-1 ${t.done ? 'line-through' : ''}`}>{t.title}</span>
+                <span className={`text-xs font-semibold ${t.done ? 'text-[var(--vx-emerald)]' : 'text-[var(--text3)]'}`}>+{calcPts(t)}</span>
+              </div>
+            ))}
+
+            <div className="border-t border-[var(--vx-border)] mt-2.5 pt-2.5">
+              <div className="text-xs text-[var(--text2)] mb-2">Did you redeem a reward yesterday? (optional)</div>
+              <div className="flex gap-2 flex-wrap items-center mb-3">
+                <input
+                  value={retroRewardTitle}
+                  onChange={e => setRetroRewardTitle(e.target.value)}
+                  placeholder="Reward name..."
+                  className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--vx-border)] bg-[var(--vx-surface-tint)] text-[var(--text)] outline-none"
+                />
+                <input
+                  type="number"
+                  value={retroRewardPts}
+                  onChange={e => setRetroRewardPts(e.target.value)}
+                  placeholder="Pts redeemed"
+                  min={0}
+                  className="w-[110px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--vx-border)] bg-[var(--vx-surface-tint)] text-[var(--text)] outline-none"
+                />
+              </div>
               <button
                 onClick={() => {
-                  const result = toggleTaskRetro(t.id)
-                  if (result) showToast(`+${result.pts} RXP · +${result.walletPts} 🪙`)
-                  else showToast('Unchecked — points reversed.')
+                  const cost = +retroRewardPts || 0
+                  const reward = retroRewardTitle.trim() && cost > 0 ? { title: retroRewardTitle.trim(), cost } : undefined
+                  const result = submitRetroFix(prevDay, reward)
+                  if (!result.ok) { showToast('Not enough wallet pts for that reward.'); return }
+                  setRetroRewardTitle(''); setRetroRewardPts('')
+                  showToast(`Yesterday’s changes saved.${reward ? ` 🎁 ${reward.title} redeemed.` : ''}`)
                 }}
-                className={`w-[21px] h-[21px] rounded-full border-[1.5px] flex-shrink-0 flex items-center justify-center text-[11px] transition-all ${t.done ? 'bg-[var(--green-mid)] border-[var(--green-mid)] text-white' : 'border-[var(--border2)] text-transparent'}`}
+                className="vx-submit-btn"
+                style={{ padding: '0.625rem' }}
               >
-                {t.done ? '✓' : ''}
+                ✓ Submit Changes
               </button>
-              <span className={`text-[13px] flex-1 ${t.done ? 'line-through' : ''}`}>{t.title}</span>
-              <span className={`text-xs font-semibold ${t.done ? 'text-[var(--green)]' : 'text-[var(--text3)]'}`}>+{calcPts(t)}</span>
             </div>
-          ))}
+          </Accordion>
+        )}
 
-          <div className="border-t border-[var(--border)] mt-2.5 pt-2.5">
-            <div className="text-xs text-[var(--text2)] mb-2">Did you redeem a reward yesterday? (optional)</div>
-            <div className="flex gap-2 flex-wrap items-center mb-3">
-              <input
-                value={retroRewardTitle}
-                onChange={e => setRetroRewardTitle(e.target.value)}
-                placeholder="Reward name..."
-                className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none"
-              />
-              <input
-                type="number"
-                value={retroRewardPts}
-                onChange={e => setRetroRewardPts(e.target.value)}
-                placeholder="Pts redeemed"
-                min={0}
-                className="w-[110px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none"
-              />
+        <MoodBar today={today} />
+
+        {/* Today's Focus — the task to do matters more than progress stats, so it leads */}
+        <motion.div
+          className="vx-glass flex items-center gap-2"
+          style={{ background: 'var(--color-accent-dim)', borderColor: 'color-mix(in srgb, var(--color-accent) 30%, transparent)' }}
+          initial={{ opacity: 0, y: 22, scale: 0.97, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.14 }}
+        >
+          <div className="flex-1 min-w-0">
+            <div className="vx-eyebrow">🎯 Today's Focus</div>
+            <div className="text-[15px] font-semibold mt-1 truncate">{focusTask?.title ?? (done.length === tasks.length && tasks.length > 0 ? 'All done!' : '—')}</div>
+            <div className="text-[11px] text-[var(--text3)] mt-1">
+              {focusTask ? (focusTask.isSpecial ? '⭐ special' : ({ high: 'High priority', med: 'Medium priority', low: 'Low priority', special: '⭐ special' } as Record<string,string>)[focusTask.priority]) : ''}
+              {focusTask?.level ? ` · ${focusTask.level}` : ''}
             </div>
-            <button
-              onClick={() => {
-                const cost = +retroRewardPts || 0
-                const reward = retroRewardTitle.trim() && cost > 0 ? { title: retroRewardTitle.trim(), cost } : undefined
-                const result = submitRetroFix(prevDay, reward)
-                if (!result.ok) { showToast('Not enough wallet pts for that reward.'); return }
-                setRetroRewardTitle(''); setRetroRewardPts('')
-                showToast(`Yesterday’s changes saved.${reward ? ` 🎁 ${reward.title} redeemed.` : ''}`)
-              }}
-              className="w-full py-2.5 rounded-[10px] text-sm font-semibold bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]"
-            >
-              ✓ Submit Changes
-            </button>
           </div>
-        </Accordion>
-      )}
+        </motion.div>
 
-      <MoodBar today={today} />
-
-      {/* Today's Focus — the task to do matters more than progress stats, so it leads */}
-      <div className="card mb-3.5 flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] uppercase tracking-wide text-[var(--text3)]">Today's Focus</div>
-          <div className="text-[13px] font-medium mt-0.5 truncate">{focusTask?.title ?? (done.length === tasks.length && tasks.length > 0 ? 'All done!' : '—')}</div>
-          <div className="text-[11px] text-[var(--text3)] mt-0.5">
-            {focusTask ? (focusTask.isSpecial ? '⭐' : ({ high: 'H', med: 'M', low: 'L', special: '⭐' } as Record<string,string>)[focusTask.priority]) : ''}
-            {focusTask?.level ? ` · ${focusTask.level}` : ''}
+        {/* Day progress */}
+        <motion.div
+          className="vx-glass flex items-center gap-5"
+          initial={{ opacity: 0, y: 22, scale: 0.97, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.21 }}
+        >
+          <GradientRing pct={pct} />
+          <div className="flex-1 min-w-0">
+            {/* "Points today" and "Done today" were their own separate stat
+                tiles below (see StatGrid) even though this card already
+                showed the points progress — redundant. Task count now folds
+                into this same line instead of a standalone tile. Both this
+                line and the heading above it are +2px over their previous
+                size per explicit request. */}
+            <div className="text-[15.5px] font-semibold mb-1.5">Day progress</div>
+            <div className="text-[13.5px] text-[var(--text3)] leading-relaxed">
+              {pct >= 100
+                ? "Target hit — submit whenever you're ready."
+                : (
+                  <>
+                    {earned}/{target} pts &amp; {done.length}/{tasks.length} tasks so far.<br />
+                    Keep the streak alive.
+                  </>
+                )}
+            </div>
           </div>
-        </div>
+        </motion.div>
+
+        <StatGrid today={today} onStreakClick={() => setStreakHistoryOpen(true)} />
+        <RankProgress />
+
+        {/* Water Tracker now leads Focus Time — per explicit reordering
+            request. */}
+        <WaterTrackerCard today={today} />
+
+        <FocusTimeCard today={today} />
+
+        <LifeScoreCard />
+
+        {/* Calm Down floating button + breathing overlay — Dashboard only,
+            fixed position (doesn't move on scroll). */}
+        <CalmDownButton />
+
+        {/* Manager */}
+        <motion.div
+          className="vx-glass flex gap-3 items-start"
+          initial={{ opacity: 0, y: 22, scale: 0.97, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.7 }}
+        >
+          <div className="vx-manager-avatar">⚡</div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-[var(--text2)] uppercase tracking-wide">{cfg.managerName}</span>
+              <span className="text-[11px] text-[var(--text3)] ml-auto">{cfg.tone}</span>
+            </div>
+            <div className="text-[13px] text-[var(--text2)] leading-relaxed mt-1">{managerMsg}</div>
+          </div>
+        </motion.div>
+
+        <SubmitArea today={today} />
+
+        {/* Streak history */}
+        <StreakHistoryModal open={streakHistoryOpen} onClose={() => setStreakHistoryOpen(false)} />
       </div>
-
-      {/* Day progress */}
-      <div className="card mb-3.5">
-        <div className="flex justify-between text-xs text-[var(--text2)] mb-1.5">
-          <span>Day progress</span>
-          <span>{pct}%</span>
-        </div>
-        <ProgressBar value={pct} />
-      </div>
-
-      <StatGrid today={today} onStreakClick={() => setStreakHistoryOpen(true)} />
-      <RankProgress />
-
-      <LifeScoreCard />
-
-      {/* Manager */}
-      <div className="card mb-3.5">
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <span className="text-[15px]">⚡</span>
-          <span className="text-[10px] font-semibold text-[var(--text3)] uppercase tracking-wide">{cfg.managerName}</span>
-          <span className="text-[11px] text-[var(--text3)] ml-auto">{cfg.tone}</span>
-        </div>
-        <div className="text-[13px] text-[var(--text2)] leading-relaxed">{managerMsg}</div>
-      </div>
-
-      <SubmitArea today={today} />
-
-      {/* Streak history */}
-      <StreakHistoryModal open={streakHistoryOpen} onClose={() => setStreakHistoryOpen(false)} />
     </div>
   )
 }

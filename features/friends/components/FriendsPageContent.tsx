@@ -67,63 +67,64 @@ export function FriendsPageContent() {
     <div>
       {/* Your code + share link */}
       {myUid && (
-        <div className="rounded-[10px] border border-[var(--border)] bg-[var(--bg2)] p-3 mb-3 text-[12px]">
-          <div className="text-[var(--text3)] mb-1">Your friend code / invite link</div>
+        <div className="vx-tile mb-3 text-[12px]">
+          <div style={{ color: 'var(--vx-fg-4)' }} className="mb-1">Your friend code / invite link</div>
           <div className="flex items-center gap-2 mb-2">
             <code className="flex-1 truncate text-[13px] font-semibold">{myUid}</code>
             <button onClick={() => { navigator.clipboard?.writeText(myUid); showToast('Code copied.') }}
-              className="text-[11px] px-2 py-1 rounded-full border border-[var(--border2)] text-[var(--text2)]">Copy code</button>
+              className="vx-btn vx-btn-ghost text-[11px] px-2 py-1">Copy code</button>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => { navigator.clipboard?.writeText(inviteLink(myUid, myName)); showToast('Invite link copied.') }}
-              className="text-[11px] px-2 py-1 rounded-full border border-[var(--border2)] text-[var(--text2)]">🔗 Copy invite link</button>
+              className="vx-btn vx-btn-ghost text-[11px] px-2 py-1">🔗 Copy invite link</button>
             <button
               onClick={() => {
                 const link = inviteLink(myUid, myName)
                 const msg = `Add me on Personal Planner — just open this link and tap Add Friend 💪\n\n${link}`
                 window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
               }}
-              className="text-[11px] px-2 py-1 rounded-full border border-[var(--border2)] text-[#25D366] flex items-center gap-1 whitespace-nowrap"
+              className="vx-btn vx-btn-ghost text-[11px] px-2 py-1 whitespace-nowrap"
+              style={{ color: '#25D366' }}
               title="Share invite link via WhatsApp">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"/></svg>
               WhatsApp
             </button>
           </div>
-          <div className="text-[10px] text-[var(--text3)] mt-1.5">Anyone who opens your link and taps Add Friend becomes your friend instantly — no approval needed.</div>
+          <div className="text-[10px] mt-1.5" style={{ color: 'var(--vx-fg-4)' }}>Anyone who opens your link and taps Add Friend becomes your friend instantly — no approval needed.</div>
         </div>
       )}
 
       {/* Add a friend */}
-      <div className="rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-3.5 mb-3">
+      <div className="vx-tile p-3.5 mb-3">
         <div className="text-[13px] font-medium mb-2">Add a friend</div>
         {friends.length >= FRIEND_SOFT_CAP ? (
-          <div className="text-[12px] text-[var(--amber)]">You&apos;ve hit the {FRIEND_SOFT_CAP}-friend limit. Remove someone below to add a new one.</div>
+          <div className="text-[12px]" style={{ color: 'var(--vx-amber)' }}>You&apos;ve hit the {FRIEND_SOFT_CAP}-friend limit. Remove someone below to add a new one.</div>
         ) : (
           <div className="flex gap-2 flex-wrap">
             <input value={toUid} onChange={e => setToUid(e.target.value)} placeholder="Paste their friend code"
-              className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+              className="flex-1 min-w-[160px] vx-field" />
             <input value={toName} onChange={e => setToName(e.target.value)} placeholder="Their name (optional)"
-              className="flex-1 min-w-[120px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+              className="flex-1 min-w-[120px] vx-field" />
             <button disabled={busy || !toUid.trim()} onClick={() => setConfirmAdd(true)}
-              className="text-[13px] px-3 py-2 rounded-md bg-[var(--green-mid)] text-white disabled:opacity-50">Add Friend</button>
+              className="vx-btn vx-btn-primary text-[13px]">Add Friend</button>
           </div>
         )}
       </div>
 
       {/* Your friends */}
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--vx-fg-4)' }}>
         Your friends ({friends.length}/{FRIEND_SOFT_CAP})
       </div>
-      {!loaded && <div className="text-[12px] text-[var(--text3)] py-3 text-center">Loading…</div>}
-      {loaded && friends.length === 0 && <div className="text-[12px] text-[var(--text3)] py-3 text-center">No friends yet. Share your invite link above.</div>}
+      {!loaded && <div className="text-[12px] py-3 text-center" style={{ color: 'var(--vx-fg-4)' }}>Loading…</div>}
+      {loaded && friends.length === 0 && <div className="text-[12px] py-3 text-center" style={{ color: 'var(--vx-fg-4)' }}>No friends yet. Share your invite link above.</div>}
       {friends.map(f => <FriendTile key={f.uid} friend={f} onRemove={() => remove(f.uid)} />)}
 
       {/* Add confirmation */}
-      <Modal open={confirmAdd} onClose={() => setConfirmAdd(false)} title="Add friend?">
-        <p className="text-sm text-[var(--text2)] mb-4">Add <strong>{toName.trim() || 'this person'}</strong> as a friend? You&apos;ll both be added to each other&apos;s lists right away.</p>
+      <Modal open={confirmAdd} onClose={() => setConfirmAdd(false)} title="Add friend?" variant="vx">
+        <p className="text-sm mb-4" style={{ color: 'var(--vx-fg-2)' }}>Add <strong>{toName.trim() || 'this person'}</strong> as a friend? You&apos;ll both be added to each other&apos;s lists right away.</p>
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setConfirmAdd(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
-          <button onClick={doAdd} disabled={busy} className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-50">
+          <button onClick={() => setConfirmAdd(false)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
+          <button onClick={doAdd} disabled={busy} className="vx-btn vx-btn-primary text-sm">
             {busy ? 'Adding…' : 'Add Friend'}
           </button>
         </div>
@@ -156,37 +157,37 @@ function FriendTile({ friend, onRemove }: {
   const primaryType = friend.tags[0] ? FRIEND_TAG_META[friend.tags[0]].label : 'Friend'
 
   return (
-    <div className="rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-3 mb-2">
+    <div className="vx-tile mb-2">
       <div className="flex items-center gap-2.5">
         <button onClick={() => setHistoryOpen(true)} className="flex-1 min-w-0 text-left">
           <div className="text-[13px] font-medium break-words [overflow-wrap:anywhere]">{friend.displayName}</div>
-          <div className="text-[11px] text-[var(--text3)] flex items-center gap-2 mt-0.5">
+          <div className="text-[11px] flex items-center gap-2 mt-0.5" style={{ color: 'var(--vx-fg-4)' }}>
             <span>{primaryType}</span>
             <span>·</span>
             <span>{xp == null ? '… XP' : `${xp} XP`}</span>
           </div>
         </button>
         <select value={friend.tags[0] ?? ''} onChange={e => setTags(friend.uid, e.target.value ? [e.target.value as FriendTag] : [])}
-          className="text-[11px] px-2 py-1 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)] outline-none flex-shrink-0"
+          className="vx-field text-[11px] px-2 py-1 flex-shrink-0 w-auto"
           title="Friend type">
           <option value="">Type…</option>
           {FRIEND_TAGS.map(t => <option key={t} value={t}>{FRIEND_TAG_META[t].label}</option>)}
         </select>
         {!reciprocal ? (
           <button onClick={() => addFriend(friend.uid, friend.displayName).then(() => { setReciprocal(true); showToast('Re-added.') })}
-            className="text-[11px] px-2.5 py-1 rounded-full bg-[var(--green-mid)] text-white flex-shrink-0" title="They removed you — re-add">Send request</button>
+            className="vx-btn vx-btn-primary text-[11px] px-2.5 py-1 flex-shrink-0" title="They removed you — re-add">Send request</button>
         ) : (
           <button onClick={() => setConfirmRemove(true)}
-            className="flex-shrink-0 w-6 h-6 rounded-full border border-[var(--red)] text-[var(--red)] flex items-center justify-center text-sm" title="Remove friend" aria-label="Remove friend">×</button>
+            className="vx-btn vx-btn-icon vx-danger flex-shrink-0" title="Remove friend" aria-label="Remove friend">×</button>
         )}
       </div>
 
-      <Modal open={confirmRemove} onClose={() => setConfirmRemove(false)} title="Remove friend?">
-        <p className="text-sm text-[var(--text2)] mb-4">Remove {friend.displayName}? They&apos;ll no longer be in your list. You can re-add them anytime with their code.</p>
+      <Modal open={confirmRemove} onClose={() => setConfirmRemove(false)} title="Remove friend?" variant="vx">
+        <p className="text-sm mb-4" style={{ color: 'var(--vx-fg-2)' }}>Remove {friend.displayName}? They&apos;ll no longer be in your list. You can re-add them anytime with their code.</p>
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setConfirmRemove(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={() => setConfirmRemove(false)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
           <button onClick={() => { onRemove(); setConfirmRemove(false); showToast('Friend removed.') }}
-            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[var(--red)]">Remove</button>
+            className="vx-btn vx-btn-danger text-sm">Remove</button>
         </div>
       </Modal>
 
@@ -214,33 +215,33 @@ function FriendHistoryModal({ open, onClose, friend }: {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`🎯 ${friend.displayName} — challenge history`}>
+    <Modal open={open} onClose={onClose} title={`🎯 ${friend.displayName} — challenge history`} variant="vx">
       <div className="max-h-[55vh] overflow-y-auto">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-1.5">You challenged them</div>
-        {sent.length === 0 && <div className="text-[12px] text-[var(--text3)] mb-3">None yet.</div>}
+        <div className="text-[10px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--vx-fg-4)' }}>You challenged them</div>
+        {sent.length === 0 && <div className="text-[12px] mb-3" style={{ color: 'var(--vx-fg-4)' }}>None yet.</div>}
         {sent.map(c => (
-          <div key={c.id} className="flex items-center justify-between gap-2 py-1.5 text-[12px] border-b border-[var(--border)]">
+          <div key={c.id} className="flex items-center justify-between gap-2 py-1.5 text-[12px] border-b" style={{ borderColor: 'var(--vx-border)' }}>
             <span className="break-words [overflow-wrap:anywhere] min-w-0">
-              <span className="text-[10px] font-semibold mr-1 text-[var(--text3)]">{c.type === 'goal' ? 'GOAL' : 'TASK'}</span>
+              <span className="text-[10px] font-semibold mr-1" style={{ color: 'var(--vx-fg-4)' }}>{c.type === 'goal' ? 'GOAL' : 'TASK'}</span>
               {c.title}{c.type === 'goal' && c.completionPoints != null ? ` · +${c.completionPoints} pts` : ''}
             </span>
-            <span className="text-[var(--text2)] flex-shrink-0">{statusOf(c)}</span>
+            <span className="flex-shrink-0" style={{ color: 'var(--vx-fg-3)' }}>{statusOf(c)}</span>
           </div>
         ))}
 
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-1.5 mt-3">They challenged you</div>
-        {fromThem.length === 0 && <div className="text-[12px] text-[var(--text3)]">None yet.</div>}
+        <div className="text-[10px] font-semibold uppercase tracking-wide mb-1.5 mt-3" style={{ color: 'var(--vx-fg-4)' }}>They challenged you</div>
+        {fromThem.length === 0 && <div className="text-[12px]" style={{ color: 'var(--vx-fg-4)' }}>None yet.</div>}
         {fromThem.map(x => (
-          <div key={x.id} className="flex items-center justify-between gap-2 py-1.5 text-[12px] border-b border-[var(--border)]">
+          <div key={x.id} className="flex items-center justify-between gap-2 py-1.5 text-[12px] border-b" style={{ borderColor: 'var(--vx-border)' }}>
             <span className="break-words [overflow-wrap:anywhere] min-w-0">
-              <span className="text-[10px] font-semibold mr-1 text-[var(--text3)]">{x.kind.toUpperCase()}</span>{x.title}
+              <span className="text-[10px] font-semibold mr-1" style={{ color: 'var(--vx-fg-4)' }}>{x.kind.toUpperCase()}</span>{x.title}
             </span>
-            <span className="text-[var(--text2)] flex-shrink-0">{x.done ? 'Completed ✓' : 'In progress'}</span>
+            <span className="flex-shrink-0" style={{ color: 'var(--vx-fg-3)' }}>{x.done ? 'Completed ✓' : 'In progress'}</span>
           </div>
         ))}
       </div>
       <div className="flex justify-end mt-3">
-        <button onClick={onClose} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Close</button>
+        <button onClick={onClose} className="vx-btn vx-btn-ghost text-sm">Close</button>
       </div>
     </Modal>
   )

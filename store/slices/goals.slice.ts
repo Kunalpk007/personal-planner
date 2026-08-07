@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { AppState, Goal, GoalChecklistItem } from '../types'
 import { uid } from '@/lib/engine/cutoff'
 import { WALLET_RATIO } from '@/constants/points'
+import { checkGoalMilestone } from '@/lib/engine/badges'
 
 export interface GoalsSlice {
   addGoal:    (g: Omit<Goal, 'id' | 'createdAt'>) => void
@@ -11,7 +12,8 @@ export interface GoalsSlice {
   setGoalNote: (goalId: string, note: string) => void
   completeGoal: (goalId: string) => { pts: number; walletPts: number } | null
   uncompleteGoal: (goalId: string) => { pts: number; walletPts: number } | null
-  addChallengeGoal: (title: string, taskTitles: string[], endDate: string | undefined, challengedBy: string, points: number, delayPoints: number) => string
+  addChallengeGoal: (title: string, taskTitles: string[], endDate: string | undefined, challengedBy: string, points: number, delayPoints: number, challengeId?: string) => string
+  cancelGoal: (goalId: string, reason: string) => boolean
 }
 
 /** For a 'checklist' goal, `target` is always kept equal to the checklist
@@ -101,12 +103,21 @@ export const createGoalsSlice: StateCreator<AppState, [], [], GoalsSlice> = (set
     // own goals). Carry-forward never reduces — only a crossed deadline does.
     const pts = delayed ? (goal.delayPoints ?? Math.round(full * 0.5)) : full
     const walletPts = Math.floor(pts / WALLET_RATIO)
+    const completedAt = new Date().toISOString()
 
-    set(s => ({
-      goals:        s.goals.map(g => g.id === goalId ? { ...g, completedAt: new Date().toISOString(), awardedPts: pts } : g),
-      rankXP:       s.rankXP + pts,
-      rewardWallet: s.rewardWallet + walletPts,
-    }))
+    set(s => {
+      const doneCount = s.goals.filter(g => g.completedAt).length + 1
+      const milestone = checkGoalMilestone(doneCount)
+      const badges = milestone && !s.badges.some(b => b.id === milestone.id)
+        ? [...s.badges, { ...milestone, date: completedAt.slice(0, 10) }]
+        : s.badges
+      return {
+        goals:        s.goals.map(g => g.id === goalId ? { ...g, completedAt, awardedPts: pts } : g),
+        rankXP:       s.rankXP + pts,
+        rewardWallet: s.rewardWallet + walletPts,
+        badges,
+      }
+    })
     return { pts, walletPts }
   },
 
@@ -123,7 +134,7 @@ export const createGoalsSlice: StateCreator<AppState, [], [], GoalsSlice> = (set
     return { pts, walletPts }
   },
 
-  addChallengeGoal(title, taskTitles, endDate, challengedBy, points, delayPoints) {
+  addChallengeGoal(title, taskTitles, endDate, challengedBy, points, delayPoints, challengeId) {
     const checklist: GoalChecklistItem[] = taskTitles
       .map(t => t.trim())
       .filter(Boolean)
@@ -138,6 +149,7 @@ export const createGoalsSlice: StateCreator<AppState, [], [], GoalsSlice> = (set
       checklist,
       endDate,
       challengedBy,
+      challengeId,
       pointsMode: 'whole',
       points,
       delayPoints,
@@ -145,5 +157,19 @@ export const createGoalsSlice: StateCreator<AppState, [], [], GoalsSlice> = (set
     }
     set(s => ({ goals: [...s.goals, goal] }))
     return goal.id
+  },
+
+  // Abandoning a goal with a reason instead of finishing it. Only an active
+  // (incomplete, not-already-cancelled) goal can be cancelled. If the goal
+  // came from a challenge (challengeId set), social.store.ts's watcher picks
+  // up the cancelledAt transition and notifies the challenger with the
+  // reason — see markChallengeCancelled in lib/firebase/social.ts.
+  cancelGoal(goalId, reason) {
+    const goal = get().goals.find(g => g.id === goalId)
+    if (!goal || goal.completedAt || goal.cancelledAt) return false
+    set(s => ({
+      goals: s.goals.map(g => g.id === goalId ? { ...g, cancelledAt: new Date().toISOString(), cancelReason: reason } : g),
+    }))
+    return true
   },
 })
