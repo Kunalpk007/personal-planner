@@ -148,6 +148,44 @@ should feel "lively" and "premium."
 
 ## Progress log
 
+- **2026-08-07 — Bug fix: Submit My Day bar floating too far above the bottom nav,
+  reported only in production on a real device.** Full root-cause writeup + a
+  dedicated entry live in `BUGS.md` (new file this batch — a running bug log kept
+  separate from this narrative progress log, easier to scan on its own for past
+  bugs). Summary here:
+  - **Root cause**: `.vx-bottom-nav` (the floating bottom-nav pill) was the one fixed
+    bottom element in `app/globals.css` that did NOT add `env(safe-area-inset-bottom)`
+    to its `bottom` offset — it was hardcoded to a flat `16px`, while
+    `.fixed-bottom-bar` (the Submit My Day bar), `.vx-calm-fab`, and
+    `.vx-task-fab-wrap` all correctly do. On desktop/emulator testing that inset is
+    always `0`, so the asymmetry is invisible and everything lines up with the
+    intended ~8.6px gap (as measured in the Third batch). On a real phone reporting a
+    non-zero safe-area inset (Android gesture-nav phones and iPhones with a home
+    indicator both commonly report 24–48px), the Submit bar keeps rising with the
+    inset while the nav stays pinned at a flat 16px — opening a gap that grows in
+    direct proportion to that device's inset. This explains the "works locally, broken
+    in production" report precisely: it was never a dev-vs-prod code difference (see
+    Verification below — ruled out explicitly), it's a desktop-testing-vs-real-device
+    difference that only becomes visible once you're actually holding a phone with a
+    real safe-area inset, which production use surfaces and casual dev-time testing
+    doesn't.
+  - **Fix**: `.vx-bottom-nav`'s `bottom` changed to
+    `calc(16px + env(safe-area-inset-bottom))`, matching the other three elements it
+    needs to stay vertically in lock-step with.
+  - **Verification**: throwaway Playwright script using Chrome DevTools Protocol's
+    `Emulation.setSafeAreaInsetsOverride` to simulate real device insets (tested
+    0/24/34/48px) against a live server, measuring the actual `getBoundingClientRect()`
+    gap between the Submit bar and the nav pill. Before the fix the gap grew 1:1 with
+    the inset (8.6 / 32.6 / 42.6 / 56.6px); after the fix it's a constant 8.6px at every
+    tested inset. Deliberately ran this exact measurement against **both** `next dev`
+    (Turbopack, this repo's `dev` script) and a real `next build --webpack && next
+    start` production server, before and after the fix, specifically to check for a
+    dev/prod bundler-level CSS discrepancy (this session has hit genuine ones before,
+    e.g. the `postcss.config.mjs` gap and the modal cascade-layers bug) — results were
+    byte-identical in both modes at every inset, so this was confirmed to be purely a
+    device-inset issue, not a build-tool difference. `tsc --noEmit` clean, `vitest run
+    --coverage` 418/418 at 100% coverage, `next build --webpack` clean.
+
 - **2026-08-07 — Fourth batch (12 items) + one infra fix discovered along the way:
   streak-modal reorder/freeze-confirm/freeze-count, modals ignoring Light/Cream
   theme, Focus overlay text contrast, water-tracker icon, Submit-bar width/premium
