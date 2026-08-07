@@ -1278,7 +1278,18 @@ textarea.vx-field { resize: vertical; min-height: 64px; }
    earlier "nav always stays dark glass" decision per explicit user
    feedback. */
 .vx-bottom-nav {
-  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 50;
+  /* Must include env(safe-area-inset-bottom) — every other fixed bottom
+     element that's supposed to sit above this nav (`.fixed-bottom-bar`'s
+     Submit-My-Day bar, `.vx-calm-fab`, `.vx-task-fab-wrap`) already adds the
+     safe-area inset to its own `bottom` offset, but this rule didn't, so on
+     any real device reporting a non-zero inset (Android gesture-nav phones,
+     iPhones with a home indicator) the nav stayed pinned at a flat 16px
+     while everything above it kept rising by the inset amount — opening a
+     growing gap between the Submit bar and the nav in exact proportion to
+     the device's inset. Invisible in desktop/emulator testing (inset is
+     always 0 there), only visible on a real device — see project.md +
+     BUGS.md for the full root-cause writeup. */
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50;
   display: flex; gap: 2px; padding: 6px; border-radius: 22px;
   background: var(--nav-bg-solid); border: 1px solid var(--vx-border); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   box-shadow: 0 12px 32px rgba(0,0,0,0.18);
