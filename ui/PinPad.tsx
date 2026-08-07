@@ -10,6 +10,10 @@ interface PinPadProps {
   onSuccess:   (hash?: string) => void
   onCancel?:   () => void
   title?:      string
+  /** Digit count to require — defaults to the current PIN_LENGTH. Verify mode
+   *  passes a shorter length when checking a legacy PIN during the 5→6 digit
+   *  migration flow (see ui/PinGate.tsx). */
+  length?:     number
 }
 
 function formatRemaining(ms: number): string {
@@ -20,7 +24,8 @@ function formatRemaining(ms: number): string {
   return `${m}m`
 }
 
-export function PinPad({ mode, storedHash, onSuccess, onCancel, title = 'Journal PIN' }: PinPadProps) {
+export function PinPad({ mode, storedHash, onSuccess, onCancel, title = 'Journal PIN', length }: PinPadProps) {
+  const digits = length ?? PIN_LENGTH
   const [buf,   setBuf]   = useState('')
   const [error, setError] = useState('')
 
@@ -44,7 +49,7 @@ export function PinPad({ mode, storedHash, onSuccess, onCancel, title = 'Journal
 
     const next = buf + d
     setBuf(next)
-    if (next.length < PIN_LENGTH) return
+    if (next.length < digits) return
 
     setBuf('')
     if (mode === 'set') {
@@ -69,12 +74,12 @@ export function PinPad({ mode, storedHash, onSuccess, onCancel, title = 'Journal
     return (
       <div className="text-center">
         <div className="text-[15px] font-semibold mb-1">{title}</div>
-        <div className="text-sm text-[var(--red)] mb-2">🔒 Too many incorrect attempts</div>
-        <div className="text-xs text-[var(--text3)] mb-4">
+        <div className="text-sm mb-2" style={{ color: 'var(--red)' }}>🔒 Too many incorrect attempts</div>
+        <div className="text-xs mb-4" style={{ color: 'var(--vx-fg-4)' }}>
           Try again in {formatRemaining(lockoutUntil! - now)}
         </div>
         {onCancel && (
-          <button onClick={onCancel} className="text-sm text-[var(--text3)] hover:text-[var(--text)]">
+          <button onClick={onCancel} className="vx-btn vx-btn-ghost text-sm">
             Cancel
           </button>
         )}
@@ -85,30 +90,32 @@ export function PinPad({ mode, storedHash, onSuccess, onCancel, title = 'Journal
   return (
     <div className="text-center">
       <div className="text-[15px] font-semibold mb-1">{title}</div>
-      <div className="text-xs text-[var(--text3)] mb-4">
-        {mode === 'set' ? `Set a ${PIN_LENGTH}-digit PIN for your journal` : `Enter your ${PIN_LENGTH}-digit PIN`}
+      <div className="text-xs mb-4" style={{ color: 'var(--vx-fg-4)' }}>
+        {mode === 'set' ? `Set a ${digits}-digit PIN for your journal` : `Enter your ${digits}-digit PIN`}
       </div>
       <div className="flex gap-3 justify-center mb-2">
-        {Array.from({ length: PIN_LENGTH }).map((_, i) => (
-          <div key={i} className={`w-3.5 h-3.5 rounded-full border-[1.5px] transition-colors
-            ${i < buf.length ? 'bg-[var(--green-mid)] border-[var(--green-mid)]' : 'bg-[var(--bg3)] border-[var(--border2)]'}`}
+        {Array.from({ length: digits }).map((_, i) => (
+          <div key={i} className="w-3.5 h-3.5 rounded-full border-[1.5px] transition-colors"
+            style={i < buf.length
+              ? { background: 'var(--vx-grad-emerald)', borderColor: 'transparent' }
+              : { background: 'var(--vx-card)', borderColor: 'var(--vx-border)' }}
           />
         ))}
       </div>
-      <div className="text-xs text-red-500 h-4 mb-2">{error}</div>
+      <div className="text-xs h-4 mb-2" style={{ color: 'var(--red)' }}>{error}</div>
       <div className="grid grid-cols-3 gap-2 mb-3">
         {KEYS.map(k => (
           <button
             key={k}
             onClick={() => handleDigit(k)}
-            className="py-3.5 text-lg font-medium rounded-lg border border-[var(--border2)] bg-[var(--bg2)] hover:bg-[var(--bg3)] active:scale-95 transition-all"
+            className="py-3.5 text-lg font-medium rounded-lg vx-keypad-btn active:scale-95 transition-all"
           >
             {k === 'back' ? '←' : k === 'clear' ? 'CLR' : k}
           </button>
         ))}
       </div>
       {onCancel && (
-        <button onClick={onCancel} className="text-sm text-[var(--text3)] hover:text-[var(--text)]">
+        <button onClick={onCancel} className="vx-btn vx-btn-ghost text-sm">
           Cancel
         </button>
       )}

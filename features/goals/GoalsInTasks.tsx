@@ -24,11 +24,11 @@ function GoalDeadline({ endDate }: { endDate: string }) {
   const overdue = today > endDate
   return (
     <span
-      className="px-1.5 py-0.5 rounded-full border whitespace-nowrap text-[11px]"
+      className="vx-chip text-[11px]"
       style={{
-        background: overdue ? 'var(--red-bg)' : 'var(--amber-bg)',
-        color:      overdue ? 'var(--red)'    : 'var(--amber)',
-        borderColor: overdue ? '#E24B4A' : '#EF9F27',
+        background: overdue ? 'rgba(248,113,113,0.12)' : 'rgba(251,191,36,0.12)',
+        color:      overdue ? 'var(--red)' : 'var(--vx-amber)',
+        borderColor: overdue ? 'rgba(248,113,113,0.4)' : 'rgba(251,191,36,0.4)',
       }}
     >
       {overdue ? '⏳ Overdue · reduced pts' : `⏳ by ${endDate}`}
@@ -41,15 +41,26 @@ function fullPoints(g: Goal): number {
   return g.points ?? 0
 }
 
+const CANCEL_REASONS = [
+  'Changed my mind',
+  'No longer relevant',
+  'Too ambitious for now',
+  'Ran out of time',
+  'Other',
+]
+
 export function GoalTile({ goal }: { goal: Goal }) {
   const toggleItem     = usePlannerStore(s => s.toggleGoalChecklistItem)
   const completeGoal   = usePlannerStore(s => s.completeGoal)
   const uncompleteGoal = usePlannerStore(s => s.uncompleteGoal)
   const removeGoal     = usePlannerStore(s => s.removeGoal)
+  const cancelGoal    = usePlannerStore(s => s.cancelGoal)
   const setGoalNote  = usePlannerStore(s => s.setGoalNote)
 
   const [editOpen, setEditOpen]     = useState(false)
   const [delOpen, setDelOpen]       = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
   const [noteOpen, setNoteOpen]     = useState(false)
   const [noteDraft, setNoteDraft]   = useState(goal.note ?? '')
 
@@ -83,13 +94,14 @@ export function GoalTile({ goal }: { goal: Goal }) {
 
   return (
     <>
-      <div className={`flex items-start gap-2.5 p-3 rounded-[10px] border mb-2 bg-[var(--bg)] border-[var(--border)] ${completed ? 'opacity-45' : ''} border-l-[3px] !border-l-[var(--blue)]`}>
+      <div className={`vx-tile vx-accent-l flex items-start gap-2.5 mb-2 ${completed ? 'opacity-45' : ''}`} data-tone="cyan">
         {/* Complete checkbox — enabled only once every subtask is done */}
         <button
           onClick={handleComplete}
           disabled={!completed && !allDone}
           title={completed ? 'Completed — click to unmark' : allDone ? 'Mark goal complete' : 'Finish all subtasks first'}
-          className={`w-[21px] h-[21px] rounded-full border-[1.5px] flex-shrink-0 mt-0.5 flex items-center justify-center text-[11px] transition-all ${completed ? 'bg-[var(--green-mid)] border-[var(--green-mid)] text-white' : allDone ? 'border-[var(--green-mid)] text-[var(--green)]' : 'border-[var(--border2)] text-transparent'}`}
+          className={`vx-check mt-0.5 ${completed ? 'vx-done' : allDone ? 'vx-pending' : ''}`}
+          style={allDone && !completed ? { borderColor: 'var(--vx-emerald)', color: 'var(--vx-emerald)' } : undefined}
         >
           {completed ? '✓' : allDone ? '✓' : ''}
         </button>
@@ -97,18 +109,29 @@ export function GoalTile({ goal }: { goal: Goal }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center flex-wrap gap-1 min-w-0">
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--blue-bg)] text-[var(--blue)] border border-[var(--blue)]">GOAL</span>
-              <span className={`text-[13px] break-words [overflow-wrap:anywhere] ${completed ? 'line-through' : ''}`}>{goal.title}</span>
+              <span className="vx-chip" data-tone="violet">GOAL</span>
+              <span className={`text-[13px] break-words [overflow-wrap:anywhere] ${completed ? 'line-through' : ''}`} style={{ color: 'var(--vx-fg-1)' }}>{goal.title}</span>
             </div>
+            {/* Goals from an accepted friend challenge aren't editable/deletable
+                — only completing (or cancelling, with a reason — see below)
+                is allowed (see the "Challenged by" chip in the meta row
+                below). */}
             <div className="flex items-center gap-0.5 flex-shrink-0">
-              <button onClick={() => setEditOpen(true)} className="btn-icon" title="Edit goal" aria-label="Edit goal"><EditIcon /></button>
-              <button onClick={() => setDelOpen(true)} className="btn-icon danger" title="Delete goal" aria-label="Delete goal">×</button>
+              {!goal.challengedBy && (
+                <>
+                  <button onClick={() => setEditOpen(true)} className="vx-btn vx-btn-icon" title="Edit goal" aria-label="Edit goal"><EditIcon /></button>
+                  <button onClick={() => setDelOpen(true)} className="vx-btn vx-btn-icon vx-danger" title="Delete goal" aria-label="Delete goal">×</button>
+                </>
+              )}
+              {!completed && (
+                <button onClick={() => setCancelOpen(true)} className="vx-btn vx-btn-icon" title="Cancel goal" aria-label="Cancel goal">🚫</button>
+              )}
             </div>
           </div>
 
           {/* Meta row */}
-          <div className="flex flex-wrap gap-1.5 mt-0.5 text-[11px] text-[var(--text3)] min-w-0">
-            {goal.challengedBy && <span className="px-1.5 py-0.5 rounded-full bg-[var(--purple-bg)] text-[var(--purple)] border border-[#CECBF6]">🎯 From {goal.challengedBy}</span>}
+          <div className="flex flex-wrap gap-1.5 mt-0.5 text-[11px] min-w-0" style={{ color: 'var(--vx-fg-4)' }}>
+            {goal.challengedBy && <span className="vx-chip" data-tone="violet">🎯 From {goal.challengedBy}</span>}
             {goal.endDate && <GoalDeadline endDate={goal.endDate} />}
             {items.length > 0 && <span>{doneCount}/{items.length} done</span>}
           </div>
@@ -119,11 +142,11 @@ export function GoalTile({ goal }: { goal: Goal }) {
               {items.map(item => (
                 <label key={item.id} className="flex items-center gap-1.5 text-[12px] cursor-pointer">
                   <input type="checkbox" checked={item.done} onChange={() => handleToggleItem(item.id)} />
-                  <span className="break-words [overflow-wrap:anywhere] min-w-0 flex-1" style={{ textDecoration: item.done ? 'line-through' : 'none', color: item.done ? 'var(--text3)' : 'var(--text2)' }}>
+                  <span className="break-words [overflow-wrap:anywhere] min-w-0 flex-1" style={{ textDecoration: item.done ? 'line-through' : 'none', color: item.done ? 'var(--vx-fg-4)' : 'var(--vx-fg-2)' }}>
                     {item.title}
                   </span>
                   {goal.pointsMode === 'perSubtask' && item.points != null && (
-                    <span className="text-[11px] text-[var(--text3)] flex-shrink-0">+{item.points}</span>
+                    <span className="text-[11px] flex-shrink-0" style={{ color: 'var(--vx-fg-4)' }}>+{item.points}</span>
                   )}
                 </label>
               ))}
@@ -132,7 +155,7 @@ export function GoalTile({ goal }: { goal: Goal }) {
 
           {/* Note */}
           {goal.note && !noteOpen && (
-            <div className="mt-1.5 text-[11px] text-[var(--text2)] bg-[var(--bg2)] rounded-md px-2 py-1 break-words [overflow-wrap:anywhere]">📝 {goal.note}</div>
+            <div className="mt-1.5 text-[11px] rounded-md px-2 py-1 break-words [overflow-wrap:anywhere]" style={{ color: 'var(--vx-fg-2)', background: 'var(--vx-card)' }}>📝 {goal.note}</div>
           )}
           {noteOpen && (
             <div className="mt-1.5">
@@ -140,11 +163,11 @@ export function GoalTile({ goal }: { goal: Goal }) {
                 value={noteDraft}
                 onChange={e => setNoteDraft(e.target.value.slice(0, MAX_GOAL_NOTE))}
                 placeholder="Goal note..."
-                className="w-full text-[12px] px-2 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none min-h-[48px] resize-y"
+                className="vx-field text-[12px] min-h-[48px] resize-y"
               />
               <div className="flex gap-2 justify-end mt-1">
-                <button onClick={() => { setNoteOpen(false); setNoteDraft(goal.note ?? '') }} className="text-[11px] px-2 py-1 rounded-md border border-[var(--border2)] bg-[var(--bg2)]">Cancel</button>
-                <button onClick={saveNote} className="text-[11px] px-2 py-1 rounded-md bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">Save note</button>
+                <button onClick={() => { setNoteOpen(false); setNoteDraft(goal.note ?? '') }} className="vx-btn vx-btn-ghost text-[11px] px-2 py-1">Cancel</button>
+                <button onClick={saveNote} className="vx-btn vx-btn-primary text-[11px] px-2 py-1">Save note</button>
               </div>
             </div>
           )}
@@ -152,21 +175,54 @@ export function GoalTile({ goal }: { goal: Goal }) {
           {/* Footer */}
           <div className="flex items-center justify-between gap-2 mt-1.5">
             {!goal.note && !noteOpen
-              ? <button onClick={() => setNoteOpen(true)} className="text-[11px] text-[var(--text3)]">＋ Note</button>
-              : !noteOpen ? <button onClick={() => { setNoteDraft(goal.note ?? ''); setNoteOpen(true) }} className="text-[11px] text-[var(--text3)]">Edit note</button> : <span />}
-            <span className={`text-xs font-semibold whitespace-nowrap ${completed ? 'text-[var(--green)]' : 'text-[var(--text3)]'}`}>+{pts}{goal.endDate && new Date().toISOString().slice(0,10) > goal.endDate ? ' (reduced)' : ''}</span>
+              ? <button onClick={() => setNoteOpen(true)} className="text-[11px]" style={{ color: 'var(--vx-fg-4)' }}>＋ Note</button>
+              : !noteOpen ? <button onClick={() => { setNoteDraft(goal.note ?? ''); setNoteOpen(true) }} className="text-[11px]" style={{ color: 'var(--vx-fg-4)' }}>Edit note</button> : <span />}
+            <span className="text-xs font-semibold whitespace-nowrap" style={{ color: completed ? 'var(--vx-emerald)' : 'var(--vx-fg-4)' }}>+{pts}{goal.endDate && new Date().toISOString().slice(0,10) > goal.endDate ? ' (reduced)' : ''}</span>
           </div>
         </div>
       </div>
 
       <GoalFormModal open={editOpen} onClose={() => setEditOpen(false)} goal={goal} />
 
-      <Modal open={delOpen} onClose={() => setDelOpen(false)} title="Delete goal?">
-        <p className="text-sm text-[var(--text2)] mb-4">Delete &ldquo;{goal.title}&rdquo;? This can&apos;t be undone.</p>
+      <Modal open={delOpen} onClose={() => setDelOpen(false)} title="Delete goal?" variant="vx">
+        <p className="text-sm mb-4" style={{ color: 'var(--vx-fg-2)' }}>Delete &ldquo;{goal.title}&rdquo;? This can&apos;t be undone.</p>
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setDelOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={() => setDelOpen(false)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
           <button onClick={() => { removeGoal(goal.id); setDelOpen(false); showToast('Goal deleted.') }}
-            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">Delete</button>
+            className="vx-btn vx-btn-danger text-sm">Delete</button>
+        </div>
+      </Modal>
+
+      <Modal open={cancelOpen} onClose={() => { setCancelOpen(false); setCancelReason('') }} title="Cancel goal?" variant="vx">
+        <p className="text-sm mb-3" style={{ color: 'var(--vx-fg-2)' }}>
+          Why are you cancelling &ldquo;{goal.title}&rdquo;?
+          {goal.challengedBy && ` ${goal.challengedBy} will be notified.`}
+        </p>
+        <div className="flex flex-col gap-1.5 mb-3">
+          {CANCEL_REASONS.map(r => (
+            <button
+              key={r}
+              onClick={() => setCancelReason(r)}
+              className={`vx-btn ${cancelReason === r ? 'vx-btn-primary' : 'vx-btn-ghost'} text-left justify-start w-full text-[13px]`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => { setCancelOpen(false); setCancelReason('') }} className="vx-btn vx-btn-ghost text-sm">Go back</button>
+          <button
+            onClick={() => {
+              if (!cancelReason) return
+              const ok = cancelGoal(goal.id, cancelReason)
+              setCancelOpen(false); setCancelReason('')
+              if (ok) showToast('Goal cancelled.')
+            }}
+            disabled={!cancelReason}
+            className="vx-btn vx-btn-danger text-sm"
+          >
+            Cancel goal
+          </button>
         </div>
       </Modal>
     </>
@@ -245,49 +301,48 @@ export function GoalFormModal({ open, onClose, goal }: { open: boolean; onClose:
   const minDate = new Date().toISOString().slice(0, 10)
 
   return (
-    <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Goal' : '🎯 Add Goal'}>
+    <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Goal' : '🎯 Add Goal'} variant="vx">
       <div className="flex flex-col gap-2.5">
         <div>
           <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Goal title..."
-            style={{ borderWidth: 1, borderStyle: 'solid', borderColor: titleOver ? '#E24B4A' : 'var(--border2)' }}
-            className="w-full text-[13px] px-2.5 py-2 rounded-md bg-[var(--bg2)] text-[var(--text)] outline-none" />
-          {titleOver && <div className="text-[11px] text-[var(--red)] mt-0.5">Max length {MAX_GOAL_TITLE}</div>}
+            className={`vx-field ${titleOver ? 'vx-error' : ''}`} />
+          {titleOver && <div className="text-[11px] mt-0.5" style={{ color: 'var(--red)' }}>Max length {MAX_GOAL_TITLE}</div>}
         </div>
 
         {/* Points model */}
         <div className="flex gap-1.5">
           <button onClick={() => setMode('whole')}
-            className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium border ${mode === 'whole' ? 'bg-[var(--green-bg)] text-[var(--green)] border-[var(--green-mid)]' : 'border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)]'}`}>
+            className={`vx-pill flex-1 justify-center text-xs ${mode === 'whole' ? 'vx-tinted' : ''}`} data-tone={mode === 'whole' ? 'emerald' : undefined}>
             Points for whole goal
           </button>
           <button onClick={() => setMode('perSubtask')}
-            className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium border ${mode === 'perSubtask' ? 'bg-[var(--green-bg)] text-[var(--green)] border-[var(--green-mid)]' : 'border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)]'}`}>
+            className={`vx-pill flex-1 justify-center text-xs ${mode === 'perSubtask' ? 'vx-tinted' : ''}`} data-tone={mode === 'perSubtask' ? 'emerald' : undefined}>
             Points per subtask
           </button>
         </div>
 
         {mode === 'whole' && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--text2)]">Goal points:</span>
+            <span className="text-xs" style={{ color: 'var(--vx-fg-2)' }}>Goal points:</span>
             <input type="number" min={0} max={500} value={wholePts} onChange={e => setWholePts(e.target.value)}
-              className="w-24 text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
-            <span className="text-[11px] text-[var(--text3)]">(half if past deadline)</span>
+              className="w-24 vx-field" />
+            <span className="text-[11px]" style={{ color: 'var(--vx-fg-4)' }}>(half if past deadline)</span>
           </div>
         )}
 
         {/* Subtasks */}
-        <div className="border-t border-[var(--border)] pt-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-1.5">Subtasks</div>
+        <div className="border-t pt-2.5" style={{ borderColor: 'var(--vx-border)' }}>
+          <div className="text-[10px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--vx-fg-4)' }}>Subtasks</div>
           {subs.length > 0 && (
             <div className="flex flex-col gap-1 mb-2">
               {subs.map(s => (
-                <div key={s.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)]">
+                <div key={s.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md vx-tile">
                   <span className="text-[12px] flex-1 break-words [overflow-wrap:anywhere] min-w-0">{s.title}</span>
                   {mode === 'perSubtask' && (
                     <input type="number" min={0} value={s.points} onChange={e => setSubs(l => l.map(x => x.id === s.id ? { ...x, points: e.target.value } : x))}
-                      className="w-14 text-[12px] px-1.5 py-1 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                      className="w-14 vx-field text-[12px] px-1.5 py-1" />
                   )}
-                  <button onClick={() => setSubs(l => l.filter(x => x.id !== s.id))} className="btn-icon danger">×</button>
+                  <button onClick={() => setSubs(l => l.filter(x => x.id !== s.id))} className="vx-btn vx-btn-icon vx-danger">×</button>
                 </div>
               ))}
             </div>
@@ -296,32 +351,31 @@ export function GoalFormModal({ open, onClose, goal }: { open: boolean; onClose:
             <div className="flex-1">
               <input value={subDraft} onChange={e => setSubDraft(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSub()}
                 placeholder="Subtask..."
-                style={{ borderWidth: 1, borderStyle: 'solid', borderColor: subDraftOver ? '#E24B4A' : 'var(--border2)' }}
-                className="w-full text-[13px] px-2.5 py-2 rounded-md bg-[var(--bg2)] text-[var(--text)] outline-none" />
-              {subDraftOver && <div className="text-[11px] text-[var(--red)] mt-0.5">Max length {MAX_GOAL_SUBTASK}</div>}
+                className={`vx-field ${subDraftOver ? 'vx-error' : ''}`} />
+              {subDraftOver && <div className="text-[11px] mt-0.5" style={{ color: 'var(--red)' }}>Max length {MAX_GOAL_SUBTASK}</div>}
             </div>
             {mode === 'perSubtask' && (
               <input type="number" min={0} value={subPtsDraft} onChange={e => setSubPtsDraft(e.target.value)} title="Points"
-                className="w-14 text-[13px] px-1.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+                className="w-14 vx-field px-1.5" />
             )}
-            <button onClick={addSub} disabled={!subDraft.trim() || subDraftOver} className="px-3 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] disabled:opacity-40">+ Add</button>
+            <button onClick={addSub} disabled={!subDraft.trim() || subDraftOver} className="vx-btn vx-btn-ghost text-xs">+ Add</button>
           </div>
         </div>
 
         <div className="flex gap-2 items-center flex-wrap">
-          <span className="text-xs text-[var(--text2)]">Deadline (optional):</span>
+          <span className="text-xs" style={{ color: 'var(--vx-fg-2)' }}>Deadline (optional):</span>
           <input type="date" value={endDate} min={minDate} onChange={e => setEndDate(e.target.value)}
-            className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+            className="vx-field" />
         </div>
 
         <textarea value={note} onChange={e => setNote(e.target.value.slice(0, MAX_GOAL_NOTE))} placeholder="Note (optional)"
-          className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none min-h-[48px] resize-y" />
+          className="vx-field min-h-[48px] resize-y" />
       </div>
 
       <div className="flex gap-2 justify-end mt-4">
-        <button onClick={onClose} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+        <button onClick={onClose} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
         <button onClick={handleSave} disabled={!canSave}
-          className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-40">
+          className="vx-btn vx-btn-primary text-sm">
           {isEdit ? 'Save Changes' : 'Add Goal'}
         </button>
       </div>

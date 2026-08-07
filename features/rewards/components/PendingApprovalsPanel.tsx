@@ -41,18 +41,18 @@ export function PendingApprovalsPanel() {
   }
 
   return (
-    <div className="rounded-[10px] border border-[var(--border)] bg-[var(--bg2)] p-3 mb-3">
+    <div className="vx-tile mb-3">
       <div className="text-[12px] font-medium mb-2">Awaiting approval</div>
       {active.map(a => (
         <div key={a.id} className="flex items-center gap-2 flex-wrap py-1.5 text-[12px]">
           <span className="flex-1">{a.title} — {a.cost} pts</span>
-          <span className="text-[var(--text3)]">via {a.notaryName}, until {new Date(a.cooldownEndsAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-          <button onClick={() => handleCancel(a.id)} className="text-[11px] px-2 py-1 rounded-full border border-[var(--border2)] text-[var(--red)]">Cancel</button>
+          <span style={{ color: 'var(--vx-fg-4)' }}>via {a.notaryName}, until {new Date(a.cooldownEndsAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+          <button onClick={() => handleCancel(a.id)} className="vx-btn vx-btn-danger text-[11px] px-2 py-1">Cancel</button>
           {notaries.length > 1 && (
             <select
               defaultValue=""
               onChange={e => { if (e.target.value) handleReassign(a.id, e.target.value) }}
-              className="text-[11px] px-1.5 py-1 rounded-md border border-[var(--border2)] bg-[var(--bg)] text-[var(--text)] outline-none"
+              className="vx-field text-[11px] px-1.5 py-1 w-auto"
             >
               <option value="">Reassign to…</option>
               {notaries.filter(f => f.uid !== a.notaryUid).map(f => <option key={f.uid} value={f.uid}>{f.displayName}</option>)}

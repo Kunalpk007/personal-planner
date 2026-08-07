@@ -1,7 +1,7 @@
 'use client'
 import { useState }        from 'react'
+import { motion }          from 'framer-motion'
 import { usePlannerStore } from '@/store'
-import { ProgressBar }     from '@/ui/ProgressBar'
 import { Modal }           from '@/ui/Modal'
 import defaults            from '@/data/defaults.json'
 
@@ -20,45 +20,43 @@ export function RankProgress() {
 
   return (
     <>
-      <button
+      <motion.button
         onClick={() => setOpen(true)}
-        className="card mb-3.5 w-full text-left cursor-pointer transition-opacity hover:opacity-90"
+        className="vx-glass vx-glass-tap w-full text-left cursor-pointer"
+        initial={{ opacity: 0, y: 22, scale: 0.97, filter: 'blur(4px)' }}
+        animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.56 }}
       >
-        <div className="flex justify-between items-center flex-wrap gap-1 mb-2">
+        <div className="flex justify-between items-center flex-wrap gap-1 mb-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border"
-              style={{ background: rank.bg, color: rank.c, borderColor: rank.bc }}
-            >
-              {rank.label}
-            </span>
+            <span className="vx-rank-badge">🏅 {rank.label}</span>
             <span className="text-xs text-[var(--text2)]">{rankXP} XP</span>
           </div>
-          <span className="text-xs text-[var(--text2)]">
+          <span className="text-xs text-[var(--text3)]">
             {nextRank ? `${rankXP - rank.min}/${nextRank.min - rank.min} XP to ${nextRank.label}` : '🏆 MAX RANK'}
           </span>
         </div>
-        <ProgressBar value={pct} />
-      </button>
+        <div className="vx-bar-track">
+          <motion.div
+            className="vx-bar-fill"
+            initial={{ width: 0 }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.7 }}
+          />
+        </div>
+      </motion.button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="🏆 Rank milestones">
+      <Modal open={open} onClose={() => setOpen(false)} title="🏆 Rank milestones" variant="vx">
         <div className="space-y-2">
           {RANKS.map((r, i) => {
             const isCurrent = rankXP >= r.min && (i === RANKS.length - 1 || rankXP < RANKS[i + 1].min)
             const isPast    = rankXP >= r.min
             const isNext    = rankIdx + 1 === i
             return (
-              <div
-                key={r.label}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-lg border"
-                style={{
-                  background:   isCurrent ? r.bg  : 'var(--bg2)',
-                  borderColor:  isCurrent ? r.bc  : 'var(--border)',
-                }}
-              >
-                <span>{isPast ? '✅' : isNext ? '🎯' : '⬜'}</span>
+              <div key={r.label} className={`vx-milestone ${isCurrent ? 'vx-current' : ''}`}>
+                <div className="vx-m-icon">{isPast ? '✅' : isNext ? '🎯' : '⬜'}</div>
                 <div>
-                  <div className="text-[13px] font-medium" style={{ color: isCurrent ? r.c : 'var(--text)' }}>
+                  <div className="text-[13px] font-medium">
                     {r.label}{isCurrent ? ' ← you' : ''}
                   </div>
                   <div className="text-[11px] text-[var(--text3)]">{r.min} XP</div>

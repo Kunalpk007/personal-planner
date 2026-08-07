@@ -39,7 +39,8 @@ export function StreakHistoryModal({ open, onClose }: { open: boolean; onClose: 
   const useFreeze      = usePlannerStore(s => s.useFreeze)
   const declareRestDay = usePlannerStore(s => s.declareRestDay)
 
-  const [restConfirmOpen, setRestConfirmOpen] = useState(false)
+  const [restConfirmOpen, setRestConfirmOpen]     = useState(false)
+  const [freezeConfirmOpen, setFreezeConfirmOpen] = useState(false)
 
   const months = new Map<string, typeof history>()
   for (const e of [...history].sort((a, b) => b.date.localeCompare(a.date))) {
@@ -50,8 +51,41 @@ export function StreakHistoryModal({ open, onClose }: { open: boolean; onClose: 
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title="🔥 Streak History">
-        <div className="text-[11px] text-[var(--text2)] mb-3 flex flex-wrap gap-3">
+      <Modal open={open} onClose={onClose} title="🔥 Streak History" variant="vx">
+        {/* Today's Actions now leads the modal (was previously below the
+            calendar, requiring a scroll to reach the actually-actionable
+            part) — per explicit feedback that the useful buttons should be
+            immediately visible on open. */}
+        <div className="flex flex-col gap-2 mb-4">
+          <div className="text-[10px] uppercase tracking-wide text-[var(--text3)] mb-0.5">Today&apos;s Actions</div>
+          <button
+            onClick={() => setRestConfirmOpen(true)}
+            disabled={isSettledToday || !restAvailable || streak <= 0}
+            className="vx-pill vx-tinted w-full text-left justify-start disabled:opacity-35"
+            data-tone="amber"
+          >
+            🟡 Take Rest Day
+            {streak <= 0 && <span className="block text-[11px] opacity-80 font-normal">No streak to protect</span>}
+            {streak > 0 && !restAvailable && <span className="block text-[11px] opacity-80 font-normal">Already used this week</span>}
+          </button>
+          <button
+            onClick={() => setFreezeConfirmOpen(true)}
+            disabled={isSettledToday || freezeTokens <= 0 || streak <= 0}
+            className="vx-pill vx-tinted w-full text-left justify-start disabled:opacity-35"
+            data-tone="cyan"
+          >
+            ❄ Use Freeze
+            {streak <= 0 && <span className="block text-[11px] opacity-80 font-normal">No streak to protect</span>}
+            {streak > 0 && freezeTokens <= 0 && <span className="block text-[11px] opacity-80 font-normal">No freeze tokens available</span>}
+          </button>
+          {/* Always-visible freeze balance — previously only discoverable by
+              hitting the disabled "no tokens" state on the button itself. */}
+          <div className="text-[11px] text-[var(--text3)] pl-0.5">
+            ❄ {freezeTokens} streak freeze{freezeTokens === 1 ? '' : 's'} available
+          </div>
+        </div>
+
+        <div className="text-[11px] text-[var(--text2)] mb-3 flex flex-wrap gap-3 border-t border-[var(--vx-border)] pt-3">
           <span>✅ Complete</span>
           <span>🟡 Rest day</span>
           <span>❄ Freeze used</span>
@@ -73,7 +107,7 @@ export function StreakHistoryModal({ open, onClose }: { open: boolean; onClose: 
                     <div
                       key={e.date}
                       title={`${formatDate(e.date)} · ${e.rxp} pts`}
-                      className="flex flex-col items-center justify-center w-10 h-[52px] rounded-md border border-[var(--border)] bg-[var(--bg)] text-[13px] gap-[1px]"
+                      className="vx-cal-chip"
                     >
                       <span>{dayIcon(e, cfg)}</span>
                       <span className="text-[9px] text-[var(--text3)] leading-none font-medium">{+e.date.slice(8, 10)}</span>
@@ -85,41 +119,38 @@ export function StreakHistoryModal({ open, onClose }: { open: boolean; onClose: 
             )
           })}
         </div>
-
-        <div className="border-t border-[var(--border)] mt-3 pt-3 flex flex-col gap-2">
-          <div className="text-[10px] uppercase tracking-wide text-[var(--text3)] mb-0.5">Today&apos;s Actions</div>
-          <button
-            onClick={() => setRestConfirmOpen(true)}
-            disabled={isSettledToday || !restAvailable || streak <= 0}
-            className="w-full text-left px-3.5 py-2.5 rounded-md text-sm font-medium border disabled:opacity-35 bg-[var(--amber-bg)] text-[var(--amber)] border-[#EF9F27]"
-          >
-            🟡 Take Rest Day
-            {streak <= 0 && <span className="block text-[11px] opacity-80 font-normal">No streak to protect</span>}
-            {streak > 0 && !restAvailable && <span className="block text-[11px] opacity-80 font-normal">Already used this week</span>}
-          </button>
-          <button
-            onClick={() => { useFreeze(today); onClose(); showToast('❄ Freeze used. Streak protected.') }}
-            disabled={isSettledToday || freezeTokens <= 0 || streak <= 0}
-            className="w-full text-left px-3.5 py-2.5 rounded-md text-sm font-medium border disabled:opacity-35 bg-[var(--blue-bg)] text-[var(--blue)] border-[var(--blue)]"
-          >
-            ❄ Use Freeze
-            {streak <= 0 && <span className="block text-[11px] opacity-80 font-normal">No streak to protect</span>}
-            {streak > 0 && freezeTokens <= 0 && <span className="block text-[11px] opacity-80 font-normal">No freeze tokens available</span>}
-          </button>
-        </div>
       </Modal>
 
-      <Modal open={restConfirmOpen} onClose={() => setRestConfirmOpen(false)} title="🟡 Take Rest Day">
+      <Modal open={restConfirmOpen} onClose={() => setRestConfirmOpen(false)} title="🟡 Take Rest Day" variant="vx">
         <p className="text-sm text-[var(--text2)] mb-3">
           Streak is protected — unchanged. 1 rest day per week, resets Monday.
         </p>
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setRestConfirmOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={() => setRestConfirmOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--vx-border)] bg-transparent text-sm text-[var(--text2)]">Cancel</button>
           <button
             onClick={() => { declareRestDay(today); setRestConfirmOpen(false); onClose(); showToast('🟡 Rest day taken. Streak protected.') }}
-            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]"
+            className="vx-pill vx-tinted"
+            data-tone="amber"
           >
             Take Rest Day
+          </button>
+        </div>
+      </Modal>
+
+      {/* Freeze confirmation — previously fired immediately on click with no
+          confirm step, unlike Rest Day which already had one. */}
+      <Modal open={freezeConfirmOpen} onClose={() => setFreezeConfirmOpen(false)} title="❄ Use Freeze" variant="vx">
+        <p className="text-sm text-[var(--text2)] mb-3">
+          Spend 1 of your {freezeTokens} streak freeze{freezeTokens === 1 ? '' : 's'} to protect today&apos;s streak? This can&apos;t be undone.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => setFreezeConfirmOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--vx-border)] bg-transparent text-sm text-[var(--text2)]">Cancel</button>
+          <button
+            onClick={() => { useFreeze(today); setFreezeConfirmOpen(false); onClose(); showToast('❄ Freeze used. Streak protected.') }}
+            className="vx-pill vx-tinted"
+            data-tone="cyan"
+          >
+            Use Freeze
           </button>
         </div>
       </Modal>

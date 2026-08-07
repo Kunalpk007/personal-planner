@@ -31,6 +31,7 @@
     "minPts": 70,
     "weekendPts": 20,
     "lightDays": [0, 6],
+    "lightDaysChangedAt": null,
     "cutoffHour": 1,
     "tone": "balanced",
     "managerName": "The Manager",
@@ -40,7 +41,8 @@
     "quoteMorning": true,
     "quoteEvening": true,
     "autoExportEnabled": false,
-    "theme": "system",
-    "fontScale": "normal"
+    "theme": "dark",
+    "fontScale": "normal",
+    "waterTargetMl": 2000
   }
 }

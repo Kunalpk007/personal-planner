@@ -3,6 +3,7 @@ import type { AppState, Task, RecurringTemplate, Subtask } from '../types'
 import { uid }       from '@/lib/engine/cutoff'
 import { calcPts, walletPtsFor, todayEarned } from '@/lib/engine/scoring'
 import { goalPtsEarnedOn } from '@/lib/engine/goals'
+import { checkTaskMilestone } from '@/lib/engine/badges'
 
 export interface TasksSlice {
   // Actions
@@ -17,7 +18,7 @@ export interface TasksSlice {
   addSubtask:     (taskId: string, title: string) => void
   removeSubtask:  (taskId: string, subId: string) => void
   // Recurring
-  addRecurring:   (r: Omit<RecurringTemplate, 'id'>) => void
+  addRecurring:   (r: Omit<RecurringTemplate, 'id'>) => string
   removeRecurring:(id: string) => void
   editRecurring:  (id: string, updates: Partial<RecurringTemplate>) => void
   injectRecurring:(today: string) => void
@@ -30,6 +31,7 @@ export interface TasksSlice {
   cancelTaskValidation:  (taskId: string) => void
   // Task challenges
   addChallengeTask: (task: Omit<Task, 'id' | 'createdAt' | 'done' | 'completedAt' | 'subtasks'>, challengeId: string, challengedBy: string) => string
+  cancelTask: (taskId: string, reason: string) => boolean
 }
 
 export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set, get) => ({
@@ -75,11 +77,19 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       const pts         = calcPts(updated)
       const walletPts   = walletPtsFor(pts)
 
-      set(s => ({
-        tasks: s.tasks.map(t => t.id === id ? updated : t),
-        rankXP:       s.rankXP + pts,
-        rewardWallet: s.rewardWallet + walletPts,
-      }))
+      set(s => {
+        const doneCount = s.tasks.filter(t => t.done).length + 1
+        const milestone = checkTaskMilestone(doneCount)
+        const badges = milestone && !s.badges.some(b => b.id === milestone.id)
+          ? [...s.badges, { ...milestone, date: completedAt.slice(0, 10) }]
+          : s.badges
+        return {
+          tasks: s.tasks.map(t => t.id === id ? updated : t),
+          rankXP:       s.rankXP + pts,
+          rewardWallet: s.rewardWallet + walletPts,
+          badges,
+        }
+      })
       return { pts, walletPts }
     } else {
       // Un-completing
@@ -239,7 +249,9 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
   },
 
   addRecurring(r) {
-    set(s => ({ recurring: [...s.recurring, { ...r, id: uid() }] }))
+    const id = uid()
+    set(s => ({ recurring: [...s.recurring, { ...r, id }] }))
+    return id
   },
 
   removeRecurring(id) {
@@ -278,7 +290,10 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
 
   carryTask(taskId, tomorrowKey) {
     const task = get().tasks.find(t => t.id === taskId)
-    if (!task) return
+    // Recurring-origin and cancelled tasks are never carried — recurring
+    // ones are already recreated fresh for the next day by injectRecurring,
+    // and a cancelled task was explicitly abandoned, not just missed.
+    if (!task || task.recurId || task.cancelledAt) return
     const carried: Task = {
       ...task,
       id:          uid(),
@@ -357,5 +372,21 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
     }
     set(s => ({ tasks: [...s.tasks, task] }))
     return task.id
+  },
+
+  // Used mainly for challenged tasks (edit/delete are hidden for those —
+  // see TaskRow in app/(tabs)/tasks/page.tsx), so abandoning one still
+  // requires a reason and keeps a record the challenger can be notified
+  // about (see social.store.ts's challenge watcher, which pushes cancelled
+  // tasks with a challengeId to Firestore). Plain (non-challenged) tasks can
+  // use this too — it just won't trigger a Firestore write for those, same
+  // as they'd get from removeTask, but with a reason kept locally.
+  cancelTask(taskId, reason) {
+    const task = get().tasks.find(t => t.id === taskId)
+    if (!task || task.done || task.cancelledAt) return false
+    set(s => ({
+      tasks: s.tasks.map(t => t.id === taskId ? { ...t, cancelledAt: new Date().toISOString(), cancelReason: reason } : t),
+    }))
+    return true
   },
 })

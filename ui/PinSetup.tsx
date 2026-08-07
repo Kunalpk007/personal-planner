@@ -35,31 +35,31 @@ export function PinSetup({ onComplete, onCancel, title = 'Set up PIN' }: PinSetu
   return (
     <div>
       <div className="text-[15px] font-semibold mb-1 text-center">Security question</div>
-      <div className="text-xs text-[var(--text3)] mb-4 text-center">
+      <div className="text-xs mb-4 text-center" style={{ color: 'var(--vx-fg-4)' }}>
         Used to recover your PIN if you forget it.
       </div>
       <div className="mb-3">
-        <label className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-1 block">Question</label>
+        <label className="text-[11px] font-semibold uppercase tracking-wide mb-1 block" style={{ color: 'var(--vx-fg-4)' }}>Question</label>
         <input
           value={question}
           onChange={e => setQuestion(e.target.value)}
           placeholder="e.g. What was your first pet's name?"
-          className="w-full text-[13px] p-2.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none"
+          className="w-full vx-field"
         />
       </div>
       <div className="mb-3">
-        <label className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-1 block">Answer</label>
+        <label className="text-[11px] font-semibold uppercase tracking-wide mb-1 block" style={{ color: 'var(--vx-fg-4)' }}>Answer</label>
         <input
           value={answer}
           onChange={e => setAnswer(e.target.value)}
           placeholder="Your answer"
-          className="w-full text-[13px] p-2.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none"
+          className="w-full vx-field"
         />
       </div>
-      <div className="text-xs text-red-500 h-4 mb-2">{error}</div>
+      <div className="text-xs h-4 mb-2" style={{ color: 'var(--red)' }}>{error}</div>
       <div className="flex gap-2 justify-end">
-        {onCancel && <button onClick={onCancel} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>}
-        <button onClick={handleSubmit} className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+        {onCancel && <button onClick={onCancel} className="vx-btn vx-btn-ghost text-sm">Cancel</button>}
+        <button onClick={handleSubmit} className="vx-btn vx-btn-primary text-sm">
           Save
         </button>
       </div>

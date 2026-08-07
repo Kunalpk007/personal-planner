@@ -48,13 +48,14 @@ export interface BugReport {
   email: string
   category: string
   message: string
+  imageUrl?: string
   createdAt?: unknown
   status?: string
 }
 
-export async function submitBugReport(uid: string, email: string, category: string, message: string): Promise<void> {
+export async function submitBugReport(uid: string, email: string, category: string, message: string, imageUrl?: string): Promise<void> {
   const ref = doc(collection(getClientDb(), 'bugReports'))
-  await setDoc(ref, { id: ref.id, uid, email, category, message, status: 'open', createdAt: serverTimestamp() })
+  await setDoc(ref, { id: ref.id, uid, email, category, message, status: 'open', createdAt: serverTimestamp(), ...(imageUrl ? { imageUrl } : {}) })
 }
 
 // ── Admin dashboard reads (gated to the admin uid by security rules) ───────

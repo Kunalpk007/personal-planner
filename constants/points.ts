@@ -44,6 +44,20 @@ export const STREAK_BROKEN_XP_PENALTY = 10 // per day, every day the streak stay
 export const SICK_ALLOWANCE_PER_MONTH = 2  // free "sick" mood days/month — no XP penalty
 export const SHOWED_UP_BONUS_PCT      = 0.05 // wallet-only bonus, 5% of the day's target, on first open
 
-export const PIN_LENGTH           = 5               // digits
+// ─── Focus Time (Dashboard) ─────────────────────────────────────────────────
+// A completed, uninterrupted focus session credits both the reward wallet and
+// rank XP. Keyed by session length in minutes.
+export const FOCUS_REWARDS: Record<25 | 45 | 60, { pts: number; xp: number }> = {
+  25: { pts: 2,  xp: 4  },
+  45: { pts: 5,  xp: 10 },
+  60: { pts: 10, xp: 20 },
+}
+
+export const PIN_LENGTH           = 6               // digits
+/** Digit count used before the 5→6 digit PIN upgrade. Existing users with a
+ *  PIN hashed at this length are asked to re-verify it once, then set a new
+ *  PIN_LENGTH-digit PIN — see store/slices/journal.slice.ts (journalPinLength)
+ *  and ui/PinGate.tsx's migration steps. */
+export const OLD_PIN_LENGTH        = 5
 export const PIN_LOCKOUT_THRESHOLD = 5              // failed attempts before lockout
 export const PIN_LOCKOUT_MS        = 2 * 60 * 60 * 1000 // 2 hours

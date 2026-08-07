@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { usePlannerStore } from '@/store'
 import { Accordion }       from '@/ui/Accordion'
 import { Modal }           from '@/ui/Modal'
@@ -8,9 +9,9 @@ import { PinPad }          from '@/ui/PinPad'
 import { PinSetup }        from '@/ui/PinSetup'
 import { exportJSON, importJSON } from '@/lib/persistence/export'
 import { pad } from '@/lib/engine/cutoff'
-import { PIN_LENGTH, PIN_LOCKOUT_THRESHOLD } from '@/constants/points'
-import { getBackupFolderName, pickBackupFolder, fsBackupSupported } from '@/lib/persistence/fsBackup'
+import { PIN_LENGTH, OLD_PIN_LENGTH, PIN_LOCKOUT_THRESHOLD } from '@/constants/points'
 import { deleteAllUserData, submitBugReport } from '@/lib/firebase/firestore'
+import { uploadBugReportImage } from '@/lib/firebase/storage'
 import { getClientAuth } from '@/lib/firebase/client'
 import { signOut, deleteUser } from 'firebase/auth'
 import { syncNow, destroySync } from '@/lib/sync/sync'
@@ -20,6 +21,7 @@ import pkg from '@/package.json'
 import type { AppConfig } from '@/store/types'
 import { FLAGS } from '@/constants/feature-flags'
 import { APP_URL, APP_SHARE_MESSAGE } from '@/constants/social'
+import { getWeekMonday } from '@/lib/engine/cutoff'
 
 const SUPPORT_EMAIL = 'kunalpk007@gmail.com'
 const MAX_ZONE_NAME = 15
@@ -40,9 +42,13 @@ export default function SettingsPage() {
   const rankXP      = usePlannerStore(s => s.rankXP)
   const badges      = usePlannerStore(s => s.badges)
   const pauseStreak = usePlannerStore(s => s.pauseStreak)
-  const invalidate  = usePlannerStore(s => s.invalidateStreak)
   const resetRank   = usePlannerStore(s => s.resetRankXP)
   const journalPin  = usePlannerStore(s => s.journalPin)
+  const journalPinLength = usePlannerStore(s => s.journalPinLength)
+  // A PIN hashed before the 5→6 digit upgrade needs the shorter length when
+  // verifying it here too (see ui/PinGate.tsx's migrate-verify step for the
+  // Journal's own equivalent flow).
+  const verifyPinLength = journalPinLength && journalPinLength === PIN_LENGTH ? PIN_LENGTH : OLD_PIN_LENGTH
   const setJournalPin = usePlannerStore(s => s.setJournalPin)
   const setJournalSecurity = usePlannerStore(s => s.setJournalSecurity)
   const changeLog   = usePlannerStore(s => s.changeLog)
@@ -54,18 +60,27 @@ export default function SettingsPage() {
   useEffect(() => { setDraft(cfg) }, [cfg])
   const dirty = JSON.stringify(draft) !== JSON.stringify(cfg)
 
+  // Light Days can only actually change once per Monday-start calendar week
+  // (see store/slices/config.slice.ts#setConfig) — reflect that here so the
+  // picker reads as locked (buttons disabled) rather than letting the user
+  // fiddle with a selection that'll silently get dropped on save.
+  const lightDaysLockedThisWeek = !!cfg.lightDaysChangedAt
+    && getWeekMonday(cfg.lightDaysChangedAt.slice(0, 10)) === getWeekMonday(new Date().toISOString().slice(0, 10))
+
   function saveSettings() {
-    setConfig(draft)
-    showToast('Settings saved ✓')
+    const result = setConfig(draft)
+    if (result.blockedLightDays) {
+      setDraft(d => ({ ...d, lightDays: cfg.lightDays }))
+      showToast('Light Days can only be changed once a week (week starts Monday) — everything else saved.')
+    } else {
+      showToast('Settings saved ✓')
+    }
   }
 
   const [zoneName,   setZoneName]  = useState('')
   const [zoneColor,  setZoneColor] = useState('#639922')
   const [pauseReason, setPauseReason] = useState('')
   const [pauseOpen,  setPauseOpen] = useState(false)
-  const [invText,    setInvText]   = useState('')
-  const [invOpen,    setInvOpen]   = useState(false)
-  const [invPinOk,   setInvPinOk]  = useState(false)
   const [rrText,     setRrText]    = useState('')
   const [rrOpen,     setRrOpen]    = useState(false)
   const [rrPinOk,    setRrPinOk]   = useState(false)
@@ -150,11 +165,15 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <div className="inline-flex bg-[var(--bg3)] rounded-[10px] p-1 mb-3.5 flex-wrap">
+      <div className="vx-modeswitch mb-3.5" style={{ display: 'inline-flex', flexWrap: 'wrap', width: 'auto', rowGap: 6 }}>
         {TABS.map(t => (
           <button key={t.k} onClick={() => setTab(t.k as any)}
-            className={`px-4 py-1.5 text-[13px] font-medium rounded-[7px] transition-all ${tab === t.k ? 'bg-[var(--bg)] text-[var(--text)] shadow-sm' : 'text-[var(--text2)]'}`}>
-            {t.l}
+            className={`vx-modeswitch-item ${tab === t.k ? 'vx-active' : ''}`} style={{ flex: 'none', padding: '0.5rem 1rem' }}>
+            {tab === t.k && (
+              <motion.div layoutId="vx-settings-tab-indicator" className="vx-modeswitch-indicator"
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }} />
+            )}
+            <span className="relative z-10">{t.l}</span>
           </button>
         ))}
       </div>
@@ -163,20 +182,16 @@ export default function SettingsPage() {
         <div className="pb-20">
           <SectionLabel>Appearance</SectionLabel>
           <SettingCard>
-            <SettingRow label="Theme" sub="Takes effect immediately">
+            <SettingRow label="Theme" sub="Applies immediately across the whole app">
               <div className="flex gap-1.5">
-                {(['dark', 'light', 'system'] as const).map(t => (
+                {(['dark', 'light', 'cream'] as const).map(t => (
                   <button
                     key={t}
                     onClick={() => { setConfig({ theme: t }); setDraft(d => ({ ...d, theme: t })) }}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium border transition-all"
-                    style={{
-                      background:  (cfg.theme ?? 'dark') === t ? 'var(--green-bg)' : 'var(--bg2)',
-                      color:       (cfg.theme ?? 'dark') === t ? 'var(--green)'    : 'var(--text2)',
-                      borderColor: (cfg.theme ?? 'dark') === t ? 'var(--green-mid)': 'var(--border2)',
-                    }}
+                    className={`vx-pill text-xs ${(cfg.theme ?? 'dark') === t ? 'vx-tinted' : ''}`}
+                    data-tone={(cfg.theme ?? 'dark') === t ? 'emerald' : undefined}
                   >
-                    {t === 'dark' ? '🌙 Dark' : t === 'light' ? '☀️ Light' : '🖥 System'}
+                    {t === 'dark' ? '🌙 Dark' : t === 'light' ? '☀️ Light' : '☕ Cream'}
                   </button>
                 ))}
               </div>
@@ -187,12 +202,8 @@ export default function SettingsPage() {
                   <button
                     key={f}
                     onClick={() => { setConfig({ fontScale: f }); setDraft(d => ({ ...d, fontScale: f })) }}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium border transition-all"
-                    style={{
-                      background:  (cfg.fontScale ?? 'normal') === f ? 'var(--green-bg)' : 'var(--bg2)',
-                      color:       (cfg.fontScale ?? 'normal') === f ? 'var(--green)'    : 'var(--text2)',
-                      borderColor: (cfg.fontScale ?? 'normal') === f ? 'var(--green-mid)': 'var(--border2)',
-                    }}
+                    className={`vx-pill text-xs ${(cfg.fontScale ?? 'normal') === f ? 'vx-tinted' : ''}`}
+                    data-tone={(cfg.fontScale ?? 'normal') === f ? 'emerald' : undefined}
                   >
                     {f === 'normal' ? 'A Normal' : f === 'large' ? 'A Large' : 'A Extra large'}
                   </button>
@@ -224,7 +235,9 @@ export default function SettingsPage() {
             <SettingRow label="Light Day minimum" sub={`Currently: ${draft.weekendPts} pts required to submit on a Light Day`}>
               <input type="number" value={draft.weekendPts} onChange={e => setDraft(d => ({ ...d, weekendPts: +e.target.value }))} min={5} max={60} className="setting-input" />
             </SettingRow>
-            <SettingRow label="Light Days" sub={`${draft.lightDays.length}/2 selected — these days use the Light Day minimum above instead of the regular one`}>
+            <SettingRow label="Light Days" sub={lightDaysLockedThisWeek
+              ? 'Already changed this week — changes again next Monday.'
+              : `${draft.lightDays.length}/2 selected — these days use the Light Day minimum above instead of the regular one`}>
               <div className="flex gap-1">
                 {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((label, i) => {
                   const active = draft.lightDays.includes(i)
@@ -232,12 +245,17 @@ export default function SettingsPage() {
                     <button
                       key={i}
                       type="button"
+                      disabled={lightDaysLockedThisWeek}
                       onClick={() => setDraft(d => {
                         if (d.lightDays.includes(i)) return { ...d, lightDays: d.lightDays.filter(x => x !== i) }
                         if (d.lightDays.length >= 2) return d
                         return { ...d, lightDays: [...d.lightDays, i].sort((a, b) => a - b) }
                       })}
-                      className={`w-8 h-8 rounded-md text-[11px] font-medium border ${active ? 'bg-[var(--green-bg)] text-[var(--green)] border-[var(--green-mid)]' : 'border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)]'}`}
+                      className={`w-8 h-8 rounded-md text-[11px] font-medium border ${active ? '' : 'vx-btn-ghost'}`}
+                      style={{
+                        ...(active ? { background: 'var(--color-accent-dim)', color: 'var(--vx-emerald)', borderColor: 'color-mix(in srgb, var(--vx-emerald) 40%, transparent)' } : undefined),
+                        ...(lightDaysLockedThisWeek ? { opacity: 0.4, cursor: 'not-allowed' } : undefined),
+                      }}
                     >
                       {label}
                     </button>
@@ -260,6 +278,19 @@ export default function SettingsPage() {
             </SettingRow>
           </SettingCard>
 
+          <SectionLabel>Wellness</SectionLabel>
+          <SettingCard>
+            <SettingRow label="Daily water target" sub={`Currently: ${(draft.waterTargetMl / 1000).toFixed(2)} litres/day — drives the Water Intake tile and its completion animation`}>
+              <input
+                type="number"
+                value={draft.waterTargetMl / 1000}
+                onChange={e => setDraft(d => ({ ...d, waterTargetMl: Math.round(Math.max(0.25, +e.target.value) * 1000) }))}
+                min={0.25} max={10} step={0.25}
+                className="setting-input"
+              />
+            </SettingRow>
+          </SettingCard>
+
           <SectionLabel>Mood multipliers</SectionLabel>
           <SettingCard>
             <SettingRow label="⚡ Motivated multiplier" sub="Default: 1.2×">
@@ -270,37 +301,20 @@ export default function SettingsPage() {
             </SettingRow>
           </SettingCard>
 
-          <SectionLabel>Pomodoro</SectionLabel>
-          <SettingCard>
-            <SettingRow label="Focus duration (minutes)" sub="Default: 25, range 5–60">
-              <input type="number" value={draft.pomoDuration} onChange={e => setDraft(d => ({ ...d, pomoDuration: +e.target.value }))} min={5} max={60} className="setting-input" />
-            </SettingRow>
-          </SettingCard>
-
           <SectionLabel>Security</SectionLabel>
           <SettingCard>
             <SettingRow label="App PIN" sub={journalPin ? 'Set — protects Journal and destructive streak/XP actions' : 'Not set — Journal and destructive actions are unprotected'}>
               <div className="flex gap-2">
-                <button onClick={() => openPinModal('set-or-change')} className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+                <button onClick={() => openPinModal('set-or-change')} className="vx-btn vx-btn-ghost text-xs">
                   {journalPin ? 'Change PIN' : 'Set PIN'}
                 </button>
                 {journalPin && (
-                  <button onClick={() => openPinModal('remove')} className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">
+                  <button onClick={() => openPinModal('remove')} className="vx-btn vx-btn-danger text-xs">
                     Remove PIN
                   </button>
                 )}
               </div>
             </SettingRow>
-          </SettingCard>
-
-          <SectionLabel>Auto-export</SectionLabel>
-          <SettingCard>
-            <SettingRow label="Auto-export on submit" sub="Writes a dated backup JSON to a folder you choose each session (Chrome/Edge only)">
-              <select value={draft.autoExportEnabled ? '1' : '0'} onChange={e => setDraft(d => ({ ...d, autoExportEnabled: e.target.value === '1' }))} className="setting-input">
-                <option value="1">On</option><option value="0">Off</option>
-              </select>
-            </SettingRow>
-            {draft.autoExportEnabled && <AutoExportFolderRow />}
           </SettingCard>
 
           <SectionLabel>Motivational quotes</SectionLabel>
@@ -320,39 +334,38 @@ export default function SettingsPage() {
           <SectionLabel>Zone management</SectionLabel>
           <div className="mb-3">
             {zones.map(z => (
-              <div key={z.id} className="flex items-center gap-2.5 p-2.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] mb-2">
+              <div key={z.id} className="vx-tile flex items-center gap-2.5 mb-2">
                 <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: z.color }} />
                 <span className="flex-1 text-[13px]">{z.name}</span>
                 {FLAGS.LIFE_SCORE && (
-                  <label className="flex items-center gap-1.5 text-[11px] text-[var(--text3)]">
+                  <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--vx-fg-4)' }}>
                     Weight
                     <input
                       type="number" min={0} max={10} step={0.5} value={z.weight ?? 1}
                       onChange={e => setZoneWeight(z.id, +e.target.value)}
-                      className="w-14 text-[12px] px-1.5 py-1 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none"
+                      className="w-14 vx-field text-[12px] px-1.5 py-1"
                     />
                   </label>
                 )}
-                <button onClick={() => removeZone(z.id)} className="btn-icon danger">×</button>
+                <button onClick={() => removeZone(z.id)} className="vx-btn vx-btn-icon vx-danger">×</button>
               </div>
             ))}
             <div className="flex gap-2 flex-wrap items-start mt-2">
               <div className="flex-1 min-w-[160px]">
                 <input value={zoneName} onChange={e => setZoneName(e.target.value)} placeholder="Zone name..."
-                  style={{ borderWidth: 1, borderStyle: 'solid', borderColor: zoneName.length > MAX_ZONE_NAME ? '#E24B4A' : 'var(--border2)' }}
-                  className="w-full text-[13px] px-2.5 py-2 rounded-md bg-[var(--bg2)] text-[var(--text)] outline-none" />
-                {zoneName.length > MAX_ZONE_NAME && <div className="text-[11px] text-[var(--red)] mt-0.5">Max length {MAX_ZONE_NAME}</div>}
+                  className={`w-full vx-field ${zoneName.length > MAX_ZONE_NAME ? 'vx-error' : ''}`} />
+                {zoneName.length > MAX_ZONE_NAME && <div className="text-[11px] mt-0.5" style={{ color: 'var(--red)' }}>Max length {MAX_ZONE_NAME}</div>}
               </div>
-              <input type="color" value={zoneColor} onChange={e => setZoneColor(e.target.value)} style={{ width: 36, height: 36, padding: 0 }} className="border-2 border-[var(--border2)] bg-none cursor-pointer rounded-full overflow-hidden" />
+              <input type="color" value={zoneColor} onChange={e => setZoneColor(e.target.value)} style={{ width: 36, height: 36, padding: 0 }} className="border-2 border-[var(--vx-border)] bg-none cursor-pointer rounded-full overflow-hidden" />
               <button
                 disabled={!zoneName.trim() || zoneName.length > MAX_ZONE_NAME}
                 onClick={() => { if (!zoneName.trim() || zoneName.length > MAX_ZONE_NAME) return; addZone(zoneName.trim(), zoneColor); setZoneName(''); showToast('Zone added.') }}
-                className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-40">
+                className="vx-btn vx-btn-primary text-xs">
                 + Add zone
               </button>
             </div>
             {FLAGS.LIFE_SCORE && (
-              <p className="text-[11px] text-[var(--text3)] mt-2">Weights control each zone&apos;s share of your Life Score on the dashboard. Default is 1 (equal weight).</p>
+              <p className="text-[11px] mt-2" style={{ color: 'var(--vx-fg-4)' }}>Weights control each zone&apos;s share of your Life Score on the dashboard. Default is 1 (equal weight).</p>
             )}
           </div>
 
@@ -364,14 +377,14 @@ export default function SettingsPage() {
                   onClick={() => {
                     navigator.clipboard?.writeText(APP_URL); showToast('App link copied.')
                   }}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+                  className="vx-btn vx-btn-ghost text-xs">
                   Copy link
                 </button>
                 <button
                   onClick={() => {
                     window.open(`https://wa.me/?text=${encodeURIComponent(APP_SHARE_MESSAGE)}`, '_blank', 'noopener,noreferrer')
                   }}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[#25D366]">
+                  className="vx-btn vx-btn-ghost text-xs" style={{ color: '#25D366' }}>
                   📱 Send App URL via WhatsApp
                 </button>
               </div>
@@ -381,20 +394,18 @@ export default function SettingsPage() {
           <SectionLabel>Account</SectionLabel>
           <SettingCard>
             <SettingRow label="Sign out" sub="End your current session">
-              <button onClick={handleSignOut}
-                className="px-3.5 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+              <button onClick={handleSignOut} className="vx-btn vx-btn-ghost text-xs">
                 Sign out
               </button>
             </SettingRow>
             <SettingRow label="Disable account" sub="Clears local data. Cloud data is preserved — sign in again to restore.">
-              <button onClick={() => setDisableOpen(true)}
-                className="px-3.5 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+              <button onClick={() => setDisableOpen(true)} className="vx-btn vx-btn-ghost text-xs">
                 Disable
               </button>
             </SettingRow>
             <SettingRow label="Delete account" sub="Permanently removes all data from cloud and this device. Irreversible.">
               <button onClick={() => setDeleteOpen(true)}
-                className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">
+                className="vx-btn vx-btn-danger text-xs">
                 Delete
               </button>
             </SettingRow>
@@ -410,13 +421,7 @@ export default function SettingsPage() {
           <button
             onClick={saveSettings}
             disabled={!dirty}
-            className="w-full py-3 rounded-[10px] text-sm font-semibold border-[1.5px] transition-all disabled:opacity-40"
-            style={{
-              background:  dirty ? 'var(--green-bg)' : 'var(--bg3)',
-              color:       dirty ? 'var(--green)'    : 'var(--text3)',
-              borderColor: dirty ? 'var(--green-mid)': 'var(--border2)',
-              cursor:      dirty ? 'pointer' : 'not-allowed',
-            }}
+            className={`vx-btn w-full py-3 text-sm ${dirty ? 'vx-btn-primary' : 'vx-btn-ghost'}`}
           >
             💾 {dirty ? 'Save Settings' : 'Saved'}
           </button>
@@ -424,31 +429,30 @@ export default function SettingsPage() {
       )}
 
       {/* Disable confirmation */}
-      <Modal open={disableOpen} onClose={() => setDisableOpen(false)} title="Disable account?">
+      <Modal open={disableOpen} onClose={() => setDisableOpen(false)} title="Disable account?" variant="vx">
         <p className="text-sm text-[var(--text2)] mb-4">
           Your planner data will be cleared from this device. Your cloud backup in Firestore will be preserved
           so you can restore everything by signing in again.
         </p>
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setDisableOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
-          <button onClick={handleDisable}
-            className="px-3.5 py-1.5 rounded-md text-sm font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">
+          <button onClick={() => setDisableOpen(false)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
+          <button onClick={handleDisable} className="vx-btn vx-btn-ghost text-sm">
             Disable
           </button>
         </div>
       </Modal>
 
       {/* Delete confirmation — type DELETE to proceed */}
-      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete account?">
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete account?" variant="vx">
         <p className="text-sm text-[var(--red)] mb-2 font-medium">This permanently removes all data — tasks, streaks, XP, journal entries, everything.</p>
         <p className="text-sm text-[var(--text2)] mb-3">Your Firebase Authentication account will also be deleted. This cannot be undone.</p>
         <p className="text-sm text-[var(--text2)] mb-2">Type <strong>DELETE</strong> to confirm.</p>
         <input value={deleteText} onChange={e => setDeleteText(e.target.value)} placeholder="Type DELETE..."
-          className="w-full text-[13px] p-2.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none mb-3" />
+          className="w-full vx-field mb-3" />
         <div className="flex gap-2 justify-end">
-          <button onClick={() => { setDeleteOpen(false); setDeleteText('') }} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={() => { setDeleteOpen(false); setDeleteText('') }} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
           <button onClick={handleDelete} disabled={deleteText !== 'DELETE' || deleteBusy}
-            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A] disabled:opacity-40">
+            className="vx-btn vx-btn-danger text-sm">
             {deleteBusy ? 'Deleting…' : 'Permanently Delete'}
           </button>
         </div>
@@ -474,21 +478,20 @@ export default function SettingsPage() {
           <SectionLabel>Badges</SectionLabel>
           <div className="mb-4">
             {badges.length === 0
-              ? <span className="text-[13px] text-[var(--text3)]">No badges yet. Keep going.</span>
+              ? <span className="text-[13px]" style={{ color: 'var(--vx-fg-4)' }}>No badges yet. Keep going.</span>
               : badges.map(b => <span key={b.id} className="badge">{b.icon} {b.label}</span>)}
           </div>
 
           <SectionLabel>Streak controls</SectionLabel>
           <div className="flex gap-2.5 flex-wrap mb-2">
-            <button onClick={() => setPauseOpen(true)} className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]">⏸ Pause Streak</button>
-            <button onClick={() => setInvOpen(true)}   className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">🗑 Invalidate Streak</button>
-            <button onClick={() => setRrOpen(true)}    className="px-3.5 py-2 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]">↺ Reset Rank XP</button>
+            <button onClick={() => setPauseOpen(true)} className="vx-btn vx-btn-ghost text-xs" style={{ color: 'var(--vx-amber)' }}>⏸ Pause Streak</button>
+            <button onClick={() => setRrOpen(true)}    className="vx-btn vx-btn-ghost text-xs">↺ Reset Rank XP</button>
           </div>
-          <p className="text-xs text-[var(--text3)]">Pause for off-grid trips. Invalidate if streak wasn&apos;t honestly earned. Reset rank if you want a fresh start.</p>
+          <p className="text-xs" style={{ color: 'var(--vx-fg-4)' }}>Pause for off-grid trips. Reset rank if you want a fresh start.</p>
 
           <SectionLabel>Activity log</SectionLabel>
-          <p className="text-xs text-[var(--text3)]">
-            Tasks deleted: <strong className="text-[var(--text)]">{taskDeletions}</strong>
+          <p className="text-xs" style={{ color: 'var(--vx-fg-4)' }}>
+            Tasks deleted: <strong style={{ color: 'var(--vx-fg-1)' }}>{taskDeletions}</strong>
             {taskDeletions > 0 && ' — tracked for spotting misjudged priorities or repeated avoidance.'}
           </p>
         </div>
@@ -501,7 +504,7 @@ export default function SettingsPage() {
               <li>Incomplete tasks now automatically carry forward to the next day at cutoff, instead of being dropped</li>
               <li>"Fix missed check-offs" lets you retroactively mark a past day's tasks done and redeem rewards earned that day — available once per day, then hides itself</li>
               <li>Redeeming a reward now asks for confirmation before deducting wallet points</li>
-              <li>Journal PIN is now {PIN_LENGTH} digits (was 4), and locks for 2 hours after {PIN_LOCKOUT_THRESHOLD} wrong attempts</li>
+              <li>App/Journal PIN is now {PIN_LENGTH} digits (was {OLD_PIN_LENGTH}) — you&apos;ll be asked to verify your old PIN once, then set a new {PIN_LENGTH}-digit one. Locks for 2 hours after {PIN_LOCKOUT_THRESHOLD} wrong attempts</li>
               <li>"Take Rest Day" and "Use Freeze" moved into the ⋯ menu on the dashboard</li>
               <li>Tap the streak badge to view your month-by-month streak history</li>
               <li>"Weekend Pulse" renamed to "Week-off Hours / Light Day" — same rule, clearer name</li>
@@ -556,7 +559,7 @@ export default function SettingsPage() {
 
       {tab === 'phase2' && (
         <div>
-          <div className="bg-[var(--blue-bg)] border border-[var(--blue)] rounded-[10px] p-3 mb-3.5 text-[13px] text-[var(--blue)]">
+          <div className="vx-tile vx-accent-l p-3 mb-3.5 text-[13px]" data-tone="cyan" style={{ color: 'var(--vx-cyan)' }}>
             🚀 Planned for Phase 2. Not active yet.
           </div>
           <Accordion title="📊 History graph" defaultOpen>
@@ -576,13 +579,13 @@ export default function SettingsPage() {
 
       {tab === 'help' && (
         <div className="pb-20">
-          <div className="rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-3.5 mb-3.5">
+          <div className="vx-tile p-3.5 mb-3.5">
             <div className="text-[13px] font-medium mb-1">Need help?</div>
             <p className="text-[12px] text-[var(--text2)] mb-2.5 leading-relaxed">
               Can&apos;t find your answer below, or hit a bug? Reach out directly — screenshots and steps to reproduce help the most.
             </p>
             <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Personal Planner — support request")}`}
-              className="inline-flex items-center gap-1.5 text-[13px] px-3.5 py-2 rounded-md font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+              className="vx-btn vx-btn-primary inline-flex items-center gap-1.5 text-[13px]">
               ✉️ Email {SUPPORT_EMAIL}
             </a>
           </div>
@@ -698,66 +701,39 @@ export default function SettingsPage() {
       )}
 
       {/* Modals */}
-      <Modal open={pauseOpen} onClose={() => setPauseOpen(false)} title="⏸ Pause Streak">
+      <Modal open={pauseOpen} onClose={() => setPauseOpen(false)} title="⏸ Pause Streak" variant="vx">
         <p className="text-sm text-[var(--text2)] mb-2">For off-grid trips. Streak freezes for up to 20 days.</p>
         <textarea value={pauseReason} onChange={e => setPauseReason(e.target.value)} placeholder="e.g. Spiti trip, no signal..."
-          className="w-full text-[13px] p-2.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none mb-3 min-h-[64px] resize-y" />
+          className="w-full vx-field mb-3 min-h-[64px] resize-y" />
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setPauseOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={() => setPauseOpen(false)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
           <button onClick={() => { if (!pauseReason.trim()) { showToast('Describe your situation.'); return }; pauseStreak(pauseReason); setPauseOpen(false); showToast('Streak paused.') }}
-            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--amber-bg)] text-[var(--amber)] border border-[#EF9F27]">
+            className="vx-btn vx-btn-ghost text-sm" style={{ color: 'var(--vx-amber)' }}>
             Pause Streak
           </button>
         </div>
       </Modal>
 
-      <Modal open={invOpen} onClose={() => { setInvOpen(false); setInvPinOk(false); setInvText('') }} title="Invalidate Streak">
-        <p className="text-sm text-[var(--text2)] mb-2">Resets streak to 0. This cannot be undone.</p>
-        {journalPin && !invPinOk ? (
-          <PinPad mode="verify" storedHash={journalPin} title="Enter App PIN to confirm" onSuccess={() => setInvPinOk(true)} onCancel={() => setInvOpen(false)} />
-        ) : (
-          <>
-            {!journalPin && (
-              <>
-                <p className="text-sm text-[var(--text2)] mb-2">Type <strong>CONFIRM</strong> to proceed.</p>
-                <input value={invText} onChange={e => setInvText(e.target.value)} placeholder="Type CONFIRM..."
-                  className="w-full text-[13px] p-2.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none mb-3" />
-              </>
-            )}
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => { setInvOpen(false); setInvPinOk(false); setInvText('') }} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
-              <button onClick={() => {
-                  if (!journalPin && invText !== 'CONFIRM') { showToast('Type CONFIRM.'); return }
-                  invalidate(); setInvText(''); setInvPinOk(false); setInvOpen(false); showToast('Streak reset.')
-                }}
-                className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">
-                Reset Streak
-              </button>
-            </div>
-          </>
-        )}
-      </Modal>
-
-      <Modal open={rrOpen} onClose={() => { setRrOpen(false); setRrPinOk(false); setRrText('') }} title="Reset Rank XP">
+      <Modal open={rrOpen} onClose={() => { setRrOpen(false); setRrPinOk(false); setRrText('') }} title="Reset Rank XP" variant="vx">
         <p className="text-sm text-[var(--text2)] mb-2">Returns to Rookie (0 XP). This cannot be undone.</p>
         {journalPin && !rrPinOk ? (
-          <PinPad mode="verify" storedHash={journalPin} title="Enter App PIN to confirm" onSuccess={() => setRrPinOk(true)} onCancel={() => setRrOpen(false)} />
+          <PinPad mode="verify" storedHash={journalPin} length={verifyPinLength} title="Enter App PIN to confirm" onSuccess={() => setRrPinOk(true)} onCancel={() => setRrOpen(false)} />
         ) : (
           <>
             {!journalPin && (
               <>
                 <p className="text-sm text-[var(--text2)] mb-2">Type <strong>RESETRANK</strong> to proceed.</p>
                 <input value={rrText} onChange={e => setRrText(e.target.value)} placeholder="Type RESETRANK..."
-                  className="w-full text-[13px] p-2.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none mb-3" />
+                  className="w-full vx-field mb-3" />
               </>
             )}
             <div className="flex gap-2 justify-end">
-              <button onClick={() => { setRrOpen(false); setRrPinOk(false); setRrText('') }} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+              <button onClick={() => { setRrOpen(false); setRrPinOk(false); setRrText('') }} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
               <button onClick={() => {
                   if (!journalPin && rrText !== 'RESETRANK') { showToast('Type RESETRANK.'); return }
                   resetRank(); setRrText(''); setRrPinOk(false); setRrOpen(false); showToast('Rank XP reset.')
                 }}
-                className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">
+                className="vx-btn vx-btn-danger text-sm">
                 Reset Rank XP
               </button>
             </div>
@@ -766,30 +742,30 @@ export default function SettingsPage() {
       </Modal>
 
       {/* App PIN management */}
-      <Modal open={pinModalOpen} onClose={() => setPinModalOpen(false)} title={pinStep === 'remove-verify' ? 'Remove App PIN' : journalPin ? 'Change App PIN' : 'Set App PIN'}>
+      <Modal open={pinModalOpen} onClose={() => setPinModalOpen(false)} title={pinStep === 'remove-verify' ? 'Remove App PIN' : journalPin ? 'Change App PIN' : 'Set App PIN'} variant="vx">
         {pinStep === 'verify-old' && journalPin && (
-          <PinPad mode="verify" storedHash={journalPin} title="Enter current PIN" onSuccess={() => setPinStep('set-new')} onCancel={() => setPinModalOpen(false)} />
+          <PinPad mode="verify" storedHash={journalPin} length={verifyPinLength} title="Enter current PIN" onSuccess={() => setPinStep('set-new')} onCancel={() => setPinModalOpen(false)} />
         )}
         {pinStep === 'set-new' && (
           <PinSetup
-            title="Set a new 4-digit PIN"
+            title={`Set a new ${PIN_LENGTH}-digit PIN`}
             onComplete={(hash, q, aHash) => { setJournalSecurity(hash, q, aHash); setPinModalOpen(false); showToast('App PIN saved.') }}
             onCancel={() => setPinModalOpen(false)}
           />
         )}
         {pinStep === 'remove-verify' && journalPin && (
-          <PinPad mode="verify" storedHash={journalPin} title="Enter PIN to remove it" onSuccess={() => { setJournalPin(null); setPinModalOpen(false); showToast('App PIN removed.') }} onCancel={() => setPinModalOpen(false)} />
+          <PinPad mode="verify" storedHash={journalPin} length={verifyPinLength} title="Enter PIN to remove it" onSuccess={() => { setJournalPin(null); setPinModalOpen(false); showToast('App PIN removed.') }} onCancel={() => setPinModalOpen(false)} />
         )}
       </Modal>
 
       {/* Import confirmation */}
-      <Modal open={importOpen} onClose={() => { setImportOpen(false); setPendingImportFile(null) }} title="⚠ Import backup">
+      <Modal open={importOpen} onClose={() => { setImportOpen(false); setPendingImportFile(null) }} title="⚠ Import backup" variant="vx">
         <p className="text-sm text-[var(--text2)] mb-2">
           This will <strong>permanently overwrite</strong> all current data — tasks, history, streaks, XP, journal, and settings — with the contents of the selected file.
         </p>
         <p className="text-sm text-[var(--red)] mb-3">This cannot be undone. Your existing data will be lost unless you&apos;ve exported a backup.</p>
         <div className="flex gap-2 justify-end">
-          <button onClick={() => { setImportOpen(false); setPendingImportFile(null) }} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={() => { setImportOpen(false); setPendingImportFile(null) }} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
           <button onClick={async () => {
               if (!pendingImportFile) return
               try {
@@ -799,7 +775,7 @@ export default function SettingsPage() {
               } catch { showToast('Import failed.') }
               setImportOpen(false); setPendingImportFile(null)
             }}
-            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--red-bg)] text-[var(--red)] border border-[#E24B4A]">
+            className="vx-btn vx-btn-danger text-sm">
             Overwrite &amp; Import
           </button>
         </div>
@@ -808,19 +784,43 @@ export default function SettingsPage() {
   )
 }
 
+const MAX_BUG_IMAGE_MB = 5
+
 function BugReportForm() {
   const [category, setCategory] = useState('bug')
   const [message, setMessage] = useState('')
+  const [image, setImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
+
+  function pickImage(file: File | undefined) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { showToast('Please choose an image file.'); return }
+    if (file.size > MAX_BUG_IMAGE_MB * 1024 * 1024) { showToast(`Image must be under ${MAX_BUG_IMAGE_MB}MB.`); return }
+    setImage(file)
+    setImagePreview(URL.createObjectURL(file))
+  }
+
+  function clearImage() {
+    if (imagePreview) URL.revokeObjectURL(imagePreview)
+    setImage(null)
+    setImagePreview(null)
+  }
 
   async function submit() {
     if (!message.trim()) { showToast('Describe the issue first.'); return }
     setBusy(true)
     try {
       const user = getClientAuth().currentUser
-      await submitBugReport(user?.uid ?? 'anon', user?.email ?? '', category, message.trim())
-      setSent(true); setMessage('')
+      const uid = user?.uid ?? 'anon'
+      let imageUrl: string | undefined
+      if (image) {
+        try { imageUrl = await uploadBugReportImage(uid, image) }
+        catch { showToast('Report sent, but the photo upload failed.') }
+      }
+      await submitBugReport(uid, user?.email ?? '', category, message.trim(), imageUrl)
+      setSent(true); setMessage(''); clearImage()
       showToast('Thanks! Your report was sent.')
     } catch {
       showToast('Could not send — check your connection.')
@@ -831,14 +831,14 @@ function BugReportForm() {
   if (sent) {
     return (
       <div className="py-2 text-[13px] text-[var(--text2)]">
-        ✓ Report received — thank you. <button onClick={() => setSent(false)} className="text-[var(--green)] underline">Send another</button>
+        ✓ Report received — thank you. <button onClick={() => setSent(false)} className="underline" style={{ color: 'var(--vx-emerald)' }}>Send another</button>
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-2.5 py-1">
-      <p className="text-[11px] text-[var(--text3)]">Found a bug or want to complain about something? Send it straight to the app admin.</p>
+      <p className="text-[11px]" style={{ color: 'var(--vx-fg-4)' }}>Found a bug or want to complain about something? Send it straight to the app admin.</p>
       <select value={category} onChange={e => setCategory(e.target.value)} className="setting-input">
         <option value="bug">🐞 Bug</option>
         <option value="complaint">😕 Complaint</option>
@@ -847,10 +847,25 @@ function BugReportForm() {
       </select>
       <textarea value={message} onChange={e => setMessage(e.target.value.slice(0, 1000))}
         placeholder="What happened? Steps to reproduce help a lot…"
-        className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none min-h-[80px] resize-y" />
+        className="vx-field min-h-[80px] resize-y" />
+
+      {imagePreview ? (
+        <div className="flex items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imagePreview} alt="Attached screenshot" className="rounded-lg" style={{ width: 56, height: 56, objectFit: 'cover', border: '1px solid var(--vx-border)' }} />
+          <span className="text-[11px]" style={{ color: 'var(--vx-fg-4)' }}>{image?.name}</span>
+          <button onClick={clearImage} className="vx-btn vx-btn-icon vx-danger" title="Remove photo" aria-label="Remove photo">×</button>
+        </div>
+      ) : (
+        <label className="vx-btn vx-btn-ghost text-xs inline-flex w-fit cursor-pointer">
+          📷 Attach a screenshot
+          <input type="file" accept="image/*" className="hidden" onChange={e => pickImage(e.target.files?.[0])} />
+        </label>
+      )}
+
       <div className="flex justify-end">
         <button onClick={submit} disabled={busy || !message.trim()}
-          className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)] disabled:opacity-40">
+          className="vx-btn vx-btn-primary text-xs">
           {busy ? 'Sending…' : 'Send report'}
         </button>
       </div>
@@ -859,49 +874,19 @@ function BugReportForm() {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2 mt-4 first:mt-0">{children}</div>
+  return <div className="text-[10px] font-semibold uppercase tracking-wide mb-2 mt-4 first:mt-0" style={{ color: 'var(--vx-fg-4)' }}>{children}</div>
 }
 
 function SettingCard({ children }: { children: React.ReactNode }) {
-  return <div className="card mb-3.5">{children}</div>
-}
-
-function AutoExportFolderRow() {
-  const [folder, setFolder] = useState<string | null>(null)
-
-  useEffect(() => {
-    getBackupFolderName().then(setFolder)
-  }, [])
-
-  if (!fsBackupSupported()) {
-    return (
-      <div className="text-[11px] text-[var(--text3)] py-2">
-        Not supported in this browser — use manual export instead.
-      </div>
-    )
-  }
-
-  return (
-    <SettingRow label="Backup folder" sub={folder ? `Currently: ${folder} (permission re-confirmed each session)` : 'No folder chosen yet'}>
-      <button
-        onClick={async () => {
-          const name = await pickBackupFolder()
-          if (name) { setFolder(name); showToast(`Backup folder set: ${name}`) }
-        }}
-        className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)]"
-      >
-        Choose folder
-      </button>
-    </SettingRow>
-  )
+  return <div className="vx-tile p-3.5 mb-3.5">{children}</div>
 }
 
 function SettingRow({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-[var(--border)] last:border-0 gap-2.5 flex-wrap">
+    <div className="flex items-center justify-between py-3 border-b last:border-0 gap-2.5 flex-wrap" style={{ borderColor: 'var(--vx-border)' }}>
       <div className="flex-1 min-w-[160px]">
         <div className="text-[13px] font-medium">{label}</div>
-        {sub && <div className="text-[11px] text-[var(--text3)]">{sub}</div>}
+        {sub && <div className="text-[11px]" style={{ color: 'var(--vx-fg-4)' }}>{sub}</div>}
       </div>
       {children}
     </div>

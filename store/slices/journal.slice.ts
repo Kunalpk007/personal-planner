@@ -1,7 +1,8 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
-import { JOURNAL_XP, WALLET_RATIO } from '@/constants/points'
+import { JOURNAL_XP, WALLET_RATIO, PIN_LENGTH } from '@/constants/points'
 import { pad }          from '@/lib/engine/cutoff'
+import { checkJournalMilestone } from '@/lib/engine/badges'
 import { PIN_LOCKOUT_THRESHOLD, PIN_LOCKOUT_MS } from '@/constants/points'
 
 export interface JournalSlice {
@@ -32,11 +33,24 @@ export const createJournalSlice: StateCreator<AppState, [], [], JournalSlice> = 
     if (s.journal[key]) key = `${today} ${timeStr}:${pad(now.getSeconds())}`
 
     const walletBonus = Math.floor(JOURNAL_XP / WALLET_RATIO)
-    set(s2 => ({
-      journal:      { ...s2.journal, [key]: text },
-      rankXP:       isFirst ? s2.rankXP + JOURNAL_XP : s2.rankXP,
-      rewardWallet: isFirst ? s2.rewardWallet + walletBonus : s2.rewardWallet,
-    }))
+    set(s2 => {
+      let badges = s2.badges
+      if (isFirst) {
+        // Every prior key belongs to a distinct day already covered by
+        // isFirst's "no entries yet today" check, so +1 for today is exact.
+        const journalDays = new Set(Object.keys(s2.journal).map(k => k.slice(0, 10))).size + 1
+        const milestone = checkJournalMilestone(journalDays)
+        if (milestone && !badges.some(b => b.id === milestone.id)) {
+          badges = [...badges, { ...milestone, date: today }]
+        }
+      }
+      return {
+        journal:      { ...s2.journal, [key]: text },
+        rankXP:       isFirst ? s2.rankXP + JOURNAL_XP : s2.rankXP,
+        rewardWallet: isFirst ? s2.rewardWallet + walletBonus : s2.rewardWallet,
+        badges,
+      }
+    })
 
     return { isFirst }
   },
@@ -51,14 +65,14 @@ export const createJournalSlice: StateCreator<AppState, [], [], JournalSlice> = 
 
   setJournalPin(hash) {
     if (hash === null) {
-      set({ journalPin: null, journalPinQuestion: null, journalPinAnswerHash: null })
+      set({ journalPin: null, journalPinQuestion: null, journalPinAnswerHash: null, journalPinLength: null })
     } else {
-      set({ journalPin: hash })
+      set({ journalPin: hash, journalPinLength: PIN_LENGTH })
     }
   },
 
   setJournalSecurity(hash, question, answerHash) {
-    set({ journalPin: hash, journalPinQuestion: question, journalPinAnswerHash: answerHash })
+    set({ journalPin: hash, journalPinQuestion: question, journalPinAnswerHash: answerHash, journalPinLength: PIN_LENGTH })
   },
 
   recordPinFailure() {

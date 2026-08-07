@@ -375,3 +375,15 @@ export async function markChallengeCompletion(challengeId: string, friendUid: st
     [`perUserStatus.${friendUid}`]: done ? 'done' : 'accepted',
   })
 }
+
+/** Called from the RECIPIENT's own device when they cancel (with a reason)
+ *  the local task/goal that was created from this challenge, instead of
+ *  completing it — lets the challenger see why via their own
+ *  sentChallenges tracker/notifications, same write shape as
+ *  markChallengeCompletion above. */
+export async function markChallengeCancelled(challengeId: string, friendUid: string, reason: string): Promise<void> {
+  await updateDoc(doc(sharedTasksCol(), challengeId), {
+    [`perUserStatus.${friendUid}`]: 'cancelled',
+    [`cancelReason.${friendUid}`]: reason,
+  })
+}

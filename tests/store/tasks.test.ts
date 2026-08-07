@@ -210,3 +210,45 @@ describe('removeTask', () => {
     expect(usePlannerStore.getState().pinnedTaskId).toBe(idB)
   })
 })
+
+describe('cancelTask', () => {
+  it('cancels an active task with a reason, leaving other tasks untouched', () => {
+    usePlannerStore.getState().addTask(taskInput({ title: 'Abandon me' }))
+    usePlannerStore.getState().addTask(taskInput({ title: 'Leave me alone' }))
+    const [t1, t2] = usePlannerStore.getState().tasks
+    const ok = usePlannerStore.getState().cancelTask(t1.id, 'Changed my mind')
+    expect(ok).toBe(true)
+    const task = usePlannerStore.getState().tasks.find(t => t.id === t1.id)
+    expect(task?.cancelledAt).not.toBeNull()
+    expect(task?.cancelReason).toBe('Changed my mind')
+    const other = usePlannerStore.getState().tasks.find(t => t.id === t2.id)
+    expect(other?.cancelledAt).toBeUndefined()
+  })
+
+  it('returns false and no-ops for a task that does not exist', () => {
+    expect(usePlannerStore.getState().cancelTask('nope', 'reason')).toBe(false)
+  })
+
+  it('returns false and no-ops for an already-done task', () => {
+    usePlannerStore.getState().addTask(taskInput({ title: 'Finish me' }))
+    const id = usePlannerStore.getState().tasks[0].id
+    usePlannerStore.getState().toggleTask(id)
+    expect(usePlannerStore.getState().cancelTask(id, 'reason')).toBe(false)
+  })
+
+  it('returns false and no-ops for an already-cancelled task', () => {
+    usePlannerStore.getState().addTask(taskInput({ title: 'Cancel twice' }))
+    const id = usePlannerStore.getState().tasks[0].id
+    usePlannerStore.getState().cancelTask(id, 'first reason')
+    expect(usePlannerStore.getState().cancelTask(id, 'second reason')).toBe(false)
+    expect(usePlannerStore.getState().tasks.find(t => t.id === id)?.cancelReason).toBe('first reason')
+  })
+
+  it('a cancelled task is excluded from carryTask (never carried forward)', () => {
+    usePlannerStore.getState().addTask(taskInput({ title: 'Cancelled, not carried' }))
+    const id = usePlannerStore.getState().tasks[0].id
+    usePlannerStore.getState().cancelTask(id, 'reason')
+    usePlannerStore.getState().carryTask(id, '2024-01-09')
+    expect(usePlannerStore.getState().tasks.filter(t => t.date === '2024-01-09')).toHaveLength(0)
+  })
+})

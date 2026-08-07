@@ -5,9 +5,9 @@ import type { ThemeMode } from '@/store/types'
 const THEME_KEY = 'kp_theme'
 
 export function getStoredTheme(): ThemeMode {
-  if (typeof window === 'undefined') return 'system'
+  if (typeof window === 'undefined') return 'dark'
   const v = localStorage.getItem(THEME_KEY)
-  return v === 'light' || v === 'dark' || v === 'system' ? v : 'system'
+  return v === 'light' || v === 'dark' || v === 'cream' ? v : 'dark'
 }
 
 export function setStoredTheme(theme: ThemeMode): void {
@@ -15,13 +15,12 @@ export function setStoredTheme(theme: ThemeMode): void {
   localStorage.setItem(THEME_KEY, theme)
 }
 
-export function resolveTheme(theme: ThemeMode): 'light' | 'dark' {
-  if (theme === 'light') return 'light'
-  if (theme === 'dark') return 'dark'
-  if (typeof window !== 'undefined') {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  }
-  return 'dark'
+/** No more "system" option — it never actually tracked live OS changes in a
+ *  way that was visible to the user, so Settings now offers exactly three
+ *  concrete themes (Light/Dark/Cream) and whatever's picked is applied as-is.
+ *  Kept as a passthrough (rather than removed) so call sites don't change. */
+export function resolveTheme(theme: ThemeMode): ThemeMode {
+  return theme
 }
 
 export function applyTheme(theme: ThemeMode): void {

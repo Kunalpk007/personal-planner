@@ -9,11 +9,11 @@
     --color-bg-elevated:  #252525;
     --color-border:       rgba(255,255,255,0.08);
     --color-border-subtle:rgba(255,255,255,0.05);
-    --color-accent:       #4ade80;
-    --color-accent-dim:   rgba(74,222,128,0.12);
+    --color-accent:       #34D399;
+    --color-accent-dim:   rgba(52,211,153,0.14);
     --color-text-primary: #f1f1f1;
-    --color-text-secondary:#888888;
-    --color-text-muted:   #555555;
+    --color-text-secondary:#8a8a8e;
+    --color-text-muted:   #5a5a5e;
 
     --radius-sm: 6px;
     --radius-md: 10px;
@@ -56,14 +56,14 @@
 
   /* ── Light theme ────────────────────────────────────────────────────── */
   [data-theme="light"] {
-    --color-bg-primary:   #F7F6F2;
-    --color-bg-secondary: #FFFFFF;
+    --color-bg-primary:   #FFFFFF;
+    --color-bg-secondary: #FAFAFA;
     --color-bg-card:      #FFFFFF;
-    --color-bg-elevated:  #F1EFE8;
+    --color-bg-elevated:  #F4F4F5;
     --color-border:       rgba(0,0,0,0.08);
     --color-border-subtle:rgba(0,0,0,0.05);
-    --color-accent:       #3B6D11;
-    --color-accent-dim:   rgba(59,109,17,0.12);
+    --color-accent:       #1B8A54;
+    --color-accent-dim:   rgba(27,138,84,0.12);
     --color-text-primary: #1A1A1A;
     --color-text-secondary:#6B6B66;
     --color-text-muted:   #9A9A93;
@@ -85,6 +85,66 @@
 
     --nav-bg: rgba(255,255,255,0.85);
     --nav-bg-solid: rgba(255,255,255,0.92);
+
+    /* "vx" shared-component tokens (see the VIBRANT REDESIGN section further
+       down) — declared here too, not just inside .vx-light-scope, so chrome
+       that lives OUTSIDE the scoped page-container (top nav, bottom nav,
+       notification bell/panel) also goes genuinely white/light instead of
+       staying fixed dark-glass regardless of theme. */
+    --vx-card:    rgba(20,20,25,0.035);
+    --vx-border:  rgba(20,20,25,0.1);
+    --vx-bg-void: #FFFFFF;
+    --vx-bg-deep: #FFFFFF;
+    --vx-fg-1: rgba(20,20,25,0.9);
+    --vx-fg-2: rgba(20,20,25,0.68);
+    --vx-fg-3: rgba(20,20,25,0.55);
+    --vx-fg-4: rgba(20,20,25,0.42);
+    --vx-surface-tint: rgba(20,20,25,0.045);
+  }
+
+  /* ── Cream theme — warm off-white paper look (auth pages only; the "vx"
+     redesigned app shell uses .vx-cream-scope below for the same palette). ── */
+  [data-theme="cream"] {
+    --color-bg-primary:   #FBF6EC;
+    --color-bg-secondary: #FFFDF7;
+    --color-bg-card:      #FFFDF7;
+    --color-bg-elevated:  #F5EEDD;
+    --color-border:       rgba(90,62,20,0.12);
+    --color-border-subtle:rgba(90,62,20,0.06);
+    --color-accent:       #8A5A22;
+    --color-accent-dim:   rgba(138,90,34,0.14);
+    --color-text-primary: #2B2013;
+    --color-text-secondary:#7A6A52;
+    --color-text-muted:   #A79878;
+
+    --border2:  rgba(90,62,20,0.2);
+    --green:    var(--color-accent);
+    --green-bg: var(--color-accent-dim);
+    --green-mid:var(--color-accent);
+    --blue:     #185FA5;
+    --blue-bg:  #E6F1FB;
+    --purple:   #534AB7;
+    --purple-bg:#EEEDFE;
+    --amber:    #BA7517;
+    --amber-bg: #FAEEDA;
+    --red:      #A32D2D;
+    --red-bg:   #FCEBEB;
+    --teal:     #0F6E56;
+    --teal-bg:  #E1F5EE;
+
+    --nav-bg: rgba(255,253,247,0.85);
+    --nav-bg-solid: rgba(255,253,247,0.92);
+
+    /* Same rationale as the light-theme block above. */
+    --vx-card:    rgba(80,55,20,0.04);
+    --vx-border:  rgba(80,55,20,0.12);
+    --vx-bg-void: #FBF6EC;
+    --vx-bg-deep: #FFFDF7;
+    --vx-fg-1: rgba(43,32,19,0.92);
+    --vx-fg-2: rgba(43,32,19,0.7);
+    --vx-fg-3: rgba(43,32,19,0.58);
+    --vx-fg-4: rgba(43,32,19,0.44);
+    --vx-surface-tint: rgba(80,55,20,0.05);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,6 +152,13 @@
   html {
     -webkit-tap-highlight-color: transparent;
     scroll-behavior: smooth;
+    /* Explicit (not just default) so no page — Dashboard included, now that
+       it's grown a Focus Time section + a floating breathing-exercise
+       button — can ever end up non-scrollable if some future ancestor adds
+       an `overflow` rule; vertical scroll must always stay available when
+       content exceeds the viewport, horizontal never should. */
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   body {
@@ -101,6 +168,7 @@
     font-size: 15px;
     line-height: 1.6;
     min-height: 100vh;
+    min-height: 100dvh;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -308,8 +376,32 @@
     bottom: calc(8px + env(safe-area-inset-bottom));
   }
   @media (max-width: 1024px) {
-    .fixed-bottom-bar { bottom: calc(60px + env(safe-area-inset-bottom)); }
+    /* Was 60px — the real `.vx-bottom-nav` pill (bottom:16px + its own
+       padding/icon/label stack) is taller than that, so the two overlapped
+       (the submit bar's bottom edge sat inside the nav pill's top edge).
+       Bumped so the bar's bottom edge clears the nav pill with a visible
+       gap regardless of exact nav height across devices. */
+    .fixed-bottom-bar { bottom: calc(92px + env(safe-area-inset-bottom)); }
   }
+}
+
+/* Tasks-page pinned Submit-My-Day bar — narrowed + restyled to match
+   `.vx-bottom-nav`'s own width/glass treatment (see SubmitArea.tsx's
+   comment). `min(480px, calc(100vw - 24px))` mirrors the nav pill's
+   `max-width: calc(100vw - 24px)` exactly on phones (where the nav is
+   always clipped to that width), so the two align edge-to-edge, while
+   capping at 480px so it doesn't stretch unreasonably wide on tablets. */
+.vx-submit-bar-pinned {
+  width: min(480px, calc(100vw - 24px)) !important;
+}
+.vx-submit-bar-active {
+  background: var(--nav-bg-solid);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.18);
 }
 
 /* ── Top tab bar ──────────────────────────────────────────────────────────── */
@@ -457,8 +549,8 @@
 .badge {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 11px; border-radius: 20px; font-size: 11px; font-weight: 600;
-  border: 0.5px solid; margin: 3px;
-  background: var(--amber-bg); color: var(--amber); border-color: #EF9F27;
+  border: 1px solid rgba(251,191,36,0.4); margin: 3px;
+  background: rgba(251,191,36,0.12); color: var(--vx-amber);
 }
 
 .pri-badge {
@@ -628,10 +720,827 @@
 .setting-input {
   font-size: 13px;
   padding: 6px 9px;
-  border-radius: var(--radius-sm);
-  border: 0.5px solid var(--border2);
-  background: var(--bg2);
-  color: var(--text);
+  border-radius: 10px;
+  border: 1px solid var(--vx-border);
+  background: var(--vx-card);
+  color: var(--vx-fg-1);
   outline: none;
   width: 130px;
+  transition: border-color .2s ease, background .2s ease;
 }
+.setting-input:focus { border-color: var(--color-accent); background: var(--vx-surface-tint); }
+.setting-input option { background: var(--vx-bg-deep); color: var(--vx-fg-1); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VIBRANT REDESIGN ("vx-" prefixed) — new visual/motion system, additive only.
+   Scope: Dashboard page + shared app shell (nav, modal-vx variant, accordion-vx
+   variant) per the agreed rollout order in project.md ("UI Redesign Initiative").
+   None of this touches the classes above — those stay exactly as-is for every
+   page that hasn't been redesigned yet (Tasks/History/Journal/Rewards/Settings).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Premium single-accent palette ─────────────────────────────────────
+     Replaces the earlier "vibrant" violet/pink/cyan/amber rainbow system.
+     --vx-violet/--vx-cyan/--vx-amber/--vx-emerald are KEPT as token names
+     (widely referenced as var(--vx-emerald)/var(--vx-amber)/etc. for plain
+     functional colors — success ticks, "+points" text, warnings — across
+     every tab), but now resolve to the app's existing muted, theme-aware
+     tone palette (--green/--blue/--amber/--purple/--red, already declared
+     per-theme above) instead of raw neon hex. --vx-pink is retired
+     entirely — nothing in the app should render pink text/gradients. The
+     --vx-grad-* tokens (still consumed by `background:` in several shared
+     classes below, and by `.vx-text-hero`'s background-clip trick) are now
+     flat, theme-aware solid colors rather than multi-stop rainbow
+     gradients, so gradient text/buttons render as clean single-tone
+     premium color instead of a color-cycling hero effect. */
+  --vx-violet:  var(--purple);
+  --vx-cyan:    var(--blue);
+  --vx-amber:   var(--amber);
+  --vx-emerald: var(--green);
+
+  --vx-grad-hero:    var(--color-accent);
+  --vx-grad-cyan:    var(--blue);
+  --vx-grad-emerald: var(--color-accent);
+  --vx-grad-amber:   var(--amber);
+
+  --vx-card:    rgba(255,255,255,0.045);
+  --vx-border:  rgba(255,255,255,0.09);
+  --vx-bg-void: #121212;
+  --vx-bg-deep: #1b1b1d;
+  --vx-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
+  --vx-ease:    cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Semantic foreground/surface tokens — used by shared vx- components
+     (buttons, fields, checks, keypad, bar tracks, mode-switch, etc.) instead
+     of hardcoded rgba(255,255,255,N) literals, so those components repaint
+     correctly under .vx-light-scope / .vx-cream-scope too. Also declared at
+     the light/cream data-theme blocks above (html level) so nav/bottom-nav/
+     notification-bell chrome — which lives OUTSIDE the scoped
+     page-container — now follows the theme too (Light is genuinely white
+     end-to-end, not just the page content), reversing the earlier
+     "always dark glass nav" decision per explicit user feedback. ── */
+  --vx-fg-1: rgba(255,255,255,0.92);
+  --vx-fg-2: rgba(255,255,255,0.72);
+  --vx-fg-3: rgba(255,255,255,0.6);
+  --vx-fg-4: rgba(255,255,255,0.44);
+  --vx-surface-tint: rgba(255,255,255,0.05);
+}
+
+/* Light/Cream overrides for the "vx" tokens above, keyed off the same
+   `[data-theme]` attribute the base-layer theme blocks near the top of this
+   file use (set on <html> by ThemeApplier). Needed as a SEPARATE block here
+   (same @layer components as the `:root` above, not @layer base) because
+   `.vx-modal-sheet` and every other portalled-to-<body> element (Modal,
+   NotificationBell, CalmDownButton's overlay, TaskActionFab, the Focus run
+   overlay, …) live outside `.page-container`'s `.vx-light-scope`/
+   `.vx-cream-scope` subtree, so they never saw those scoped overrides —
+   they fell through to this file's plain `:root` block above instead. And
+   because CSS cascade layers always rank an earlier-declared layer below a
+   later one regardless of selector specificity, the base-layer
+   `[data-theme="light"]` block declared near the top of this file (which
+   already sets the same token names) could never win against this
+   `:root` in @layer components either, even though it's more specific in
+   isolation — layer order overrides specificity. Redeclaring the values
+   here, in the same layer and after `:root`, is what actually lets them
+   win for <html> (and therefore cascade down to portalled content), while
+   `.vx-light-scope`/`.vx-cream-scope` (declared further below, also same
+   layer) still correctly take precedence for anything inside them since
+   they sit on a closer ancestor. This is what fixed "Add Task / Add Goal /
+   Challenge Friend and other modals stay dark under Light/Cream theme". */
+[data-theme="light"] {
+  --vx-card:    rgba(20,20,25,0.035);
+  --vx-border:  rgba(20,20,25,0.1);
+  --vx-bg-void: #FFFFFF;
+  --vx-bg-deep: #FFFFFF;
+  --vx-fg-1: rgba(20,20,25,0.9);
+  --vx-fg-2: rgba(20,20,25,0.68);
+  --vx-fg-3: rgba(20,20,25,0.55);
+  --vx-fg-4: rgba(20,20,25,0.42);
+  --vx-surface-tint: rgba(20,20,25,0.045);
+}
+[data-theme="cream"] {
+  --vx-card:    rgba(80,55,20,0.04);
+  --vx-border:  rgba(80,55,20,0.12);
+  --vx-bg-void: #FBF6EC;
+  --vx-bg-deep: #FFFDF7;
+  --vx-fg-1: rgba(43,32,19,0.92);
+  --vx-fg-2: rgba(43,32,19,0.7);
+  --vx-fg-3: rgba(43,32,19,0.58);
+  --vx-fg-4: rgba(43,32,19,0.44);
+  --vx-surface-tint: rgba(80,55,20,0.05);
+}
+
+/* Three interchangeable content-area scopes — exactly one is applied to
+   `.page-container` in app/(tabs)/layout.tsx based on cfg.theme (Dark/
+   Light/Cream — see ui/ThemeApplier.tsx). Each redeclares the same set of
+   tokens so every "vx" component (built against these tokens, not raw
+   colors) repaints correctly regardless of which one is active. Nav/bottom-
+   nav/notification-bell chrome now ALSO follows the theme (see the
+   the light/cream data-theme blocks above) — it's a plain premium
+   light/dark surface like the rest of the app, not permanently dark. */
+.vx-dark-scope {
+  --color-bg-primary:   #121212;
+  --color-bg-secondary: #1a1a1a;
+  --color-bg-card:      #1c1c1e;
+  --color-bg-elevated:  #242426;
+  --color-border:       rgba(255,255,255,0.08);
+  --color-border-subtle:rgba(255,255,255,0.05);
+  --color-accent:       #34D399;
+  --color-accent-dim:   rgba(52,211,153,0.14);
+  --color-text-primary: #f1f1f1;
+  --color-text-secondary:#888888;
+  --color-text-muted:   #555555;
+
+  --bg:       var(--color-bg-card);
+  --bg2:      var(--color-bg-primary);
+  --bg3:      var(--color-bg-secondary);
+  --text:     var(--color-text-primary);
+  --text2:    var(--color-text-secondary);
+  --text3:    var(--color-text-muted);
+  --border:   var(--color-border);
+  --border2:  rgba(255,255,255,0.18);
+  --green:    var(--color-accent);
+  --green-bg: var(--color-accent-dim);
+  --green-mid:var(--color-accent);
+  --blue:     #85B7EB;
+  --blue-bg:  #0c2440;
+  --purple:   #AFA9EC;
+  --purple-bg:#1e1b3a;
+  --amber:    #FAC775;
+  --amber-bg: #2e1e04;
+  --red:      #F09595;
+  --red-bg:   #2a0f0f;
+  --teal:     #6ECFB8;
+  --teal-bg:  #052e26;
+
+  --nav-bg: rgba(15,15,15,0.85);
+  --nav-bg-solid: rgba(15,15,15,0.92);
+
+  --vx-card:    rgba(255,255,255,0.045);
+  --vx-border:  rgba(255,255,255,0.09);
+  --vx-bg-void: #121212;
+  --vx-bg-deep: #1b1b1d;
+  --vx-fg-1: rgba(255,255,255,0.92);
+  --vx-fg-2: rgba(255,255,255,0.72);
+  --vx-fg-3: rgba(255,255,255,0.6);
+  --vx-fg-4: rgba(255,255,255,0.44);
+  --vx-surface-tint: rgba(255,255,255,0.05);
+
+  background: var(--vx-bg-void);
+  color: var(--color-text-primary);
+  min-height: 100dvh;
+}
+
+.vx-light-scope {
+  --color-bg-primary:   #FFFFFF;
+  --color-bg-secondary: #FAFAFA;
+  --color-bg-card:      #FFFFFF;
+  --color-bg-elevated:  #F4F4F5;
+  --color-border:       rgba(0,0,0,0.08);
+  --color-border-subtle:rgba(0,0,0,0.05);
+  --color-accent:       #1B8A54;
+  --color-accent-dim:   rgba(27,138,84,0.12);
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary:#6B6B66;
+  --color-text-muted:   #9A9A93;
+
+  --bg:       var(--color-bg-card);
+  --bg2:      var(--color-bg-primary);
+  --bg3:      var(--color-bg-secondary);
+  --text:     var(--color-text-primary);
+  --text2:    var(--color-text-secondary);
+  --text3:    var(--color-text-muted);
+  --border:   var(--color-border);
+  --border2:  rgba(0,0,0,0.18);
+  --green:    var(--color-accent);
+  --green-bg: var(--color-accent-dim);
+  --green-mid:var(--color-accent);
+  --blue:     #185FA5;
+  --blue-bg:  #E6F1FB;
+  --purple:   #534AB7;
+  --purple-bg:#EEEDFE;
+  --amber:    #BA7517;
+  --amber-bg: #FAEEDA;
+  --red:      #A32D2D;
+  --red-bg:   #FCEBEB;
+  --teal:     #0F6E56;
+  --teal-bg:  #E1F5EE;
+
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-bg-solid: rgba(255,255,255,0.92);
+
+  --vx-card:    rgba(20,20,25,0.035);
+  --vx-border:  rgba(20,20,25,0.1);
+  --vx-bg-void: #FFFFFF;
+  --vx-bg-deep: #FFFFFF;
+  --vx-fg-1: rgba(20,20,25,0.9);
+  --vx-fg-2: rgba(20,20,25,0.68);
+  --vx-fg-3: rgba(20,20,25,0.55);
+  --vx-fg-4: rgba(20,20,25,0.42);
+  --vx-surface-tint: rgba(20,20,25,0.045);
+
+  background: var(--vx-bg-void);
+  color: var(--color-text-primary);
+  min-height: 100dvh;
+}
+
+.vx-cream-scope {
+  --color-bg-primary:   #FBF6EC;
+  --color-bg-secondary: #FFFDF7;
+  --color-bg-card:      #FFFDF7;
+  --color-bg-elevated:  #F5EEDD;
+  --color-border:       rgba(90,62,20,0.12);
+  --color-border-subtle:rgba(90,62,20,0.06);
+  --color-accent:       #8A5A22;
+  --color-accent-dim:   rgba(138,90,34,0.14);
+  --color-text-primary: #2B2013;
+  --color-text-secondary:#7A6A52;
+  --color-text-muted:   #A79878;
+
+  --bg:       var(--color-bg-card);
+  --bg2:      var(--color-bg-primary);
+  --bg3:      var(--color-bg-secondary);
+  --text:     var(--color-text-primary);
+  --text2:    var(--color-text-secondary);
+  --text3:    var(--color-text-muted);
+  --border:   var(--color-border);
+  --border2:  rgba(90,62,20,0.2);
+  --green:    var(--color-accent);
+  --green-bg: var(--color-accent-dim);
+  --green-mid:var(--color-accent);
+  --blue:     #185FA5;
+  --blue-bg:  #E6F1FB;
+  --purple:   #534AB7;
+  --purple-bg:#EEEDFE;
+  --amber:    #BA7517;
+  --amber-bg: #FAEEDA;
+  --red:      #A32D2D;
+  --red-bg:   #FCEBEB;
+  --teal:     #0F6E56;
+  --teal-bg:  #E1F5EE;
+
+  --nav-bg: rgba(255,253,247,0.85);
+  --nav-bg-solid: rgba(255,253,247,0.92);
+
+  --vx-card:    rgba(80,55,20,0.04);
+  --vx-border:  rgba(80,55,20,0.12);
+  --vx-bg-void: #FBF6EC;
+  --vx-bg-deep: #FFFDF7;
+  --vx-fg-1: rgba(43,32,19,0.92);
+  --vx-fg-2: rgba(43,32,19,0.7);
+  --vx-fg-3: rgba(43,32,19,0.58);
+  --vx-fg-4: rgba(43,32,19,0.44);
+  --vx-surface-tint: rgba(80,55,20,0.05);
+
+  background: var(--vx-bg-void);
+  color: var(--color-text-primary);
+  min-height: 100dvh;
+}
+
+/* ── Ambient background (mounted once, shared by every tab — see
+   app/(tabs)/layout.tsx). Previously three large blurred violet/pink/cyan
+   "aurora" orbs; replaced with a single, very low-opacity glow in the
+   app's own accent color so the canvas reads as a calm, premium flat
+   surface instead of a colorful club backdrop — subtle enough that most
+   users won't consciously notice it, which is the point. Kept as one soft
+   shape (rather than removed outright) so the page doesn't feel completely
+   flat/lifeless on very large screens; still fully static content-wise. ── */
+.vx-aurora { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: var(--vx-bg-void); }
+.vx-orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.16; will-change: transform; background: radial-gradient(circle, var(--color-accent), transparent 72%); }
+.vx-orb1 { width: 520px; height: 520px; top: -200px; left: -160px; animation: vxFloat1 34s ease-in-out infinite; }
+.vx-orb2 { width: 0; height: 0; opacity: 0; }
+.vx-orb3 { width: 0; height: 0; opacity: 0; }
+@keyframes vxFloat1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(40px,50px) scale(1.08); } }
+
+/* ── Glass card ── */
+.vx-glass {
+  position: relative;
+  background: var(--vx-card);
+  border: 1px solid var(--vx-border);
+  border-radius: 22px;
+  padding: 1.25rem 1.35rem;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  margin-bottom: 1rem;
+  overflow: hidden;
+  transition: transform .35s var(--vx-spring), border-color .3s ease;
+}
+.vx-glass::before {
+  content: ''; position: absolute; inset: 0; padding: 1px; border-radius: 22px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 40%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events: none;
+}
+.vx-glass:hover { border-color: rgba(255,255,255,0.16); }
+.vx-glass-tap:active { transform: scale(0.985); }
+
+/* Stat-tile "target reached" celebration (e.g. the Water Intake tile once
+   today's litres meet the configured target) — a soft glowing border pulse
+   plus a diagonal light sweep, applied on top of `.vx-glass` (which already
+   uses its own `::before` for the border sheen, hence `::after` here). */
+.vx-tile-complete {
+  animation: vx-tile-complete-glow 2.6s ease-in-out infinite;
+}
+.vx-tile-complete::after {
+  content: ''; position: absolute; inset: 0; border-radius: 22px; pointer-events: none;
+  background: linear-gradient(115deg, transparent 30%, color-mix(in srgb, var(--vx-emerald) 35%, transparent) 50%, transparent 70%);
+  background-size: 220% 100%;
+  animation: vx-tile-shimmer 2.6s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+@keyframes vx-tile-complete-glow {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--vx-emerald) 25%, transparent), 0 6px 18px color-mix(in srgb, var(--vx-emerald) 16%, transparent); }
+  50%      { box-shadow: 0 0 0 1px color-mix(in srgb, var(--vx-emerald) 48%, transparent), 0 10px 28px color-mix(in srgb, var(--vx-emerald) 30%, transparent); }
+}
+@keyframes vx-tile-shimmer {
+  0%   { background-position: -130% 0; }
+  100% { background-position: 130% 0; }
+}
+
+.vx-eyebrow { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text3); display: flex; align-items: center; gap: 6px; }
+
+/* ── Gradient text ── */
+/* Flat, theme-aware accent text (formerly an animated multi-color gradient
+   clip — now a single premium tone per token, no color-cycling). */
+.vx-text-hero    { color: var(--vx-grad-hero); }
+.vx-text-cyan    { color: var(--vx-grad-cyan); }
+.vx-text-emerald { color: var(--vx-grad-emerald); }
+.vx-text-amber   { color: var(--vx-grad-amber); }
+
+/* ── Mood / segmented pills ── */
+.vx-pill-row { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
+.vx-pill {
+  position: relative; padding: 9px 16px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  background: var(--vx-card); border: 1px solid var(--vx-border); color: var(--text2); cursor: pointer;
+  transition: all .3s var(--vx-spring); display: flex; align-items: center; gap: 6px;
+}
+.vx-pill:active { transform: scale(0.94); }
+.vx-pill.vx-sel { color: #0a0a0a; border-color: transparent; }
+.vx-pill.vx-sel[data-tone="emerald"] { background: var(--vx-grad-emerald); }
+.vx-pill.vx-sel[data-tone="neutral"] { background: var(--vx-fg-3); color: var(--vx-bg-deep); }
+.vx-pill.vx-sel[data-tone="amber"]   { background: var(--vx-grad-amber); }
+.vx-pill.vx-sel[data-tone="cyan"]    { background: var(--vx-grad-cyan); }
+.vx-pill:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Softer "tinted" pill treatment — action buttons that are always colored
+   (not a multi-choice selector like mood/period), e.g. rest-day/freeze
+   actions in StreakHistoryModal. Backgrounds/borders are derived from the
+   same semantic tone tokens via color-mix() rather than hardcoded neon
+   rgba() literals, so they stay in the app's muted, premium tone family and
+   automatically follow whichever theme (Dark/Light/Cream) is active. */
+.vx-pill.vx-tinted[data-tone="amber"]   { background: color-mix(in srgb, var(--vx-amber) 14%, transparent); color: var(--vx-amber); border-color: color-mix(in srgb, var(--vx-amber) 45%, transparent); }
+.vx-pill.vx-tinted[data-tone="cyan"]    { background: color-mix(in srgb, var(--vx-cyan) 14%, transparent); color: var(--vx-cyan); border-color: color-mix(in srgb, var(--vx-cyan) 45%, transparent); }
+.vx-pill.vx-tinted[data-tone="emerald"] { background: var(--color-accent-dim); color: var(--vx-emerald); border-color: color-mix(in srgb, var(--vx-emerald) 45%, transparent); }
+.vx-pill.vx-tinted[data-tone="violet"]  { background: color-mix(in srgb, var(--vx-violet) 14%, transparent); color: var(--vx-violet); border-color: color-mix(in srgb, var(--vx-violet) 45%, transparent); }
+.vx-pill.vx-tinted[data-tone="red"]     { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, transparent); }
+
+/* Small tag/zone chip tone variants (share the .vx-chip base above). */
+.vx-chip[data-tone="violet"]  { background: color-mix(in srgb, var(--vx-violet) 12%, transparent); color: var(--vx-violet); border-color: color-mix(in srgb, var(--vx-violet) 40%, transparent); }
+.vx-chip[data-tone="amber"]   { background: color-mix(in srgb, var(--vx-amber) 12%, transparent); color: var(--vx-amber); border-color: color-mix(in srgb, var(--vx-amber) 40%, transparent); }
+.vx-chip[data-tone="red"]     { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
+.vx-chip[data-tone="emerald"] { background: var(--color-accent-dim); color: var(--vx-emerald); border-color: color-mix(in srgb, var(--vx-emerald) 40%, transparent); }
+.vx-chip[data-tone="neutral"] { background: var(--vx-card); color: var(--vx-fg-3); border-color: var(--vx-border); }
+
+/* ── Shared form fields (input/select/textarea) — used across every tab
+   (Tasks, Rewards, History, Settings, Journal, Dashboard). Theme-aware via
+   the --vx-* tokens, so these render as clean light-grey-on-white fields in
+   Light theme and glass-on-charcoal in Dark/Cream, not fixed dark-glass. ── */
+.vx-field {
+  width: 100%; font-size: 13px; padding: 0.5rem 0.75rem; border-radius: 10px;
+  background: var(--vx-card); border: 1px solid var(--vx-border); color: var(--vx-fg-1);
+  outline: none; transition: border-color .2s ease, background .2s ease;
+}
+.vx-field::placeholder { color: var(--vx-fg-4); }
+.vx-field:focus { border-color: var(--color-accent); background: var(--vx-surface-tint); }
+.vx-field.vx-error { border-color: var(--red); }
+select.vx-field option { background: var(--vx-bg-deep); color: var(--vx-fg-1); }
+textarea.vx-field { resize: vertical; min-height: 64px; }
+
+/* ── Shared buttons ── */
+.vx-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 0.55rem 1rem; border-radius: 10px; font-size: 13px; font-weight: 600;
+  border: 1px solid transparent; cursor: pointer; transition: transform .15s var(--vx-spring), background .2s ease, opacity .2s ease;
+  white-space: nowrap;
+}
+.vx-btn:active { transform: scale(0.96); }
+.vx-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.vx-btn-ghost   { background: var(--vx-card); border-color: var(--vx-border); color: var(--vx-fg-2); }
+.vx-btn-ghost:hover:not(:disabled) { background: var(--vx-surface-tint); }
+.vx-btn-primary { background: var(--vx-grad-emerald); color: #06240f; }
+.vx-btn-accent  { background: var(--vx-grad-hero); color: #fff; }
+.vx-btn-cyan    { background: var(--vx-grad-cyan); color: #06222c; }
+.vx-btn-danger  { background: color-mix(in srgb, var(--red) 12%, transparent); border-color: color-mix(in srgb, var(--red) 40%, transparent); color: var(--red); }
+.vx-btn-icon    { width: 30px; height: 30px; padding: 0; border-radius: 9px; background: var(--vx-card); border-color: var(--vx-border); color: var(--vx-fg-3); }
+.vx-btn-icon:hover:not(:disabled) { background: var(--vx-surface-tint); color: var(--vx-fg-1); }
+.vx-btn-icon.vx-danger { color: var(--red); }
+.vx-btn-icon.vx-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 14%, transparent); }
+
+/* ── Generic tile/card (task rows, reward cards, history rows) ── */
+.vx-tile {
+  background: var(--vx-card); border: 1px solid var(--vx-border); border-radius: 14px;
+  padding: 0.75rem 0.9rem; backdrop-filter: blur(12px); transition: border-color .2s ease;
+}
+.vx-tile.vx-accent-l { border-left: 3px solid var(--vx-border); }
+.vx-tile.vx-accent-l[data-tone="purple"]  { border-left-color: var(--vx-violet); background: color-mix(in srgb, var(--vx-violet) 7%, transparent); }
+.vx-tile.vx-accent-l[data-tone="amber"]   { border-left-color: var(--vx-amber);  background: color-mix(in srgb, var(--vx-amber) 6%, transparent); }
+.vx-tile.vx-accent-l[data-tone="red"]     { border-left-color: var(--red); background: color-mix(in srgb, var(--red) 6%, transparent); }
+.vx-tile.vx-accent-l[data-tone="cyan"]    { border-left-color: var(--vx-cyan);   background: color-mix(in srgb, var(--vx-cyan) 6%, transparent); }
+
+/* ── Small tag/zone chip ── */
+.vx-chip {
+  display: inline-flex; align-items: center; font-size: 11px; font-weight: 600;
+  padding: 2px 9px; border-radius: 999px; border: 1px solid; white-space: nowrap;
+}
+
+/* ── Segmented mode-switcher (Tasks page top toggle etc.) — same sliding
+   layoutId pattern as LifeScoreCard's period selector. ── */
+.vx-modeswitch { display: inline-flex; flex-wrap: wrap; background: var(--vx-card); border: 1px solid var(--vx-border); border-radius: 12px; padding: 4px; gap: 2px; width: 100%; }
+.vx-modeswitch-item {
+  position: relative; flex: 1; padding: 0.5rem 0.75rem; border-radius: 9px; font-size: 12.5px; font-weight: 600;
+  color: var(--vx-fg-3); background: none; border: none; cursor: pointer; z-index: 1; transition: color .25s ease;
+  text-align: center;
+}
+.vx-modeswitch-item.vx-active { color: var(--vx-fg-1); }
+.vx-modeswitch-indicator { position: absolute; inset: 0; border-radius: 9px; background: var(--vx-grad-hero); z-index: -1; }
+
+/* ── Round checkbox (task complete toggle) ── */
+.vx-check {
+  width: 21px; height: 21px; border-radius: 50%; border: 1.5px solid var(--vx-fg-4);
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: transparent; background: transparent; cursor: pointer; transition: all .2s ease;
+}
+.vx-check.vx-done { background: var(--vx-grad-emerald); border-color: transparent; color: #06240f; }
+.vx-check.vx-pending { border-color: var(--vx-violet); color: var(--vx-violet); }
+.vx-check:disabled { cursor: not-allowed; }
+
+/* ── PIN pad keys ── */
+.vx-keypad-btn { border: 1px solid var(--vx-border); background: var(--vx-card); color: var(--vx-fg-1); }
+.vx-keypad-btn:hover { background: var(--vx-surface-tint); }
+
+/* ── Streak / icon orbs (header) ── */
+.vx-icon-orb {
+  position: relative; width: 42px; height: 42px; border-radius: 14px;
+  background: var(--vx-card); border: 1px solid var(--vx-border); backdrop-filter: blur(16px);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: transform .25s var(--vx-spring), background .2s ease;
+}
+.vx-icon-orb:hover { background: var(--vx-surface-tint); transform: translateY(-2px); }
+.vx-icon-orb:active { transform: scale(0.92); }
+
+.vx-streak-orb {
+  /* No circular tint/border/background — just the flame + number, per
+     explicit request (the earlier fix only removed the 1px border, but the
+     tinted circular background itself still read as a "circle" outline). */
+  position: relative;
+  background: none; border: none;
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  cursor: pointer; transition: transform .25s var(--vx-spring);
+  padding: 2px 4px;
+}
+.vx-streak-orb:hover { transform: translateY(-2px) scale(1.03); }
+.vx-streak-orb:active { transform: scale(0.92); }
+.vx-streak-orb .vx-flame { font-size: 20px; animation: vxFlicker 2.4s ease-in-out infinite; }
+.vx-streak-orb .vx-n { font-size: 12px; font-weight: 800; margin-top: -2px; color: var(--color-accent); }
+@keyframes vxFlicker { 0%,100% { transform: scale(1) rotate(0deg); } 25% { transform: scale(1.05) rotate(-3deg); } 50% { transform: scale(0.97) rotate(2deg); } 75% { transform: scale(1.03) rotate(-1deg); } }
+
+/* ── Progress ring ── */
+.vx-ring-fg { filter: none; }
+
+/* ── Bar / track (rank progress, life score) ── */
+.vx-bar-track { height: 9px; border-radius: 999px; background: var(--vx-surface-tint); overflow: hidden; margin-top: 10px; position: relative; }
+.vx-bar-fill { height: 100%; border-radius: 999px; background: var(--vx-grad-hero); }
+
+.vx-zone-track { border-radius: 999px; background: var(--vx-surface-tint); overflow: hidden; }
+.vx-zone-fill { height: 100%; border-radius: 999px; }
+
+/* ── Segmented control (Life Score period) ── */
+.vx-seg { display: inline-flex; background: var(--vx-surface-tint); border: 1px solid var(--vx-border); border-radius: 999px; padding: 3px; position: relative; gap: 2px; }
+.vx-seg button { position: relative; z-index: 1; border: none; background: none; color: var(--text3); font-size: 10.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px; cursor: pointer; transition: color .3s ease; }
+.vx-seg button.vx-active { color: #0a0a0a; }
+.vx-seg-indicator { position: absolute; top: 3px; bottom: 3px; border-radius: 999px; background: var(--vx-grad-cyan); z-index: 0; }
+
+/* ── Manager card avatar ── */
+.vx-manager-avatar { width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0; background: var(--color-accent-dim); border: 1px solid var(--vx-border); display: flex; align-items: center; justify-content: center; font-size: 15px; position: relative; }
+.vx-manager-avatar::after { content: ''; position: absolute; inset: -3px; border-radius: 14px; border: 1px solid var(--vx-border); animation: vxPing 2.4s ease infinite; }
+@keyframes vxPing { 0% { opacity: 0.7; transform: scale(1); } 100% { opacity: 0; transform: scale(1.35); } }
+
+/* ── Submit button ── */
+.vx-submit-btn {
+  width: 100%; padding: 15px; border-radius: 16px; border: none; font-size: 14.5px; font-weight: 700; cursor: pointer;
+  background: var(--vx-grad-hero); color: #0a0a0a;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.16); transition: transform .25s var(--vx-spring), box-shadow .3s ease, opacity .3s ease, filter .2s ease;
+}
+.vx-submit-btn:hover:not(:disabled) { filter: brightness(1.06); }
+.vx-submit-btn:active:not(:disabled) { transform: scale(0.98); }
+.vx-submit-btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+
+/* ── Rank / milestone badge + list ── */
+.vx-rank-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 13px; border-radius: 999px; font-size: 11px; font-weight: 700; background: color-mix(in srgb, var(--vx-violet) 18%, transparent); border: 1px solid color-mix(in srgb, var(--vx-violet) 40%, transparent); color: var(--vx-violet); }
+.vx-milestone { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 14px; margin-bottom: 6px; border: 1px solid transparent; }
+.vx-milestone.vx-current { background: var(--color-accent-dim); border-color: color-mix(in srgb, var(--color-accent) 35%, transparent); }
+.vx-milestone .vx-m-icon { width: 30px; height: 30px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; background: var(--vx-surface-tint); }
+.vx-milestone.vx-current .vx-m-icon { background: var(--vx-grad-hero); }
+
+/* ── Streak calendar chip (StreakHistoryModal) ── */
+.vx-cal-chip { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 40px; height: 52px; border-radius: 10px; border: 1px solid var(--vx-border); background: var(--vx-card); font-size: 13px; gap: 1px; }
+
+/* ── Confetti + celebration overlay ── */
+#vx-confetti-layer { position: fixed; inset: 0; z-index: 260; pointer-events: none; overflow: hidden; }
+.vx-confetti-piece { position: absolute; top: -10px; border-radius: 2px; animation: vxConfettiFall linear forwards; }
+@keyframes vxConfettiFall { to { transform: translateY(110vh) rotate(720deg); opacity: 0.3; } }
+
+.vx-celebrate-card { text-align: center; }
+.vx-celebrate-emoji { font-size: 52px; margin-bottom: .75rem; }
+.vx-celebrate-title { font-size: 21px; font-weight: 800; margin-bottom: 6px; }
+.vx-celebrate-btn { padding: 11px 26px; border-radius: 14px; border: none; background: var(--vx-grad-hero); color: #0a0a0a; font-weight: 700; font-size: 13px; cursor: pointer; transition: transform .2s var(--vx-spring); }
+.vx-celebrate-btn:active { transform: scale(0.94); }
+
+/* ── Modal (variant="vx" on ui/Modal.tsx) + Accordion (variant="vx") ── */
+.vx-modal-backdrop { position: fixed; inset: 0; z-index: 230; background: rgba(6,5,12,0.65); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 1.25rem; }
+.vx-modal-sheet {
+  width: 100%; max-width: 420px; max-height: 82vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: var(--vx-bg-deep); border: 1px solid var(--vx-border); border-radius: 24px;
+  padding: 1.5rem 1.35rem 1.75rem;
+}
+.vx-modal-close { width: 28px; height: 28px; border-radius: 9px; background: var(--vx-card); border: 1px solid var(--vx-border); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; color: var(--text2); }
+
+.vx-accordion { border-radius: 16px; border: 1px solid var(--vx-border); background: var(--vx-card); margin-bottom: 0.75rem; overflow: hidden; backdrop-filter: blur(16px); }
+.vx-accordion-head { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0.85rem 1rem; cursor: pointer; user-select: none; background: none; border: none; }
+
+/* Floating glass bottom/top nav (shared app shell). Now genuinely
+   theme-aware: uses nav-bg-solid, the vx foreground tokens, and vx-border,
+   all declared per-theme both at html level (the data-theme attribute
+   blocks above) and inside each scope class. A Light-theme user gets a
+   real white/frosted nav, not a permanently dark bar — reversing the
+   earlier "nav always stays dark glass" decision per explicit user
+   feedback. */
+.vx-bottom-nav {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 50;
+  display: flex; gap: 2px; padding: 6px; border-radius: 22px;
+  background: var(--nav-bg-solid); border: 1px solid var(--vx-border); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+  max-width: calc(100vw - 24px);
+}
+.vx-nav-indicator { position: absolute; border-radius: 16px; background: var(--color-accent-dim); border: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent); z-index: 0; }
+.vx-nav-btn {
+  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 9px 13px; border-radius: 16px; border: none; background: none; color: var(--text3); cursor: pointer;
+  min-width: 52px; transition: color .3s ease;
+}
+.vx-nav-btn.vx-active { color: var(--color-text-primary); }
+.vx-nav-btn svg { width: 19px; height: 19px; transition: transform .3s var(--vx-spring); }
+.vx-nav-btn.vx-active svg { transform: translateY(-1px) scale(1.08); }
+.vx-nav-btn span { font-size: 9px; font-weight: 600; }
+.vx-nav-btn:active { transform: scale(0.9); }
+
+.vx-nav-top {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--nav-bg-solid); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--vx-border);
+  padding: 0 var(--spacing-page);
+}
+.vx-nav-top-inner { max-width: 860px; margin: 0 auto; display: flex; align-items: center; height: 56px; gap: 24px; }
+.vx-nav-brand { font-weight: 800; font-size: 15px; letter-spacing: -0.02em; background: none; border: none; cursor: pointer; padding: 0; white-space: nowrap; }
+.vx-tab-scroll { display: flex; gap: 4px; flex: 1; position: relative; overflow-x: auto; scrollbar-width: none; }
+.vx-tab-scroll::-webkit-scrollbar { display: none; }
+.vx-tab-item { position: relative; z-index: 1; padding: 0.5rem 1rem; font-size: 0.875rem; color: var(--text2); cursor: pointer; background: none; border: none; border-radius: 999px; white-space: nowrap; transition: color .2s ease; }
+.vx-tab-item.vx-active { color: var(--color-text-primary); }
+
+/* ── Notification bell + dropdown panel (ui/NotificationBell.tsx) ──
+   Lives inside vx-nav-top — theme-linked --text/--vx-border tokens now that
+   the nav itself follows the theme (see above). */
+.vx-bell-btn {
+  position: relative; background: none; border: none; cursor: pointer; line-height: 1; padding: 6px;
+  color: var(--text2); display: flex; border-radius: 10px; transition: color .2s ease, background .2s ease;
+}
+.vx-bell-btn:hover { color: var(--color-text-primary); background: var(--vx-surface-tint); }
+.vx-bell-badge {
+  position: absolute; top: 1px; right: 1px; min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 999px; background: var(--red); color: #fff; font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+  border: 1.5px solid var(--vx-bg-deep);
+}
+/* Notification dropdown — anchored to the bell icon (see
+   ui/NotificationBell.tsx), not a centered modal. Width is responsive so it
+   can never overflow a narrow viewport regardless of where it's anchored;
+   height is capped dynamically via inline style (computed from remaining
+   viewport space below the icon) so it never runs off the bottom either.
+
+   background-color (opaque, no alpha) + isolation is set *in addition to*
+   the `background` shorthand below as a defensive fallback: some mobile
+   Chrome/WebView builds mis-composite `backdrop-filter` combined with
+   `border-radius` + `overflow: hidden` and end up rendering the panel as
+   see-through instead of the intended opaque glass — which is exactly what
+   was reported ("transparent see-through popup") specifically on mobile
+   while desktop/tablet looked fine. Gating the blur itself behind
+   `@supports` so it only applies where the browser actually composites it
+   avoids relying on the broken partial-support state; the panel is always
+   fully opaque either way, blurred or not. */
+.vx-notif-panel {
+  display: flex; flex-direction: column; width: min(320px, calc(100vw - 16px));
+  border-radius: 18px; overflow: hidden; isolation: isolate;
+  background-color: var(--vx-bg-deep);
+  background: var(--vx-bg-deep); border: 1px solid var(--vx-border);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.55); transform-origin: top right;
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .vx-notif-panel {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+}
+.vx-notif-header {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--color-text-primary); border-bottom: 1px solid var(--vx-border);
+}
+.vx-notif-dismiss-all {
+  border: none; background: transparent; cursor: pointer; font-weight: 600;
+  font-size: 11px; letter-spacing: 0; color: var(--text3); transition: color .15s ease;
+}
+.vx-notif-dismiss-all:hover { color: var(--color-text-primary); }
+.vx-notif-empty { padding: 22px 14px; font-size: 12px; color: var(--text3); text-align: center; }
+.vx-notif-list { display: flex; flex-direction: column; gap: 3px; overflow-y: auto; padding: 6px; }
+.vx-notif-item {
+  display: flex; align-items: center; gap: 6px; border-radius: 10px;
+  background: transparent; transition: background .15s ease;
+}
+.vx-notif-item:hover { background: var(--vx-surface-tint); }
+.vx-notif-item.vx-unseen { background: var(--color-accent-dim); }
+.vx-notif-item.vx-unseen:hover { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
+.vx-notif-item-text {
+  flex: 1; min-width: 0; text-align: left; padding: 10px 8px; font-size: 12.5px;
+  line-height: 1.4; border: none; background: transparent; color: var(--text2); cursor: pointer;
+}
+.vx-notif-item-dismiss {
+  flex-shrink: 0; width: 24px; height: 24px; margin-right: 6px; border-radius: 8px;
+  border: none; background: transparent; color: var(--text3); font-size: 15px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s ease;
+}
+.vx-notif-item-dismiss:hover { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
+
+@media (max-width: 1024px) {
+  .vx-nav-top { display: none; }
+  .page-container { padding-bottom: 6.5rem; }
+}
+@media (min-width: 1025px) {
+  .vx-bottom-nav { display: none; }
+}
+
+/* ── "Calm down" floating button + breathing exercise overlay ──────────────
+   Mounted on the Dashboard only (app/(tabs)/dashboard/page.tsx), per
+   explicit request. Positioned high enough to clear the floating bottom
+   nav pill regardless of scroll position (position: fixed). */
+/* Redesigned with a soft blue-violet gradient + a slow pulsing glow behind
+   it (via ::before) instead of the previous flat glass pill — per feedback
+   that it "looks dead". The pulse is deliberately slow (3.6s) and gentle,
+   echoing the breathing rhythm the button opens into, rather than a
+   generic attention-grabbing throb. */
+.vx-calm-fab {
+  position: fixed; right: 14px; z-index: 55;
+  bottom: calc(150px + env(safe-area-inset-bottom));
+  width: 64px; height: 64px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  padding: 0; text-align: center;
+  background: linear-gradient(150deg, rgba(56,189,248,0.26), rgba(129,140,248,0.2)), var(--nav-bg-solid);
+  border: 1px solid color-mix(in srgb, #38bdf8 32%, var(--vx-border));
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 10px 26px rgba(56,189,248,0.22), inset 0 1px 0 rgba(255,255,255,0.14);
+  color: var(--color-text-primary); cursor: pointer;
+  transition: transform .2s var(--vx-spring), box-shadow .2s ease;
+}
+.vx-calm-fab::before {
+  content: ''; position: absolute; inset: -7px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(56,189,248,0.4), transparent 72%);
+  z-index: -1; pointer-events: none;
+  animation: vx-calm-glow-pulse 3.6s ease-in-out infinite;
+}
+@keyframes vx-calm-glow-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.94); }
+  50%      { opacity: 0.78; transform: scale(1.1); }
+}
+.vx-calm-fab:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(56,189,248,0.32), inset 0 1px 0 rgba(255,255,255,0.18); }
+.vx-calm-fab:active { transform: scale(0.94); }
+.vx-calm-fab-label { font-size: 11px; font-weight: 700; line-height: 1.25; position: relative; z-index: 1; }
+@media (min-width: 1025px) {
+  .vx-calm-fab { bottom: 28px; }
+}
+
+.vx-calm-overlay {
+  position: fixed; inset: 0; z-index: 240;
+  background: radial-gradient(circle at 50% 40%, rgba(30,58,95,0.97), rgba(6,8,14,0.99));
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px;
+  color: #fff;
+}
+.vx-calm-close {
+  position: absolute; top: max(20px, env(safe-area-inset-top)); right: 20px;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16);
+  color: #fff; font-size: 18px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.vx-calm-timer {
+  position: absolute; top: max(24px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: rgba(255,255,255,0.55);
+}
+.vx-calm-quote {
+  max-width: 340px; text-align: center; font-size: 14px; font-style: italic; line-height: 1.5;
+  color: rgba(255,255,255,0.82); margin-bottom: 28px;
+}
+.vx-calm-cancel {
+  margin-top: 28px; color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.16);
+}
+.vx-calm-circle-wrap {
+  position: relative; width: 220px; height: 220px;
+  display: flex; align-items: center; justify-content: center;
+}
+.vx-calm-circle {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(125,211,252,0.9), rgba(56,120,220,0.55) 60%, rgba(56,120,220,0.15) 100%);
+  box-shadow: 0 0 80px rgba(94,168,255,0.45);
+}
+.vx-calm-circle-label {
+  position: relative; z-index: 1; font-size: 15px; font-weight: 600;
+  color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.vx-calm-hint {
+  margin-top: 40px; font-size: 12.5px; color: rgba(255,255,255,0.55); text-align: center; max-width: 320px;
+}
+
+/* ── Focus Time run overlay — full-screen "lock" while a session is active ──
+   The center of the radial gradient used to be only 16% opaque, so under
+   Light/Cream theme (or any bright content behind it) the dashboard cards
+   showed straight through and clashed with the overlay's fixed white text,
+   making it unreadable. Raised opacity close to opaque end-to-end (matching
+   `.vx-calm-overlay`'s treatment) AND added a strong backdrop-filter blur —
+   per explicit preference for "increase blur intensity" over fine-tuning
+   per-theme text colors — so the overlay reads as solid regardless of what
+   theme or content is behind it. */
+.vx-focus-overlay {
+  position: fixed; inset: 0; z-index: 240;
+  background: radial-gradient(circle at 50% 40%, rgba(30,64,102,0.96), rgba(6,8,14,0.99));
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px; color: #fff;
+}
+.vx-focus-eyebrow {
+  font-size: 14px; font-weight: 600; letter-spacing: 0.02em; color: rgba(255,255,255,0.75);
+  margin-bottom: 28px; text-align: center;
+}
+.vx-focus-ring-wrap { display: flex; align-items: center; justify-content: center; }
+.vx-focus-hint {
+  margin-top: 32px; font-size: 12.5px; color: rgba(255,255,255,0.55); text-align: center; max-width: 320px;
+}
+.vx-focus-cancel {
+  margin-top: 28px; color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.16);
+}
+
+/* ── Top-of-viewport route-switch loading bar ────────────────────────────── */
+.vx-route-progress {
+  position: fixed; top: 0; left: 0; width: 100%; height: 3px;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 60%, #fff));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--color-accent) 70%, transparent);
+  z-index: 300;
+}
+
+/* ── Tasks-page floating "+" action button ──────────────────────────────── */
+.vx-task-fab-wrap {
+  position: fixed; right: 14px; z-index: 65;
+  /* Must clear the pinned Submit-My-Day bar (`.fixed-bottom-bar`, itself
+     raised above `.vx-bottom-nav` — see that rule's comment), which sits
+     underneath it. 150px wasn't enough headroom once the bar's own offset
+     was corrected, so the FAB was landing on top of the bar instead of
+     above it. */
+  bottom: calc(210px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+}
+@media (min-width: 1025px) {
+  /* Desktop has no bottom nav, but the Submit-My-Day bar is still pinned
+     (`.fixed-bottom-bar`'s base rule, bottom: 8px) — clear its top edge too. */
+  .vx-task-fab-wrap { bottom: 112px; }
+}
+.vx-task-fab {
+  width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff; font-size: 26px; font-weight: 700; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 10px 28px rgba(22,163,74,0.45);
+  transition: transform .2s var(--vx-spring), box-shadow .2s ease;
+}
+.vx-task-fab:hover { transform: translateY(-2px); }
+.vx-task-fab:active { transform: scale(0.94); }
+.vx-task-fab-options { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.vx-task-fab-option {
+  padding: 10px 16px; border-radius: 999px; white-space: nowrap; cursor: pointer;
+  background: var(--nav-bg-solid); border: 1px solid var(--vx-border);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  color: var(--color-text-primary); font-size: 13px; font-weight: 600;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.24);
+}
+.vx-task-fab-option:active { transform: scale(0.96); }

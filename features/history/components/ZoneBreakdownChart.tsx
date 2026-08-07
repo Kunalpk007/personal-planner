@@ -17,7 +17,7 @@ export function ZoneBreakdownChart() {
   }, [zones])
 
   if (weeks.length === 0) {
-    return <div className="text-[13px] text-[var(--text3)] py-6 text-center">No completed tasks yet to break down by zone.</div>
+    return <div className="text-[13px] py-6 text-center" style={{ color: 'var(--vx-fg-4)' }}>No completed tasks yet to break down by zone.</div>
   }
 
   const recentWeeks = weeks.slice(-12)
@@ -26,7 +26,7 @@ export function ZoneBreakdownChart() {
 
   return (
     <div>
-      <div className="text-[12px] text-[var(--text2)] mb-2">Completed tasks per zone, last {recentWeeks.length} weeks — watch for a zone thinning out.</div>
+      <div className="text-[12px] mb-2" style={{ color: 'var(--vx-fg-3)' }}>Completed tasks per zone, last {recentWeeks.length} weeks — watch for a zone thinning out.</div>
       <div className="flex items-end gap-1.5 h-[160px]">
         {recentWeeks.map(w => {
           const total = Object.values(w.zones).reduce((s, v) => s + v, 0)
@@ -47,7 +47,7 @@ export function ZoneBreakdownChart() {
                   )
                 })}
               </div>
-              <div className="text-[8px] text-[var(--text3)] rotate-45 origin-top-left whitespace-nowrap mt-2">
+              <div className="text-[8px] rotate-45 origin-top-left whitespace-nowrap mt-2" style={{ color: 'var(--vx-fg-4)' }}>
                 {w.weekStart.slice(5)}
               </div>
             </div>
@@ -58,7 +58,7 @@ export function ZoneBreakdownChart() {
         {zoneIds.map(zid => {
           const meta = zoneMeta.get(zid) ?? { name: zid, color: FALLBACK_COLOR }
           return (
-            <div key={zid} className="flex items-center gap-1 text-[11px] text-[var(--text3)]">
+            <div key={zid} className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--vx-fg-4)' }}>
               <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: meta.color }} />
               {meta.name}
             </div>

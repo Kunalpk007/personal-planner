@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect }        from 'react'
+import { motion } from 'framer-motion'
 import { usePlannerStore } from '@/store'
 import { Modal }           from '@/ui/Modal'
 import { showToast }       from '@/ui/Toast'
@@ -84,28 +85,28 @@ export default function RewardsPage() {
   return (
     <div className="pt-3 sm:pt-0">
       <div className="flex gap-2 items-center flex-wrap mb-3">
-        <span className="wallet-chip">🪙 Wallet: <span className="ml-1">{wallet}</span> pts</span>
-        <button onClick={() => setBuyOpen(true)} className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--blue-bg)] text-[var(--blue)] border border-[#4A9EE0]">
+        <span className="vx-chip" data-tone="amber" style={{ fontSize: 13, padding: '6px 14px' }}>🪙 Wallet: <span className="ml-1 font-bold">{wallet}</span> pts</span>
+        <button onClick={() => setBuyOpen(true)} className="vx-pill vx-tinted text-xs" data-tone="cyan">
           {freezeTokens} ❄ Buy Streak Freeze
         </button>
       </div>
-      <div className="text-[11px] bg-[var(--bg3)] text-[var(--text2)] px-2.5 py-1 rounded-full border border-[var(--border)] inline-block mb-3">
+      <div className="vx-chip inline-block mb-3" data-tone="neutral" style={{ fontWeight: 400 }}>
         Redeem from your wallet anytime. Earns 1 pt per 2 task pts.
       </div>
 
       {FLAGS.FRIENDS && notaries.length > 0 && (
         <div className="text-[12px] mb-3 flex items-center gap-2 flex-wrap">
-          <span className="text-[var(--text3)]">Notary for gated redemptions:</span>
+          <span style={{ color: 'var(--vx-fg-4)' }}>Notary for gated redemptions:</span>
           <select
             value={notaryUid}
             onChange={e => setNotaryUid(e.target.value)}
-            className="text-[12px] px-2 py-1 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none"
+            className="vx-field text-[12px] px-2 py-1 w-auto"
           >
             <option value="">None selected</option>
             {notaries.map(f => <option key={f.uid} value={f.uid}>{f.displayName}</option>)}
           </select>
           {notaryUid && (
-            <span className="text-[11px] text-[var(--text3)]">
+            <span className="text-[11px]" style={{ color: 'var(--vx-fg-4)' }}>
               {notaryThreshold != null ? `Threshold: ${notaryThreshold} pts` : 'No threshold set yet — cost gate inactive'}
             </span>
           )}
@@ -118,52 +119,52 @@ export default function RewardsPage() {
         {availableRewards.map(r => {
           const ok = wallet >= r.cost
           return (
-            <div key={r.id} className={`flex items-center gap-2.5 p-3 rounded-[10px] border mb-2 ${ok ? 'border-[var(--green-mid)]' : 'border-[var(--border)]'} bg-[var(--bg)]`}>
+            <motion.div layout key={r.id} className="vx-tile vx-accent-l flex items-center gap-2.5 mb-2" data-tone={ok ? 'cyan' : undefined}>
               <span className="flex-1 text-[13px]">
                 {r.title}
-                {r.habitLinked && <span className="ml-1.5 text-[10px] text-[var(--purple)]" title="Habit-linked — always gets a cooldown before it redeems">⏳</span>}
+                {r.habitLinked && <span className="ml-1.5 text-[10px]" style={{ color: 'var(--vx-violet)' }} title="Habit-linked — always gets a cooldown before it redeems">⏳</span>}
               </span>
-              <span className={`text-xs font-semibold whitespace-nowrap ${ok ? 'text-[var(--green)]' : 'text-[var(--text3)]'}`}>{r.cost} pts</span>
+              <span className="text-xs font-semibold whitespace-nowrap" style={{ color: ok ? 'var(--vx-emerald)' : 'var(--vx-fg-4)' }}>{r.cost} pts</span>
               <button onClick={() => setRedeemTarget({ id: r.id, title: r.title, cost: r.cost, habitLinked: r.habitLinked, habitCooldownHours: r.habitCooldownHours })} disabled={!ok}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium border disabled:opacity-35 ${ok ? 'bg-[var(--green-bg)] text-[var(--green)] border-[var(--green-mid)]' : 'bg-[var(--bg2)] border-[var(--border2)] text-[var(--text2)]'}`}>
+                className={`vx-btn text-xs ${ok ? 'vx-btn-primary' : 'vx-btn-ghost'}`}>
                 Redeem
               </button>
-              <button onClick={() => removeReward(r.id)} className="btn-icon danger">×</button>
-            </div>
+              <button onClick={() => removeReward(r.id)} className="vx-btn vx-btn-icon vx-danger">×</button>
+            </motion.div>
           )
         })}
       </div>
 
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mb-2">Custom reward</div>
-      <div className="card">
+      <div className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--vx-fg-4)' }}>Custom reward</div>
+      <div className="vx-tile p-3.5">
         <div className="flex gap-2 flex-wrap items-center">
           <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Reward name..."
-            className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+            className="flex-1 min-w-[160px] vx-field" />
           <input type="number" value={cost} onChange={e => setCost(+e.target.value)} min={15} style={{ width: 80 }}
-            className="text-[13px] px-2.5 py-2 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-[var(--text)] outline-none" />
+            className="vx-field" />
           <button onClick={() => { if (!title.trim() || cost < 15) { showToast('Min cost: 15 pts.'); return }; addReward({ title: title.trim(), cost, habitLinked }); setTitle(''); setCost(15); setHabitLinked(false); showToast('Reward added.') }}
-            className="px-3.5 py-2 rounded-md text-xs font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+            className="vx-btn vx-btn-primary text-xs">
             + Add Reward
           </button>
         </div>
         {FLAGS.FRIENDS && (
-          <label className="flex items-center gap-1.5 text-[11px] text-[var(--text3)] mt-2 cursor-pointer">
+          <label className="flex items-center gap-1.5 text-[11px] mt-2 cursor-pointer" style={{ color: 'var(--vx-fg-4)' }}>
             <input type="checkbox" checked={habitLinked} onChange={e => setHabitLinked(e.target.checked)} />
             Linked to a habit I&apos;m trying to reduce (always gets a cooldown before it redeems, regardless of cost)
           </label>
         )}
-        <div className="text-[11px] text-[var(--text3)] mt-1">Min cost: 15 reward pts</div>
+        <div className="text-[11px] mt-1" style={{ color: 'var(--vx-fg-4)' }}>Min cost: 15 reward pts</div>
       </div>
 
       {redeemedToday.length > 0 && (
         <>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text3)] mt-4 mb-2">Redeemed today</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide mt-4 mb-2" style={{ color: 'var(--vx-fg-4)' }}>Redeemed today</div>
           <div className="mb-4">
             {redeemedToday.map(r => (
-              <div key={r.id} className="flex items-center gap-2.5 p-3 rounded-[10px] border border-[var(--border)] bg-[var(--bg2)] mb-2 opacity-50">
+              <div key={r.id} className="vx-tile flex items-center gap-2.5 mb-2 opacity-50">
                 <span className="flex-1 text-[13px] line-through">{r.title}</span>
-                <span className="text-xs font-semibold whitespace-nowrap text-[var(--text3)]">{r.cost} pts</span>
-                <span className="px-3 py-1.5 rounded-md text-xs font-medium border bg-[var(--bg3)] border-[var(--border2)] text-[var(--text3)]">
+                <span className="text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--vx-fg-4)' }}>{r.cost} pts</span>
+                <span className="vx-chip" data-tone="neutral">
                   ✓ Redeemed
                 </span>
               </div>
@@ -173,15 +174,15 @@ export default function RewardsPage() {
       )}
 
       {/* Redemption receipt */}
-      <Modal open={!!redeemedReceipt} onClose={() => setRedeemedReceipt(null)} title="🎉 Reward Redeemed">
+      <Modal open={!!redeemedReceipt} onClose={() => setRedeemedReceipt(null)} title="🎉 Reward Redeemed" variant="vx">
         {redeemedReceipt && (
           <>
-            <p className="text-sm text-[var(--text2)] mb-3">
+            <p className="text-sm mb-3" style={{ color: 'var(--vx-fg-2)' }}>
               <strong>{redeemedReceipt.title}</strong> redeemed for <strong>{redeemedReceipt.cost} pts</strong>.
             </p>
-            <p className="text-xs text-[var(--text3)] mb-3">Wallet balance: <strong>{wallet}</strong> pts.</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--vx-fg-4)' }}>Wallet balance: <strong>{wallet}</strong> pts.</p>
             <div className="flex justify-end">
-              <button onClick={() => setRedeemedReceipt(null)} className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]">
+              <button onClick={() => setRedeemedReceipt(null)} className="vx-btn vx-btn-primary text-sm">
                 Done
               </button>
             </div>
@@ -190,20 +191,20 @@ export default function RewardsPage() {
       </Modal>
 
       {/* Redeem confirmation */}
-      <Modal open={!!redeemTarget} onClose={() => setRedeemTarget(null)} title="🎁 Redeem Reward">
+      <Modal open={!!redeemTarget} onClose={() => setRedeemTarget(null)} title="🎁 Redeem Reward" variant="vx">
         {redeemTarget && (
           <>
-            <p className="text-sm text-[var(--text2)] mb-3">
+            <p className="text-sm mb-3" style={{ color: 'var(--vx-fg-2)' }}>
               Redeem <strong>{redeemTarget.title}</strong> for <strong>{redeemTarget.cost} pts</strong>? This will be deducted from your wallet.
             </p>
             {FLAGS.FRIENDS && redeemTarget.habitLinked && (
-              <p className="text-xs text-[var(--purple)] mb-3">⏳ This reward is habit-linked — it won&apos;t finalize for {redeemTarget.habitCooldownHours ?? 12}h, during which your Notary can reject it.</p>
+              <p className="text-xs mb-3" style={{ color: 'var(--vx-violet)' }}>⏳ This reward is habit-linked — it won&apos;t finalize for {redeemTarget.habitCooldownHours ?? 12}h, during which your Notary can reject it.</p>
             )}
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setRedeemTarget(null)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+              <button onClick={() => setRedeemTarget(null)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
               <button
                 onClick={() => { handleRedeem(redeemTarget.id); setRedeemTarget(null) }}
-                className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--green-bg)] text-[var(--green)] border border-[var(--green-mid)]"
+                className="vx-btn vx-btn-primary text-sm"
               >
                 Redeem
               </button>
@@ -212,25 +213,25 @@ export default function RewardsPage() {
         )}
       </Modal>
 
-      <Modal open={buyOpen} onClose={() => setBuyOpen(false)} title="❄ Buy Streak Freeze">
-        <p className="text-sm text-[var(--text2)] mb-2">Spend <strong>{FREEZE_COST} reward pts</strong> from your wallet.</p>
-        <p className="text-xs text-[var(--text3)] mb-3">Max 2 purchased at a time. Milestone freezes stack beyond this cap.</p>
-        <div className="bg-[var(--bg2)] rounded-lg p-3 mb-4 text-sm space-y-1.5">
+      <Modal open={buyOpen} onClose={() => setBuyOpen(false)} title="❄ Buy Streak Freeze" variant="vx">
+        <p className="text-sm mb-2" style={{ color: 'var(--vx-fg-2)' }}>Spend <strong>{FREEZE_COST} reward pts</strong> from your wallet.</p>
+        <p className="text-xs mb-3" style={{ color: 'var(--vx-fg-4)' }}>Max 2 purchased at a time. Milestone freezes stack beyond this cap.</p>
+        <div className="vx-tile mb-4 text-sm space-y-1.5">
           <div className="flex justify-between"><span>Wallet balance</span><strong>{wallet}</strong></div>
           <div className="flex justify-between"><span>Purchased freezes held</span><strong>{freezesBought ?? 0}</strong></div>
           <div className="flex justify-between"><span>Total freeze tokens</span><strong>{freezeTokens}</strong></div>
         </div>
         {!canBuyFreeze && freezesBought < 2 && (
-          <p className="text-xs text-[var(--amber)] mb-3">
+          <p className="text-xs mb-3" style={{ color: 'var(--vx-amber)' }}>
             Need {Math.max(0, FREEZE_COST - wallet)} more wallet pts to buy a freeze.
           </p>
         )}
         <div className="flex gap-2 justify-end">
-          <button onClick={() => setBuyOpen(false)} className="px-3.5 py-1.5 rounded-md border border-[var(--border2)] bg-[var(--bg2)] text-sm">Cancel</button>
+          <button onClick={() => setBuyOpen(false)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
           <button
             onClick={handleBuy}
             disabled={!canBuyFreeze}
-            className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[var(--blue-bg)] text-[var(--blue)] border border-[#4A9EE0] disabled:opacity-35"
+            className="vx-btn vx-btn-cyan text-sm"
           >
             {wallet < FREEZE_COST ? `Need ${FREEZE_COST} pts (have ${wallet})` : `Buy 1 freeze (${FREEZE_COST} pts)`}
           </button>

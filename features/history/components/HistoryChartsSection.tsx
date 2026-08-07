@@ -16,17 +16,14 @@ export default function HistoryChartsSection() {
   const [tab, setTab] = useState<TabKey>('trend')
 
   return (
-    <div className="rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-3.5 mb-3">
+    <div className="vx-tile p-3.5 mb-3">
       <div className="flex gap-1 mb-3 flex-wrap">
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`text-[12px] px-2.5 py-1.5 rounded-full border ${
-              tab === t.key
-                ? 'bg-[var(--green-mid)] text-white border-[var(--green-mid)]'
-                : 'border-[var(--border2)] text-[var(--text2)]'
-            }`}
+            className={`vx-pill text-[12px] ${tab === t.key ? 'vx-tinted' : ''}`}
+            data-tone={tab === t.key ? 'emerald' : undefined}
           >
             {t.label}
           </button>

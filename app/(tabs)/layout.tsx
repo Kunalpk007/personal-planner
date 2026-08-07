@@ -1,6 +1,8 @@
 'use client'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
+import { usePlannerStore }  from '@/store'
 import { Toast }            from '@/ui/Toast'
 import { ManagerModal }     from '@/ui/ManagerModal'
 import { ThemeApplier }     from '@/ui/ThemeApplier'
@@ -8,6 +10,7 @@ import { FontScaleApplier } from '@/ui/FontScaleApplier'
 import { useOvernightCheck } from '@/hooks/useOvernightCheck'
 import { StoreBootstrap }   from '@/features/auth/StoreBootstrap'
 import { PwaBootstrap }     from '@/features/pwa/PwaBootstrap'
+import { WaterReminder }    from '@/features/wellness/WaterReminder'
 import { AppShellErrorBoundary } from './AppShellErrorBoundary'
 import { SyncStatusBadge }  from '@/ui/SyncStatusBadge'
 import { NotificationBell } from '@/ui/NotificationBell'
@@ -98,9 +101,16 @@ const TABS = [
   { href: '/settings',  label: 'Settings' },
 ]
 
+const SCOPE_CLASS: Record<string, string> = {
+  dark:  'vx-dark-scope',
+  light: 'vx-light-scope',
+  cream: 'vx-cream-scope',
+}
+
 function AppShell({ children }: { children: React.ReactNode }) {
   const pathname  = usePathname()
   const router    = useRouter()
+  const theme     = usePlannerStore(s => s.cfg.theme)
   const prevPath  = useRef(pathname)
   const touchX    = useRef(0)
   const touchY    = useRef(0)
@@ -108,8 +118,27 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
   const [animKey, setAnimKey] = useState(0)
   const [optimisticTab, setOptimisticTab] = useState<string | null>(null)
+  // Tab switches (and swipes) can take a visible moment — a dev-mode route
+  // compile, a slow device, etc. — during which the screen used to show no
+  // feedback at all ("looks dead"). `navigating` flips true the instant a
+  // switch is requested and false once the new pathname actually commits;
+  // `showLoader` only renders the bar after a short delay so a genuinely
+  // instant switch doesn't flash it needlessly.
+  const [navigating, setNavigating] = useState(false)
+  const [showLoader, setShowLoader] = useState(false)
+  const loaderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useOvernightCheck()
+
+  useEffect(() => {
+    if (navigating) {
+      loaderTimerRef.current = setTimeout(() => setShowLoader(true), 120)
+    } else {
+      if (loaderTimerRef.current) clearTimeout(loaderTimerRef.current)
+      setShowLoader(false)
+    }
+    return () => { if (loaderTimerRef.current) clearTimeout(loaderTimerRef.current) }
+  }, [navigating])
 
   // Warm the client-side cache for every tab up front so the first click on
   // each is instant — the tab buttons use router.push (not <Link>), which
@@ -128,12 +157,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
       setAnimKey(k => k + 1)
     }
     setOptimisticTab(null)
+    setNavigating(false)
     prevPath.current = pathname
   }, [pathname])
 
   const navigateTab = useCallback((href: string) => {
     if (href === pathname) return
     setOptimisticTab(href)
+    setNavigating(true)
     const currIdx = TABS.findIndex(t => t.href === href)
     const prevIdx = TABS.findIndex(t => t.href === pathname)
     if (prevIdx >= 0 && currIdx >= 0) {
@@ -162,27 +193,68 @@ function AppShell({ children }: { children: React.ReactNode }) {
     else if (dx > 0 && idx > 0) navigateTab(TABS[idx - 1].href)
   }, [pathname, navigateTab])
 
+  const activeTab = optimisticTab ?? pathname
+
   return (
     <>
-      {/* Top navigation bar */}
-      <nav className="nav-top">
-        <div className="nav-top-inner">
+      {/* Ambient background — shared across every tab. Previously three
+          large, brightly-colored blurred orbs (violet/pink/cyan); now a
+          single, very low-opacity accent-tinted glow so the canvas reads as
+          a calm, premium flat surface (see app/globals.css's `.vx-orb*`
+          rules for the actual toning-down). */}
+      <div className="vx-aurora">
+        <div className="vx-orb vx-orb1" />
+      </div>
+
+      {/* Route-switch loading bar — see the `navigating`/`showLoader` state
+          above. A thin animated bar at the very top of the viewport, the
+          same pattern as GitHub/YouTube's top-of-page progress indicator,
+          so a tab tap always gets immediate visual feedback even if the
+          new page takes a moment to actually render. */}
+      <AnimatePresence>
+        {showLoader && (
+          <motion.div
+            className="vx-route-progress"
+            initial={{ scaleX: 0, opacity: 1 }}
+            animate={{ scaleX: 0.82 }}
+            exit={{ scaleX: 1, opacity: 0, transition: { scaleX: { duration: 0.15 }, opacity: { duration: 0.25, delay: 0.1 } } }}
+            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Top navigation bar — floating glass pill, spring-sliding active indicator
+          (see project.md's "UI Redesign Initiative": shared app-shell chrome is
+          upgraded now even though most tabs' own content isn't redesigned yet). */}
+      <nav className="vx-nav-top">
+        <div className="vx-nav-top-inner">
           <button
             onClick={() => navigateTab('/dashboard')}
-            className="nav-brand"
+            className="vx-nav-brand vx-text-hero"
           >
             Personal Planner
           </button>
-          <div className="tab-bar-scroll">
-            {TABS.map(tab => (
-              <button
-                key={tab.href}
-                onClick={() => navigateTab(tab.href)}
-                className={`tab-item ${(optimisticTab ?? pathname) === tab.href ? 'active' : ''}`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="vx-tab-scroll">
+            {TABS.map(tab => {
+              const active = activeTab === tab.href
+              return (
+                <button
+                  key={tab.href}
+                  onClick={() => navigateTab(tab.href)}
+                  className={`vx-tab-item ${active ? 'vx-active' : ''}`}
+                >
+                  {active && (
+                    <motion.div
+                      layoutId="vx-top-tab-indicator"
+                      className="vx-nav-indicator"
+                      style={{ inset: 0 }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                    />
+                  )}
+                  <span className="relative z-10">{tab.label}</span>
+                </button>
+              )
+            })}
           </div>
           {FLAGS.FRIENDS && <NotificationBell />}
           <SyncStatusBadge />
@@ -199,24 +271,48 @@ function AppShell({ children }: { children: React.ReactNode }) {
         // silently ignored. Force it to always cover at least the viewport.
         style={{ position: 'relative', minHeight: '100dvh' }}
       >
-        <div key={animKey ? `${pathname}-${animKey}` : pathname} className={`page-container page-enter-${slideDir}`}>
+        <motion.div
+          key={animKey ? `${pathname}-${animKey}` : pathname}
+          // The redesigned app shell isn't forced dark regardless of the
+          // user's theme choice — the scope class picked here (vx-dark-scope
+          // / vx-light-scope / vx-cream-scope, see app/globals.css)
+          // re-declares the same shared tokens to that theme's values for
+          // this whole ancestor, so it also covers `.page-container`'s own
+          // padding box (otherwise a light-themed user would see a
+          // mismatched margin framing the card). Nav/bottom-nav/
+          // notification-bell chrome now follows the theme too (see the
+          // `[data-theme=...]` blocks in globals.css) — Light is genuinely
+          // white end-to-end, not just the page content.
+          className={`page-container ${SCOPE_CLASS[theme] ?? 'vx-dark-scope'}`}
+          initial={{ opacity: 0.4, x: slideDir === 'right' ? 28 : -28, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+        >
           {children}
-        </div>
+        </motion.div>
       </main>
 
-      {/* Bottom mobile nav */}
-      <nav className="bottom-nav">
+      {/* Bottom mobile nav — floating glass pill */}
+      <nav className="vx-bottom-nav">
         {TABS.map(tab => {
           const Icon = TAB_ICONS[tab.href]
-          const active = (optimisticTab ?? pathname) === tab.href
+          const active = activeTab === tab.href
           return (
             <button
               key={tab.href}
               onClick={() => navigateTab(tab.href)}
-              className={`bottom-tab ${active ? 'active' : ''}`}
+              className={`vx-nav-btn ${active ? 'vx-active' : ''}`}
             >
+              {active && (
+                <motion.div
+                  layoutId="vx-bottom-tab-indicator"
+                  className="vx-nav-indicator"
+                  style={{ inset: 0 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                />
+              )}
               <Icon />
-              <span className="bottom-tab__label">{tab.label}</span>
+              <span>{tab.label}</span>
             </button>
           )
         })}
@@ -225,6 +321,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <Toast />
       <ManagerModal />
       <PwaBootstrap />
+      <WaterReminder />
     </>
   )
 }
