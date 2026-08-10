@@ -45,8 +45,8 @@ export function CalmDownButton() {
       title="Take a moment to breathe"
       aria-label="Open breathing exercise"
     >
-      <span className="vx-calm-fab-label">Calm</span>
-      <span className="vx-calm-fab-label">Down!</span>
+      <span className="vx-calm-fab-label">calm</span>
+      <span className="vx-calm-fab-label">down!</span>
     </button>
   )
 

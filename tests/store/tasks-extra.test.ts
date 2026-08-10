@@ -371,3 +371,154 @@ describe('submitRetroFix', () => {
     expect(updated?.rewards).toEqual(['Treat'])
   })
 })
+
+// See lib/engine/retroFix.ts + BUGS.md/project.md: proving an auto-resolved
+// day (Rest Day or a plain miss — `auto: true`, never true for a deliberate
+// declareRestDay/useFreeze/on-time submit) actually met its target doesn't
+// just patch the displayed numbers — it upgrades the day to a genuinely
+// completed one, exactly like an on-time submit.
+describe('submitRetroFix — upgrading an auto-resolved day that actually met target', () => {
+  it('upgrades an auto-protected rest day: streak +1, XP penalty refunded, rest-day flag and weekly slot cleared', () => {
+    // 2024-01-09 is a Tuesday; its week's Monday is 2024-01-08.
+    for (let i = 0; i < 4; i++) {
+      usePlannerStore.getState().addTask(taskInput({ date: '2024-01-09', priority: 'high' })) // 4 x 20 = 80 pts
+    }
+    usePlannerStore.getState().tasks.forEach(t => usePlannerStore.getState().toggleTaskRetro(t.id))
+
+    usePlannerStore.setState({
+      history: [histEntry('2024-01-09', { rxp: 20, rest: true, auto: true })],
+      streak: 5, bestStreak: 5, rankXP: 100,
+      restDays: { '2024-01-09': true },
+      weekRestUsed: { '2024-01-08': true },
+    })
+
+    const result = usePlannerStore.getState().submitRetroFix('2024-01-09')
+
+    expect(result).toEqual({ ok: true, upgraded: true, newStreak: 6 })
+    const state = usePlannerStore.getState()
+    expect(state.streak).toBe(6)
+    expect(state.bestStreak).toBe(6)
+    expect(state.rankXP).toBe(100 + 40 + 5) // +REST_DAY_XP_PENALTY refund, +floor((80-70)/2) overflow
+    expect(state.restDays['2024-01-09']).toBeUndefined()
+    expect(state.weekRestUsed['2024-01-08']).toBe(false) // no other rest day that week
+    const entry = state.history.find(h => h.date === '2024-01-09')
+    expect(entry).toMatchObject({ rest: false, late: true, done: 4, total: 4 })
+  })
+
+  it('keeps the week\'s rest slot marked used if another rest day still exists that week', () => {
+    for (let i = 0; i < 4; i++) {
+      usePlannerStore.getState().addTask(taskInput({ date: '2024-01-09', priority: 'high' }))
+    }
+    usePlannerStore.getState().tasks.forEach(t => usePlannerStore.getState().toggleTaskRetro(t.id))
+
+    usePlannerStore.setState({
+      history: [histEntry('2024-01-09', { rxp: 20, rest: true, auto: true })],
+      streak: 5, bestStreak: 5,
+      restDays: { '2024-01-09': true, '2024-01-11': true }, // another rest day that same week
+      weekRestUsed: { '2024-01-08': true },
+    })
+
+    usePlannerStore.getState().submitRetroFix('2024-01-09')
+
+    expect(usePlannerStore.getState().weekRestUsed['2024-01-08']).toBe(true)
+  })
+
+  it('upgrades a plain missed day (streak already broken): streak becomes 1, daysActive counted', () => {
+    for (let i = 0; i < 4; i++) {
+      usePlannerStore.getState().addTask(taskInput({ date: '2024-01-09', priority: 'high' }))
+    }
+    usePlannerStore.getState().tasks.forEach(t => usePlannerStore.getState().toggleTaskRetro(t.id))
+
+    usePlannerStore.setState({
+      history: [histEntry('2024-01-09', { rxp: 20, rest: false, frozen: false, auto: true })],
+      streak: 0, bestStreak: 3, rankXP: 50, daysActive: 2,
+    })
+
+    const result = usePlannerStore.getState().submitRetroFix('2024-01-09')
+
+    expect(result).toEqual({ ok: true, upgraded: true, newStreak: 1 })
+    const state = usePlannerStore.getState()
+    expect(state.streak).toBe(1)
+    expect(state.bestStreak).toBe(3) // unchanged — 1 doesn't beat existing best
+    expect(state.rankXP).toBe(50 + 10 + 5) // +STREAK_BROKEN_XP_PENALTY refund, +overflow
+    expect(state.daysActive).toBe(3) // this branch wasn't counted active before, now is
+  })
+
+  it('grants a streak-milestone freeze bonus + badge when the upgraded streak crosses one', () => {
+    for (let i = 0; i < 4; i++) {
+      usePlannerStore.getState().addTask(taskInput({ date: '2024-01-09', priority: 'high' }))
+    }
+    usePlannerStore.getState().tasks.forEach(t => usePlannerStore.getState().toggleTaskRetro(t.id))
+
+    usePlannerStore.setState({
+      history: [histEntry('2024-01-09', { rxp: 20, rest: true, auto: true })],
+      streak: 2, bestStreak: 2, freezeTokens: 0,
+      badges: [{ id: 's-other', label: 'Unrelated badge', icon: '🏅', date: '2024-01-01' }], // newStreak = 3 -> milestone bonus = 1
+    })
+
+    usePlannerStore.getState().submitRetroFix('2024-01-09')
+
+    const state = usePlannerStore.getState()
+    expect(state.freezeTokens).toBe(1)
+    expect(state.badges).toHaveLength(2)
+    expect(state.badges[1]).toMatchObject({ id: 's3', label: '3-Day Streak' })
+  })
+
+  it('does NOT upgrade a deliberately declared rest day (auto: false) even if enough tasks are later checked off', () => {
+    for (let i = 0; i < 4; i++) {
+      usePlannerStore.getState().addTask(taskInput({ date: '2024-01-09', priority: 'high' }))
+    }
+    usePlannerStore.getState().tasks.forEach(t => usePlannerStore.getState().toggleTaskRetro(t.id))
+
+    usePlannerStore.setState({
+      history: [histEntry('2024-01-09', { rxp: 0, rest: true, auto: false })],
+      streak: 5, bestStreak: 5, rankXP: 100,
+      restDays: { '2024-01-09': true },
+    })
+
+    const result = usePlannerStore.getState().submitRetroFix('2024-01-09')
+
+    expect(result).toEqual({ ok: true })
+    const state = usePlannerStore.getState()
+    expect(state.streak).toBe(5) // unchanged
+    expect(state.rankXP).toBe(100) // no refund
+    expect(state.restDays['2024-01-09']).toBe(true) // still a rest day
+    const entry = state.history.find(h => h.date === '2024-01-09')
+    expect(entry?.rest).toBe(true)
+  })
+
+  it('does NOT upgrade when the corrected total still falls short of the target', () => {
+    usePlannerStore.getState().addTask(taskInput({ date: '2024-01-09', priority: 'low' })) // 6 pts, way under 70
+    usePlannerStore.getState().tasks.forEach(t => usePlannerStore.getState().toggleTaskRetro(t.id))
+
+    usePlannerStore.setState({
+      history: [histEntry('2024-01-09', { rxp: 0, rest: true, auto: true })],
+      streak: 5, bestStreak: 5,
+      restDays: { '2024-01-09': true },
+    })
+
+    const result = usePlannerStore.getState().submitRetroFix('2024-01-09')
+
+    expect(result).toEqual({ ok: true })
+    expect(usePlannerStore.getState().streak).toBe(5) // unchanged
+    expect(usePlannerStore.getState().restDays['2024-01-09']).toBe(true) // still a rest day
+  })
+
+  it('does NOT upgrade a frozen day even if auto were somehow true', () => {
+    for (let i = 0; i < 4; i++) {
+      usePlannerStore.getState().addTask(taskInput({ date: '2024-01-09', priority: 'high' }))
+    }
+    usePlannerStore.getState().tasks.forEach(t => usePlannerStore.getState().toggleTaskRetro(t.id))
+
+    usePlannerStore.setState({
+      history: [histEntry('2024-01-09', { rxp: 0, rest: false, frozen: true, auto: true })],
+      streak: 5, bestStreak: 5, rankXP: 100,
+    })
+
+    const result = usePlannerStore.getState().submitRetroFix('2024-01-09')
+
+    expect(result).toEqual({ ok: true })
+    expect(usePlannerStore.getState().streak).toBe(5) // unchanged
+    expect(usePlannerStore.getState().rankXP).toBe(100) // no refund
+  })
+})

@@ -390,7 +390,7 @@ export interface AppActions {
   removeTask:            (id: string) => void
   toggleTask:            (id: string) => { pts: number; walletPts: number } | null
   toggleTaskRetro:       (id: string) => { pts: number; walletPts: number } | null
-  submitRetroFix:        (dateKey: string, reward?: { title: string; cost: number }) => { ok: boolean; reason?: string }
+  submitRetroFix:        (dateKey: string, reward?: { title: string; cost: number }) => { ok: boolean; reason?: string; upgraded?: boolean; newStreak?: number }
   editTask:              (id: string, updates: Partial<Task>) => void
   pinTask:               (id: string | null) => void
   toggleSubtask:         (taskId: string, subId: string) => void
