@@ -46,6 +46,20 @@ export function getWeekMonday(dateStr: string): string {
   return `${mon.getFullYear()}-${pad(mon.getMonth() + 1)}-${pad(mon.getDate())}`
 }
 
+/** All 7 date keys (Mon..Sun) of the week starting at mondayStr. Used to
+ *  recompute a week's `weekRestUsed` flag after a retroactive fix removes a
+ *  rest day from it (see tasks.slice.ts#submitRetroFix) — need to check
+ *  whether any OTHER day that same week still has a rest day recorded. */
+export function getWeekDates(mondayStr: string): string[] {
+  const dates: string[] = []
+  const d = new Date(`${mondayStr}T12:00:00`)
+  for (let i = 0; i < 7; i++) {
+    dates.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`)
+    d.setDate(d.getDate() + 1)
+  }
+  return dates
+}
+
 export function isWeekend(dateStr: string): boolean {
   const d = new Date(`${dateStr}T12:00:00`)
   return d.getDay() === 0 || d.getDay() === 6

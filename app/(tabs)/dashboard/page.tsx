@@ -8,16 +8,14 @@ import { StatGrid }        from '@/features/dashboard/components/StatGrid'
 import { RankProgress }    from '@/features/dashboard/components/RankProgress'
 import { GradientRing }    from '@/ui/GradientRing'
 import { SubmitArea }      from '@/features/dashboard/components/SubmitArea'
-import { Accordion }       from '@/ui/Accordion'
-import { showToast }       from '@/ui/Toast'
-import { todayEarned, todayTarget, calcPts } from '@/lib/engine/scoring'
+import { RetroFixPanel }   from '@/features/dashboard/components/RetroFixPanel'
+import { todayEarned, todayTarget } from '@/lib/engine/scoring'
 import { goalPtsEarnedOn } from '@/lib/engine/goals'
-import { getPrevDayKey } from '@/lib/engine/cutoff'
 import { getDailyQuote }   from '@/lib/engine/quotes'
 import { getManagerMessage } from '@/lib/engine/manager'
 import { StreakHistoryModal } from '@/features/dashboard/components/StreakHistoryModal'
 import { MorningQuoteOverlay } from '@/features/dashboard/components/MorningQuoteOverlay'
-import { LifeScoreCard }   from '@/features/dashboard/components/LifeScoreCard'
+import { LifeScoreModal }  from '@/features/dashboard/components/LifeScoreCard'
 import { FocusTimeCard }   from '@/features/dashboard/components/FocusTimeCard'
 import { WaterTrackerCard } from '@/features/dashboard/components/WaterTrackerCard'
 import { CalmDownButton }  from '@/features/wellness/CalmDownButton'
@@ -65,25 +63,11 @@ export default function DashboardPage() {
   const mood         = usePlannerStore(s => s.mood[today])
   const cfg          = usePlannerStore(s => s.cfg)
   const pinnedTaskId = usePlannerStore(s => s.pinnedTaskId)
-  const toggleTaskRetro = usePlannerStore(s => s.toggleTaskRetro)
-  const submitRetroFix  = usePlannerStore(s => s.submitRetroFix)
-  const retroFixedDays  = usePlannerStore(s => s.retroFixedDays)
   const streak       = usePlannerStore(s => s.streak)
   const allGoals     = usePlannerStore(s => s.goals)
 
-  const [fixDismissed, setFixDismissed] = useState(false)
-  const [retroRewardTitle, setRetroRewardTitle] = useState('')
-  const [retroRewardPts, setRetroRewardPts] = useState('')
   const [streakHistoryOpen, setStreakHistoryOpen] = useState(false)
-
-  const prevDay      = getPrevDayKey(today)
-  const yesterdayTasks = useMemo(() => allTasks.filter(t => t.date === prevDay), [allTasks, prevDay])
-  // Show even when auto-submitted — user may still have missed checkoffs.
-  // Only hide once they've explicitly submitted the retro panel (retroFixedDays) or dismissed it.
-  const showRetroFix = yesterdayTasks.length > 0
-    && !fixDismissed
-    && !retroFixedDays[prevDay]
-    && now.getHours() < cfg.cutoffHour
+  const [lifeScoreOpen, setLifeScoreOpen] = useState(false)
 
   const earned  = todayEarned(done, mood, cfg, goalPtsEarnedOn(allGoals, today))
   const target  = todayTarget(tasks)
@@ -149,75 +133,11 @@ export default function DashboardPage() {
           </p>
         </motion.div>
 
-        {/* Yesterday reconciliation — grace window until next cutoff */}
-        {showRetroFix && (
-          <Accordion variant="vx" title={
-            <div className="flex items-center justify-between flex-1 gap-2">
-              <span>📝 Yesterday ({prevDay}) — Fix Missed Check-offs</span>
-              <span
-                role="button"
-                onClick={(e) => { e.stopPropagation(); setFixDismissed(true) }}
-                className="btn-icon"
-              >
-                ×
-              </span>
-            </div>
-          }>
-            <p className="text-xs text-[var(--text2)] mb-2.5">
-              Forgot to tick something off before the cutoff? Toggle it here, then submit to update yesterday&apos;s history, streak and XP.
-            </p>
-            {yesterdayTasks.map(t => (
-              <div key={t.id} className="flex items-center gap-2.5 p-2.5 rounded-[10px] border border-[var(--vx-border)] bg-[var(--vx-surface-tint)] mb-1.5">
-                <button
-                  onClick={() => {
-                    const result = toggleTaskRetro(t.id)
-                    if (result) showToast(`+${result.pts} RXP · +${result.walletPts} 🪙`)
-                    else showToast('Unchecked — points reversed.')
-                  }}
-                  className={`w-[21px] h-[21px] rounded-full border-[1.5px] flex-shrink-0 flex items-center justify-center text-[11px] transition-all ${t.done ? 'bg-[var(--vx-emerald)] border-[var(--vx-emerald)] text-white' : 'border-[var(--border2)] text-transparent'}`}
-                >
-                  {t.done ? '✓' : ''}
-                </button>
-                <span className={`text-[13px] flex-1 ${t.done ? 'line-through' : ''}`}>{t.title}</span>
-                <span className={`text-xs font-semibold ${t.done ? 'text-[var(--vx-emerald)]' : 'text-[var(--text3)]'}`}>+{calcPts(t)}</span>
-              </div>
-            ))}
-
-            <div className="border-t border-[var(--vx-border)] mt-2.5 pt-2.5">
-              <div className="text-xs text-[var(--text2)] mb-2">Did you redeem a reward yesterday? (optional)</div>
-              <div className="flex gap-2 flex-wrap items-center mb-3">
-                <input
-                  value={retroRewardTitle}
-                  onChange={e => setRetroRewardTitle(e.target.value)}
-                  placeholder="Reward name..."
-                  className="flex-1 min-w-[160px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--vx-border)] bg-[var(--vx-surface-tint)] text-[var(--text)] outline-none"
-                />
-                <input
-                  type="number"
-                  value={retroRewardPts}
-                  onChange={e => setRetroRewardPts(e.target.value)}
-                  placeholder="Pts redeemed"
-                  min={0}
-                  className="w-[110px] text-[13px] px-2.5 py-2 rounded-md border border-[var(--vx-border)] bg-[var(--vx-surface-tint)] text-[var(--text)] outline-none"
-                />
-              </div>
-              <button
-                onClick={() => {
-                  const cost = +retroRewardPts || 0
-                  const reward = retroRewardTitle.trim() && cost > 0 ? { title: retroRewardTitle.trim(), cost } : undefined
-                  const result = submitRetroFix(prevDay, reward)
-                  if (!result.ok) { showToast('Not enough wallet pts for that reward.'); return }
-                  setRetroRewardTitle(''); setRetroRewardPts('')
-                  showToast(`Yesterday’s changes saved.${reward ? ` 🎁 ${reward.title} redeemed.` : ''}`)
-                }}
-                className="vx-submit-btn"
-                style={{ padding: '0.625rem' }}
-              >
-                ✓ Submit Changes
-              </button>
-            </div>
-          </Accordion>
-        )}
+        {/* Missed check-offs reconciliation — a two-step confirm+checklist
+            modal (auto-opens, doesn't sit as a persistent banner), fixable
+            until a fixed, non-configurable 12:00 PM the day after. See
+            RetroFixPanel.tsx / lib/engine/retroFix.ts. */}
+        <RetroFixPanel today={today} />
 
         <MoodBar today={today} />
 
@@ -268,7 +188,7 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        <StatGrid today={today} onStreakClick={() => setStreakHistoryOpen(true)} />
+        <StatGrid today={today} onLifeScoreClick={() => setLifeScoreOpen(true)} />
         <RankProgress />
 
         {/* Water Tracker now leads Focus Time — per explicit reordering
@@ -276,8 +196,6 @@ export default function DashboardPage() {
         <WaterTrackerCard today={today} />
 
         <FocusTimeCard today={today} />
-
-        <LifeScoreCard />
 
         {/* Calm Down floating button + breathing overlay — Dashboard only,
             fixed position (doesn't move on scroll). */}
@@ -304,6 +222,8 @@ export default function DashboardPage() {
 
         {/* Streak history */}
         <StreakHistoryModal open={streakHistoryOpen} onClose={() => setStreakHistoryOpen(false)} />
+        {/* Life Score detail — tap the 7D tile above to open (see StatGrid.tsx) */}
+        <LifeScoreModal open={lifeScoreOpen} onClose={() => setLifeScoreOpen(false)} />
       </div>
     </div>
   )

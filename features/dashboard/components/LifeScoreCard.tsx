@@ -2,13 +2,21 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { usePlannerStore } from '@/store'
+import { Modal } from '@/ui/Modal'
 import { computeLifeScore } from '@/lib/engine/goals'
 import { FLAGS } from '@/constants/feature-flags'
 import { AnimatedNumber } from '@/ui/AnimatedNumber'
 
 const LIFE_SCORE_PERIODS = [7, 15, 30, 60, 90] as const
 
-export function LifeScoreCard() {
+/** Was a permanently-rendered card on the Dashboard, sitting directly below
+ *  the StatGrid tile that already showed the same 7-day Life Score number —
+ *  two copies of the same metric on one screen. Folded into a modal opened
+ *  by tapping that tile instead, matching how the streak orb and Rank
+ *  Progress bar already work here: a compact number on the surface, full
+ *  detail (period picker + per-zone breakdown) one tap away rather than
+ *  always taking up scroll space. See StatGrid.tsx's `onLifeScoreClick`. */
+export function LifeScoreModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const zones   = usePlannerStore(s => s.zones)
   const history = usePlannerStore(s => s.history)
   const [periodDays, setPeriodDays] = useState<number>(30)
@@ -18,14 +26,8 @@ export function LifeScoreCard() {
   if (!FLAGS.LIFE_SCORE) return null
 
   return (
-    <motion.div
-      className="vx-glass"
-      initial={{ opacity: 0, y: 22, scale: 0.97, filter: 'blur(4px)' }}
-      animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.63 }}
-    >
+    <Modal open={open} onClose={onClose} title="🧭 Life Score" variant="vx">
       <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-        <div className="vx-eyebrow" style={{ marginBottom: 0 }}>🧭 Life Score</div>
         <div className="vx-seg ml-auto">
           {LIFE_SCORE_PERIODS.map(d => (
             <button
@@ -64,7 +66,7 @@ export function LifeScoreCard() {
                   style={{ background: z.color }}
                   initial={{ width: 0 }}
                   animate={{ width: `${byZone[z.id] ?? 0}%` }}
-                  transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.7 + i * 0.05 }}
+                  transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.1 + i * 0.05 }}
                 />
               </div>
               <span className="text-[11px] text-[var(--text3)] w-8 text-right flex-shrink-0">{byZone[z.id] ?? 0}</span>
@@ -72,6 +74,6 @@ export function LifeScoreCard() {
           ))}
         </div>
       )}
-    </motion.div>
+    </Modal>
   )
 }

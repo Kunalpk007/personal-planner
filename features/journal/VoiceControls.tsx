@@ -1,8 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { showToast } from '@/ui/Toast'
-import { getClientAuth } from '@/lib/firebase/client'
-import { uploadJournalAudio } from '@/lib/firebase/storage'
 
 // Minimal typing for the browser Speech Recognition API (not in TS DOM libs).
 type SR = {
@@ -19,26 +17,47 @@ function getSR(): (new () => SR) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
 }
 
-/** Speech-to-text (dictation) + optional voice-note recording for the journal.
- *  - Dictation appends transcribed text via onAppendText (no infra needed).
- *  - Recording captures audio and uploads it to Firebase Storage (best-effort);
- *    on success it appends a markdown link to the entry via onAppendText. */
-export function VoiceControls({ dateKey, onAppendText }: {
+/** Speech-to-text (dictation) for the journal.
+ *
+ *  The "Record voice" (audio note upload) feature that used to live here has
+ *  been removed for now — it always failed. TWO stacked root causes, found
+ *  by reading top to bottom what actually happens when it's tapped:
+ *  1. **The real blocker**: `next.config.ts`'s global security headers send
+ *     `Permissions-Policy: microphone=()` on every response — an empty
+ *     allowlist, which disables microphone access for every origin,
+ *     including the app's own (`'self'` is not in the list). That header is
+ *     enforced by the browser itself, before any app code runs, so
+ *     `navigator.mediaDevices.getUserMedia({ audio: true })` was rejected
+ *     every single time, surfacing as the "Mic permission denied" toast —
+ *     not an actual OS/browser permission prompt being denied, but the page
+ *     itself telling the browser the mic isn't allowed. (`camera=()` and
+ *     `geolocation=()` are set the same way, presumably as a blanket
+ *     hardening default when those headers were added — nothing else in the
+ *     app currently needs camera/mic/location, so this had gone unnoticed.)
+ *  2. **The second blocker, which would have fired even with #1 fixed**:
+ *     the upload step used Firebase Storage via `uploadJournalAudio`
+ *     (`lib/firebase/storage.ts`), which requires Storage's security rules
+ *     to be deployed for this project. Neither a `storage.rules` file nor a
+ *     `firebase.json` referencing one exist anywhere in this repo — Storage
+ *     was never actually provisioned, so Firebase's default deny-all rules
+ *     reject every upload attempt and `uploadBytes` throws.
+ *  Fixing #1 is a one-line header change but still leaves #2 blocking a
+ *  successful save, and #2 needs Firebase Storage enabled + rules deployed
+ *  from the console/CLI with real project access — not something that can
+ *  be done from here. So rather than "fix" it halfway and leave it visibly
+ *  broken in a new way, it's been taken out entirely for now. Dictation
+ *  (below) depends on neither — it's a pure browser Speech Recognition API
+ *  with no mic-stream/Storage involvement — and is unaffected. */
+export function VoiceControls({ dateKey: _dateKey, onAppendText }: {
   dateKey: string
   onAppendText: (text: string) => void
 }) {
   const [listening, setListening] = useState(false)
-  const [recording, setRecording] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [localUrl, setLocalUrl] = useState<string | null>(null)
   const srRef = useRef<SR | null>(null)
-  const recRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<BlobPart[]>([])
 
   const srSupported = !!getSR()
-  const recSupported = typeof window !== 'undefined' && typeof navigator !== 'undefined' && !!navigator.mediaDevices && typeof MediaRecorder !== 'undefined'
 
-  useEffect(() => () => { try { srRef.current?.stop() } catch {}; try { recRef.current?.stop() } catch {} }, [])
+  useEffect(() => () => { try { srRef.current?.stop() } catch {} }, [])
 
   function toggleDictation() {
     if (listening) { srRef.current?.stop(); return }
@@ -59,68 +78,17 @@ export function VoiceControls({ dateKey, onAppendText }: {
     try { sr.start(); setListening(true) } catch { showToast('Could not start the mic.') }
   }
 
-  async function toggleRecording() {
-    if (recording) { recRef.current?.stop(); return }
-    if (!recSupported) { showToast('Recording not supported on this browser.'); return }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const rec = new MediaRecorder(stream)
-      chunksRef.current = []
-      rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data) }
-      rec.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop())
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-        setLocalUrl(URL.createObjectURL(blob))
-        setBusy(true)
-        try {
-          const uid = getClientAuth().currentUser?.uid ?? 'anon'
-          const url = await uploadJournalAudio(uid, dateKey, blob)
-          onAppendText(`\n🎙️ [Voice note](${url})\n`)
-          showToast('Voice note saved.')
-        } catch {
-          showToast('Recorded — but cloud upload needs Firebase Storage enabled. Playable below for now.')
-        }
-        setBusy(false)
-      }
-      recRef.current = rec
-      rec.start(); setRecording(true)
-    } catch {
-      showToast('Mic permission denied.')
-    }
-  }
-
-  useEffect(() => {
-    if (!recording) return
-    const rec = recRef.current
-    if (!rec) return
-    const onStop = () => setRecording(false)
-    rec.addEventListener('stop', onStop, { once: true })
-    return () => rec.removeEventListener('stop', onStop)
-  }, [recording])
-
-  if (!srSupported && !recSupported) return null
+  if (!srSupported) return null
 
   return (
     <div className="flex items-center gap-2 flex-wrap mb-2">
-      {srSupported && (
-        <button type="button" onClick={toggleDictation}
-          className="vx-chip text-[12px]"
-          style={listening
-            ? { background: 'rgba(239,68,68,0.12)', color: 'var(--red)', borderColor: 'rgba(239,68,68,0.4)' }
-            : { background: 'var(--vx-card)', color: 'var(--vx-fg-3)', borderColor: 'var(--vx-border)' }}>
-          {listening ? '● Listening… tap to stop' : '🎤 Dictate'}
-        </button>
-      )}
-      {recSupported && (
-        <button type="button" onClick={toggleRecording} disabled={busy}
-          className="vx-chip text-[12px] disabled:opacity-50"
-          style={recording
-            ? { background: 'rgba(239,68,68,0.12)', color: 'var(--red)', borderColor: 'rgba(239,68,68,0.4)' }
-            : { background: 'var(--vx-card)', color: 'var(--vx-fg-3)', borderColor: 'var(--vx-border)' }}>
-          {busy ? 'Saving…' : recording ? '■ Stop recording' : '🎙️ Record voice'}
-        </button>
-      )}
-      {localUrl && <audio src={localUrl} controls className="h-8 max-w-[180px]" />}
+      <button type="button" onClick={toggleDictation}
+        className="vx-chip text-[12px]"
+        style={listening
+          ? { background: 'rgba(239,68,68,0.12)', color: 'var(--red)', borderColor: 'rgba(239,68,68,0.4)' }
+          : { background: 'var(--vx-card)', color: 'var(--vx-fg-3)', borderColor: 'var(--vx-border)' }}>
+        {listening ? '● Listening… tap to stop' : '🎤 Dictate'}
+      </button>
     </div>
   )
 }

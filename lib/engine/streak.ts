@@ -155,7 +155,7 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
       const penalty = streakBrokenXpPenalty(mk, state.mood)
       patch.rankXP = Math.max(0, patch.rankXP! - penalty)
       patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: false })
-      overnightMsg = `😔 ${mk} missed (${earned}/${minPts} pts). No streak yet to protect.`
+      overnightMsg = `😔 ${mk} missed (${earned}/${minPts} pts). No streak yet to protect. Actually finished it? Fix it below.`
     } else {
       const penalty = restOrLightXpPenalty(mk, state.cfg, state.mood)
       patch.rankXP = Math.max(0, patch.rankXP! - penalty)
@@ -164,7 +164,7 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
       patch.submittedDays![mk] = true
       patch.daysActive         = (patch.daysActive ?? 0) + 1
       patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: true })
-      overnightMsg = `🟡 Rest Day auto-applied for ${mk} (${earned}/${minPts} pts). Streak protected.`
+      overnightMsg = `🟡 Rest Day auto-applied for ${mk} (${earned}/${minPts} pts). Streak protected. Forgot to tick something off? Fix it below.`
     }
   }
 

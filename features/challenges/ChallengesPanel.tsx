@@ -31,7 +31,11 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
  *  Deep-linkable via ?sub=given|accepted (e.g. from a notification click). */
 export function ChallengesPanel() {
   const searchParams = useSearchParams()
-  const [sub, setSub] = useState<'given' | 'accepted'>('given')
+  // Default sub-tab is "My Challenges" (accepted) — that's the actionable
+  // one (things to respond to / work on), "Challenges given" is more of a
+  // sent-log you check less often. Still overridable via ?sub=, e.g. from a
+  // notification click that specifically wants "given".
+  const [sub, setSub] = useState<'given' | 'accepted'>('accepted')
 
   useEffect(() => {
     const s = searchParams.get('sub')

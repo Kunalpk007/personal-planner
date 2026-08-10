@@ -125,7 +125,25 @@ this file to resume cold. Not auto-loaded — see "How to use this file" at the 
 
 ## Open questions
 
-None remaining — all resolved as of 2026-07-30 (see CONFIRMED notes inline above).
+Two, both awaiting a user decision as of 2026-08-10 — see that date's Progress log entry
+for full context. Nothing else is pending; do not start either without an explicit go-ahead,
+per this session's established pattern of prototyping user-facing changes before touching
+real code.
+
+1. **Time/attention tracking + weekly rituals** — three prototype screens were designed and
+   sent to the user (image: a 3-panel mockup, not yet in the repo as real code): a non-scored
+   end-of-day "focus check-in" (5-point scale + distraction tags), a "Tomorrow's Top 3" step
+   appended to Submit My Day, and a Sunday-only Weekly Review screen wired to the existing but
+   never-surfaced `setWeeklyReviewDone` store action. **Not approved yet.** If the user says go
+   ahead, implement per the design described in the 2026-08-10 log entry below — note
+   `setWeeklyReviewDone`'s current signature (`date: string, reflection: string`) will likely
+   need restructuring to hold multiple prompts rather than one string.
+2. **Consolidating the 5 parallel progress systems** (Rank/XP ladder, streak, badges, reward
+   wallet, Life Score) — user flagged that even with a 21-day streak they "aren't sure if
+   they're being productive," which points at the scoring being too spread out, not just the
+   dashboard layout (already addressed separately, see below). Life Score was suggested as the
+   strongest candidate for a single "is this actually working" number, with the rest pushed a
+   tap deeper rather than removed. **Offered to prototype next; user has not responded yet.**
 
 ## UI Redesign Initiative (started 2026-08-03)
 
@@ -147,6 +165,373 @@ should feel "lively" and "premium."
 - **Status: Dashboard implementation COMPLETE** (see progress log entry below for detail).
 
 ## Progress log
+
+- **2026-08-10 — Personal-coach analysis delivered (the "as a personal coach analyse
+  what's missing" item from the original 10-item batch, the last item from that batch
+  to be addressed), user responded with a 4-part follow-up, 3 of 4 parts actioned.**
+  `personal-coach-analysis.md` was written (grounded in a full codebase inventory, not
+  a generic feature wishlist) and sent to the user. Key findings: the app's streak/mood/
+  social-accountability design is already genuinely strong; the biggest real gap is that
+  the app tracks task *completion*, not time or attention, so it can't answer the user's
+  original ask of "am I wasting time and being unproductive" — a perfect streak is
+  possible on a scattered, low-focus day; a `setWeeklyReviewDone(date, reflection)` store
+  action already exists but is dead code, never called from any screen — a near-free win
+  if wired up; and the Dashboard runs 5 simultaneous progress numbers at once (Rank/XP,
+  streak, badges, wallet, Life Score), risking "am I doing well" being harder to answer,
+  not easier, plus a caution that the slot-mismatch −20% penalty is the same *shape* of
+  rigid rule that caused the original rest-day trust problem this whole session started
+  from.
+  - **User's 4-part reply and what happened with each**:
+    1. *"Give me a solution for the time/attention signal, guide me what to do"* → designed
+       (not yet built) as a non-scored end-of-day focus check-in — see Open Questions #1
+       and the dashboard-decluttering entry directly below for the full design + prototype.
+    2. *"Implement weekly review + tomorrow's-top-3-at-EOD, decide triggers, show me the
+       screens"* → trigger decision made (both piggyback on the existing Submit My Day
+       flow — top-3 every day right after EOD mood, Weekly Review appended only on
+       Sundays, this app's week-boundary day everywhere else) and a 3-screen mockup was
+       designed and sent as an image. **Not implemented — prototype only, awaiting
+       approval**, per Open Questions #1.
+    3. *Dashboard tile cleanup — specific, concrete instructions (drop Reward wallet tile,
+       drop the duplicate Streak tile, make the Life Score tile clickable like the streak
+       orb, keep Water)* → **implemented directly** (concrete enough not to need a
+       prototype-approval round) — see the dashboard-decluttering entry directly below for
+       full detail. Screenshots were sent confirming the live result.
+    4. *"Have you fixed the bottom nav issue?"* → confirmed still fixed, no regression —
+       re-read the live CSS and confirmed the `isolation: isolate` + opaque
+       `background-color` fallback from the 2026-08-09 fix is untouched. No code change
+       was needed; user was told to send a fresh screenshot if they're still seeing it
+       (would imply a second, different cause).
+  - Also raised (not part of the original 4-item reply, a new observation from the "even
+    with 21 streak I'm not sure if I'm being productive" line) — see Open Questions #2:
+    offered to prototype consolidating the 5 parallel progress systems down to one lead
+    metric (Life Score suggested as the candidate), user hasn't responded yet.
+  - **2026-08-10, later same day — synced this session's cumulative work to the user's
+    real local repo** (`E:\Claude Projects\kunals-planner` on their Windows machine,
+    connected via the device bridge). Discovered the local repo's last commit predated
+    this entire session (`feat: add bug log for Submit My Day bar alignment issue and fix
+    CSS safe-area inset handling`, 2026-08-07) — none of this session's work (the original
+    rest-day/retro-fix bug fix, the second-same-day batch, the retro-fix redesign, or
+    today's dashboard decluttering) had ever reached local disk. Before writing anything,
+    hashed every file on both sides (content-only, ignoring the local checkout's pre-
+    existing CRLF/LF noise — confirmed via `git diff -w` that all 145 locally-"modified"
+    files per `git status` were whitespace-only, zero real uncommitted local work at risk)
+    to find the exact set of real differences rather than doing a blind directory
+    overwrite. Result: 16 files with genuine content differences + 3 brand-new files
+    (`RetroFixPanel.tsx`, `retroFix.ts`, `retroFix.test.ts`) — synced all 19, byte-verified
+    identical on both sides afterward via a second hash pass. Nothing else in the local
+    tree was touched. Left **uncommitted** on the local `feat/BugFixes_featureAdd` branch —
+    committing/pushing was not requested. One harmless leftover: `_sync_incoming.zip` in
+    the repo root (the mounted drive doesn't allow deleting files remotely, so it was
+    emptied rather than removed) — safe for the user to delete themselves, git will ignore
+    it either way if never staged.
+
+- **2026-08-10 — Dashboard decluttering, following the coach-analysis feedback that
+  5 simultaneous progress numbers (StatGrid's 4 tiles + the streak orb) made it
+  impossible to tell "am I actually doing well" at a glance.** `tsc --noEmit`
+  clean, `vitest run --coverage` 442/442 at 100% coverage (unchanged — no
+  engine/store files touched, presentational only), `next build --webpack`
+  clean, live-verified via Playwright screenshots of both the tile grid and the
+  new modal.
+  - **`StatGrid.tsx` cut from 4 tiles to 2.** "Reward wallet" removed
+    entirely — it's already shown at the point it actually matters (redeeming
+    on the Rewards page), so it was a second number with no decision attached
+    to it here. "Streak" removed entirely — an exact duplicate of the streak
+    orb already in the dashboard header (also clickable, opens the same
+    `StreakHistoryModal`). "Water Intake" kept as explicitly requested.
+  - **"7D Life Score" tile is now tap-to-expand instead of a static number,
+    matching the streak orb / Rank Progress bar pattern** (compact number on
+    the surface, full detail one tap away — not permanently taking up scroll
+    space). `LifeScoreCard.tsx` was rewritten into `LifeScoreModal` (same
+    period-picker + per-zone-breakdown content, now inside a `<Modal
+    variant="vx">` opened via `StatGrid`'s new `onLifeScoreClick` prop) — this
+    also removes what had become a second, always-visible copy of the same
+    7-day number sitting just below the tile that already showed it.
+  - **Not changed**: the streak orb (top-right) and the Rank Progress bar both
+    stay — neither was flagged as duplicate/confusing, and both already follow
+    the same "compact + tap for detail" pattern the Life Score tile now
+    matches.
+  - **Not yet built** (proposed as prototypes this same round, pending
+    approval before real implementation — see the write-up delivered to the
+    user 2026-08-10): a non-scored end-of-day "focus/attention" check-in
+    (5-point scale + optional distraction tags) to answer "am I actually
+    wasting time," a "Tomorrow's Top 3" step appended to Submit My Day, and a
+    Sunday Weekly Review screen wired to the already-existing but never-
+    surfaced `setWeeklyReviewDone` store action.
+
+- **2026-08-09 — Second same-day batch: bottom nav opacity fix, Challenges default
+  tab, route loader visibility, Journal voice-record removal + diagnosis,
+  performance investigation, retro-fix modal redesign (prototype sent for
+  approval this day; implementation completed and live-verified 2026-08-10 —
+  see the dedicated sub-entry below), push notifications (design only, pending a
+  user decision — see below).** `tsc --noEmit` clean, `vitest run --coverage`
+  440/440 at 100% coverage (unchanged — no engine/store files touched this
+  batch), `next build --webpack` clean.
+  - **Bottom nav see-through / clickable content behind it**: same root
+    cause class already documented and fixed once this session for
+    `.vx-notif-panel` — some mobile Chrome/WebView builds mis-composite
+    `backdrop-filter` combined with `border-radius` and clipped children,
+    rendering the element as see-through instead of blurred-opaque, instead
+    of the intended `rgba(...,0.92)` translucent glass. `.vx-bottom-nav`
+    never got that same defensive treatment. Fixed in `app/globals.css`:
+    `isolation: isolate` + an explicit fully-opaque `background-color`
+    (`var(--vx-bg-deep)`, a real hex per theme, not the alpha
+    `--nav-bg-solid` token) as the guaranteed base, with `backdrop-filter`
+    now gated behind `@supports` so it only layers on top where it actually
+    composites correctly. This also better matches the fully-opaque
+    reference nav the user attached (a solid bar, not a glass one) — traded
+    a bit of the glass aesthetic for reliability on the one element users
+    stare at on every single screen. Live-verified via Playwright screenshot
+    with a long scrollable task list behind the nav: fully opaque, no
+    content or buttons visible/clickable through it.
+  - **Challenges panel default tab**: `ChallengesPanel.tsx`'s `sub` state
+    default flipped from `'given'` to `'accepted'` ("My Challenges") — still
+    overridable via `?sub=` for notification deep-links, which route
+    specifically to "given" where that's the right target (e.g. "your
+    challenge was accepted/declined/completed").
+  - **Route-switch loading bar not visible on phone**: root cause —
+    `top: 0` places the bar at the literal top pixel of the viewport, which
+    on an installed (standalone) iOS PWA sits *under* the OS status bar (a
+    translucent overlay drawn on top of page content there), tinting/masking
+    a thin bar exactly at that edge. Changed to
+    `top: env(safe-area-inset-top)` (a no-op everywhere without a notch/
+    standalone status bar), bumped height 3px→4px and z-index 300→9999,
+    strengthened the glow shadow slightly — still a thin, subtle bar, just
+    reliably on the visible canvas and a touch more assertive.
+  - **Journal "Record voice" removed + diagnosed** (`features/journal/
+    VoiceControls.tsx`) — two stacked root causes found by reading what
+    actually happens on tap, in order: (1) `next.config.ts`'s
+    `Permissions-Policy` header ships `microphone=()` — an empty allowlist
+    that disables mic access for every origin including the app's own, so
+    `getUserMedia` was rejected by the browser itself before any app code
+    even ran, surfacing as "Mic permission denied." (2) even with that
+    fixed, the upload step (`uploadJournalAudio`, `lib/firebase/storage.ts`)
+    needs Firebase Storage security rules deployed — no `storage.rules` or
+    `firebase.json` exists anywhere in the repo, so Storage was never
+    actually provisioned and every upload would still throw against
+    Firebase's default deny-all rules. Fixing #1 alone would just trade one
+    error for another, so removed the whole feature (button, `MediaRecorder`
+    logic, refs, state) rather than ship it half-fixed. Dictation
+    (speech-to-text) has neither dependency and is untouched/unaffected.
+  - **Performance investigation ("app feels slow, 2–3s tab switches")**:
+    measured real click-to-pathname-commit timing with a throwaway
+    Playwright script against an actual `next build --webpack` + `next
+    start` production server (not `next dev`, which this session has
+    already separately shown compiles routes on-demand and can take
+    multiple seconds cold — a known, different, dev-only cost). Result:
+    tab switches were consistently **80–250ms**, including under simulated
+    throttled mobile network conditions (1.5Mbps / 150ms RTT via CDP), even
+    when tapped before the app-mount `router.prefetch()` pass had time to
+    finish. Route-level JS chunks are already small (12–60KB per tab,
+    automatic Next.js code-splitting), there's no custom web-font loading to
+    block paint, and `StoreBootstrap` (auth/data bootstrap) is mounted once
+    in the shared `(tabs)/layout.tsx`, not remounted per navigation. The one
+    number that WAS large: initial cold app load under the same throttled
+    profile measured **~3.1s** — consistent with the reported "2–3 sec"
+    feeling, but that's initial-load weight (JS parse/hydrate + first
+    Firebase/Firestore round trips), not the client-side route transition
+    itself, which this data says is already fast. Conclusion relayed to the
+    user rather than guessed at further: can't fully diagnose without
+    knowing whether they're testing the actual deployed production build or
+    a dev preview, and without live access to their production
+    hosting/Firestore latency.
+    - **Follow-up (production URL provided: thepersonalplanner.netlify.app,
+      hosted on Netlify)**: could not directly profile it from this
+      sandbox — raw outbound network to arbitrary domains is blocked at the
+      sandbox's own egress proxy (confirmed: a direct `curl` to the domain
+      got a 403 from the proxy itself), there's no connected browser bridge
+      to drive a real authenticated session, and logging into the user's
+      account on their behalf is off the table regardless (credential entry
+      is a hard no). `WebFetch` confirmed the public `/login` page loads
+      fine, but gives no timing/waterfall data. Ruled out one hypothesis by
+      reading the code instead: `proxy.ts`'s auth check (`decrypt()` in
+      `lib/auth/session.ts`) is a pure local JWT verify via `jose` — no
+      network I/O, not a plausible source of multi-second delay. No
+      `netlify.toml` exists anywhere in the repo, meaning the deploy is
+      using Netlify's zero-config auto-detected Next.js Runtime
+      (serverless/edge functions for every dynamic route + middleware).
+      Leading hypothesis, not yet confirmed: Netlify's free-tier functions
+      have no keep-warm pinging, so a function that's gone idle pays a real
+      cold-start cost (commonly several hundred ms to a few seconds) on the
+      next hit — fitting "sometimes 2–3 sec" (intermittent, correlating
+      with how recently the site was used) far better than anything a warm
+      localhost test could surface. Asked the user to check Netlify's
+      dashboard (Functions/Edge Functions tab → invocation duration/
+      cold-start indicators) or their own Chrome DevTools Network tab (TTFB
+      on the RSC request during a slow switch) to confirm before guessing
+      at a fix blind.
+  - **Retro-fix modal redesign — IMPLEMENTED and live-verified (2026-08-10),
+    superseding the "prototype sent for approval" note below/above from the
+    same batch.** Two rounds of prototype iteration were approved first
+    ("Approved, minor tweaks", then a compact rewrite after "It feels like
+    reading an essay, keep it simple and compact!"), then explicit go-ahead
+    ("Go ahead on trimmed retro fix") before any app code was touched, per
+    the user's explicit hold-until-approved instruction.
+    - **Fixed, non-configurable window**: replaced the Settings-configurable
+      `cfg.retroWindowDays` rolling window entirely with a single fixed rule
+      — fixable only until 12:00 PM (noon) the day after. New
+      `retroFixDeadline(dateStr)` helper in `lib/engine/retroFix.ts`.
+      Removed `retroWindowDays` from `AppConfig` (`store/types.ts`),
+      `data/defaults.json`, and its Settings row entirely.
+      `getFixableDays` now takes an explicit `now: Date = new Date()` param
+      for testability. Proved mathematically (not just tested) that this
+      rule can only ever surface zero or one fixable day at a time — any
+      date older than "yesterday" has already passed its own deadline by
+      the time "today" exists — so the previous `.sort()` call was removed
+      as genuinely dead code, with the guarantee documented inline instead
+      of left as an untested branch.
+    - **No more persistent dashboard banner**: `RetroFixPanel.tsx` rewritten
+      as a two-step modal flow that auto-opens (mirrors the PWA-install
+      reminder's auto-popup pattern) rather than sitting as a standing
+      banner/accordion. Step 1 is a compact confirm modal — icon + "Fix
+      Yesterday's Tasks?" + one-line context, a one-line honesty reminder
+      ("🤝 Be honest — this is for real misses, not padding your streak."),
+      Cancel/Fix Tasks buttons. Both the intro line and the honesty text
+      were rewritten to single short lines per explicit feedback that the
+      first draft "feels like reading an essay."
+    - **Step 2 checklist**: toggle-only list of that day's actual tasks (no
+      add-task control), live done-count/points-vs-target strip, a
+      conditional callout when the toggled state now meets target
+      previewing the streak restoration, Cancel/Save Changes buttons.
+      Toggling calls the existing `toggleTaskRetro` action (confirmed
+      correct/intentional — credits XP live per toggle, mirroring normal
+      `toggleTask`, with `submitRetroFix` adding only the day-level overflow
+      bonus + penalty refund on save, exactly like a normal day's submit —
+      not double-counting). Saving reverses the auto rest-day/miss verdict,
+      refunds the original XP penalty, restores the streak, and clears the
+      week's rest slot only if no other rest day exists that week — all via
+      the already-existing `submitRetroFix` logic from the original bug fix,
+      unchanged in this batch.
+    - **Verification**: `tsc --noEmit` clean; `vitest run --coverage`
+      442/442 passing, 100%/100%/100%/100% coverage (`tests/unit/
+      retroFix.test.ts` fully rewritten with explicit `now` params for
+      determinism, plus new `retroFixDeadline` tests; `retroWindowDays`
+      fixture references removed from `historyChart.test.ts`/
+      `scoring.test.ts`/`streak.test.ts`); `next build --webpack` clean
+      (17 routes, zero errors). Live end-to-end verified with Playwright
+      against a real `next build --webpack` + `next start` production
+      server (not dev mode): confirm modal auto-opens with correct honesty
+      copy, checklist modal opens and toggles credit live, target-met
+      preview appears once all tasks are checked, Save Changes shows the
+      success toast + confetti and closes both modals, and the final
+      persisted store state matched exactly (streak 5→6, `restDays`
+      cleared, `weekRestUsed` correctly recomputed false, `retroFixedDays`
+      stamped, full task snapshot saved). One real bug was found and fixed
+      during verification, but it was in the throwaway test script, not the
+      app: `Modal.tsx` attaches its own global `document` Escape-key
+      listener per open instance, so a stray `Escape` keypress (meant to
+      dismiss an unrelated PWA-install modal that happened to be open at
+      the same time) was closing the RetroFix confirm modal underneath it
+      too — removed the Escape press from the script in favor of a
+      backdrop-scoped dismiss click; no app code changed as a result.
+  - **Push notifications — design only, blocked on a user decision, not
+    built.** Investigated existing infra: no `sw.js` exists anywhere in the
+    repo despite `PwaBootstrap.tsx` attempting to register one (a separate,
+    pre-existing latent bug — the registration 404s and is silently
+    swallowed). True OS-level push (arrives even with the app closed) needs
+    a real service worker + Push API subscription + VAPID keys generated in
+    the Firebase console + a server-side sender. The event-driven pair
+    (challenge given / challenge completed) is buildable without Firebase
+    Cloud Functions — this app already has working Next.js API routes
+    (`/api/auth/session`) and `firebase-admin` as a dependency, so a new
+    route using `admin.messaging().send()` can trigger a push directly
+    (both are already shown in-app via the existing NotificationBell —
+    this would add the OS-level counterpart). The time-based pair (1hr/15min
+    before day-end) is harder: precise per-user local-time delivery needs
+    either a real scheduled server job (this project is confirmed on
+    Firebase's free Spark plan — no Cloud Functions cron available — a
+    Vercel Cron job or similar external scheduler would be needed instead)
+    or a client-scheduled local Notification that only fires reliably while
+    the app/tab is actually open. Flagged back to the user rather than
+    building untestable infra blind — **decision: skip for now** (asked
+    2026-08-09, user chose "skip push for now" over both the buildable
+    challenge-given/completed option and the local-only day-end reminder
+    option). Not started; revisit if/when raised again.
+
+- **2026-08-09 — Bug fix: Rest Day auto-mark of genuinely-completed days, and the
+  near-invisible missed-check-off fix panel.** Full root-cause writeup + a
+  dedicated entry in `BUGS.md`. Summary here.
+  - **Trigger**: "I recently had completed my tasks but failed to mark complete
+    and the app automatically marked the rest day. This creates false data and
+    is very demotivating even when the tasks are done... Sometimes due to some
+    emergencies or due to a long day we dont [get a chance] to mark tasks
+    completed. And after such a stressed day... when a rest day is applied it
+    reduces trust to use the app."
+  - **Two root causes found**: (1) the old inline retro-fix block on the
+    Dashboard was gated on something equivalent to `now.getHours() <
+    cfg.cutoffHour` — since `cutoffHour` defaults to 1–4 (AM), the panel was
+    only ever visible for a ~1–4 hour window right after midnight, so almost
+    nobody opening the app at a normal hour ever saw it. (2) the old
+    `submitRetroFix` only ever patched the *displayed* numbers for a day — it
+    never actually reversed the Rest Day verdict, restored the streak, refunded
+    the XP penalty, or freed the week's rest slot, so even a "fixed" day stayed
+    permanently mis-recorded.
+  - **Fix, part 1 — when the panel is offered**: replaced the single-day,
+    cutoff-hour-gated block with `RetroFixPanel`
+    (`features/dashboard/components/RetroFixPanel.tsx`) driven by a new pure
+    function `getFixableDays` (`lib/engine/retroFix.ts`). It surfaces every day
+    within a rolling window that the overnight engine auto-resolved
+    (`auto: true` — the existing, already-reliable discriminator for "the app
+    decided this, not the user") and that still falls short of that day's
+    target — regardless of the current hour. The window length is a new
+    Settings-configurable field, `cfg.retroWindowDays` (default 3, 1–7 days,
+    `data/defaults.json` + a new row in Settings → Submission rules),
+    deliberately made adjustable rather than hardcoding a single "right"
+    number, mirroring how `waterTargetMl`/`lightDays`/`cutoffHour` are already
+    exposed. A day the user deliberately chose to rest or freeze (`auto:
+    false`) is never touched or offered here — only automatic verdicts are
+    ever up for reconsideration.
+  - **Fix, part 2 — what "fixing" a day actually does now**: rewrote
+    `submitRetroFix` (`store/slices/tasks.slice.ts`) so that when the
+    corrected tasks genuinely clear that day's target, it performs a real
+    reversal, not a cosmetic one: refunds the exact XP penalty originally
+    applied for that day (recomputed via the same deterministic
+    `restOrLightXpPenalty`/`streakBrokenXpPenalty` functions used to apply it
+    in the first place — same date/cfg/mood always reproduces the same
+    amount), increments the streak by 1 (mathematically safe for *any* day in
+    the window, since the automatic overnight path never decrements a live
+    streak — it only ever holds it flat via rest-day protection or increments
+    it, so a retroactive +1 can't ever be wrong regardless of how much time or
+    how many other days have passed since), re-grants a streak-milestone
+    freeze/badge bonus if the corrected streak newly crosses one, clears the
+    day out of `restDays`, and recomputes that week's `weekRestUsed` flag by
+    checking whether another rest day still exists that same week (rather than
+    blindly clearing the whole week's flag, which would have wrongly re-opened
+    the weekly rest slot if a different day that week was still a legitimate
+    rest day). The history entry itself flips from `rest: true` to
+    `rest: false, late: true` — the pre-existing `late` field was already
+    displayed in the history trend chart but had never actually been written
+    anywhere before this.
+  - **Coverage**: `lib/engine/retroFix.ts`, the new `getWeekDates` helper
+    (`lib/engine/cutoff.ts`), and the new upgrade branch in `tasks.slice.ts`
+    all brought to the project's required 100% statements/branches/functions/
+    lines bar — `tests/unit/retroFix.test.ts` (new, 13 cases covering every
+    filter branch: window edges, already-fixed, already-succeeded, frozen,
+    deliberate rest day, light-day minPts, multi-day sort order, etc.) and a
+    new block in `tests/store/tasks-extra.test.ts` (7 cases: full rest-day
+    upgrade, weekRestUsed preserved when another rest day exists that week,
+    upgrade of a plain streak-0 miss, milestone bonus grants a badge+freeze,
+    guards against upgrading a deliberate rest day / a still-short day / a
+    frozen day). Final: 440/440 tests passing, 100%/100%/100%/100% coverage.
+  - **Live verification**: throwaway Playwright script against a seeded
+    anonymous session, confirming end-to-end in the actual rendered UI (not
+    just unit tests) — the panel renders and is correctly labeled well outside
+    the old 1–4AM window, ticking off a day's tasks and hitting Submit flips
+    the history entry as described above, the streak number updates live on
+    screen, and the underlying `localStorage` state matches exactly. One
+    numeric discrepancy surfaced during the first pass (`rankXP` and
+    `restDays` didn't match a hand-calculated expectation) — traced entirely
+    to the test's seed data leaving an unrelated gap day between the last
+    seeded history entry and the real current date, which the overnight engine
+    correctly (and separately) auto-processed as its own rest day before the
+    fix panel ever ran; re-seeding history through the day immediately prior
+    to "today" removed that variable, and the resulting numbers matched
+    hand-calculated expectations exactly (task-level XP credited at
+    checkbox-toggle time, same as a normal day's `toggleTask`, plus the day's
+    overflow-past-target bonus at submit time, same as `submitDay`, plus the
+    refunded original penalty — netting out to precisely what a normal
+    on-time submission of the same day would have earned). No code defect —
+    confirms the implementation is correct. `tsc --noEmit` clean, `vitest run
+    --coverage` 440/440 at 100% coverage, `next build --webpack` clean.
 
 - **2026-08-07 — Bug fix: Submit My Day bar floating too far above the bottom nav,
   reported only in production on a real device.** Full root-cause writeup + a

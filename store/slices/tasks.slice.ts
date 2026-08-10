@@ -1,9 +1,12 @@
 import type { StateCreator } from 'zustand'
 import type { AppState, Task, RecurringTemplate, Subtask } from '../types'
-import { uid }       from '@/lib/engine/cutoff'
-import { calcPts, walletPtsFor, todayEarned } from '@/lib/engine/scoring'
+import { uid, getWeekMonday, getWeekDates } from '@/lib/engine/cutoff'
+import { calcPts, walletPtsFor, todayEarned, getMinPts } from '@/lib/engine/scoring'
 import { goalPtsEarnedOn } from '@/lib/engine/goals'
 import { checkTaskMilestone } from '@/lib/engine/badges'
+import { checkStreakMilestone } from '@/lib/engine/streak'
+import { restOrLightXpPenalty, streakBrokenXpPenalty } from '@/lib/engine/xpPenalty'
+import { WALLET_RATIO } from '@/constants/points'
 
 export interface TasksSlice {
   // Actions
@@ -11,7 +14,7 @@ export interface TasksSlice {
   removeTask:     (id: string) => void
   toggleTask:     (id: string) => { pts: number; walletPts: number } | null
   toggleTaskRetro:(id: string) => { pts: number; walletPts: number } | null
-  submitRetroFix: (dateKey: string, reward?: { title: string; cost: number }) => { ok: boolean; reason?: string }
+  submitRetroFix: (dateKey: string, reward?: { title: string; cost: number }) => { ok: boolean; reason?: string; upgraded?: boolean; newStreak?: number }
   editTask:       (id: string, updates: Partial<Task>) => void
   pinTask:        (id: string | null) => void
   toggleSubtask:  (taskId: string, subId: string) => void
@@ -146,6 +149,23 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
   // that day's history entry from the current task state and (optionally)
   // log a reward redeemed for that day. Marks the day as fixed so the
   // dashboard prompt no longer appears.
+  //
+  // Upgrade path (see lib/engine/retroFix.ts + BUGS.md/project.md for the
+  // full backstory): if this day was auto-resolved by the overnight logic
+  // (`auto: true` — never true for a deliberate declareRestDay/useFreeze/
+  // on-time submit) and the corrected total now actually clears that day's
+  // target, this isn't just a display fix — the day gets upgraded to a
+  // genuinely completed day, exactly like an on-time submit: streak +1
+  // (rest days never decrement the streak, they only ever hold it flat or
+  // — via auto-submit — increment it, so this is always a safe +1
+  // regardless of how many days have passed since), the XP penalty that was
+  // deducted when it was auto-resolved is refunded, any excess points above
+  // the target flow into Rank XP the same way a normal submit does, a
+  // streak-milestone freeze bonus is granted if the new streak crosses one,
+  // and — if this was a rest day — that week's rest-day slot is freed back
+  // up (unless another rest day still exists that week). The history entry
+  // itself flips `rest: false, late: true` rather than erasing that it was
+  // originally auto-detected.
   submitRetroFix(dateKey, reward) {
     const state    = get()
     const dayTasks = state.tasks.filter(t => t.date === dateKey)
@@ -161,7 +181,8 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       level:       t.level,
     }))
 
-    const histIdx = state.history.findIndex(h => h.date === dateKey)
+    const histIdx   = state.history.findIndex(h => h.date === dateKey)
+    const prevEntry = histIdx >= 0 ? state.history[histIdx] : null
     let rewardsList = histIdx >= 0 ? [...(state.history[histIdx].rewards ?? [])] : []
 
     let rewardWallet      = state.rewardWallet
@@ -174,9 +195,65 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       rewardsList = [...rewardsList, reward.title.trim()]
     }
 
+    const minPts       = getMinPts(dateKey, state.cfg)
+    const wasAutoRest   = !!prevEntry?.auto && prevEntry.rest
+    const wasAutoMissed = !!prevEntry?.auto && !prevEntry.rest && !prevEntry.frozen
+    const eligibleUpgrade = (wasAutoRest || wasAutoMissed) && rxp >= minPts
+
+    let streak       = state.streak
+    let bestStreak    = state.bestStreak
+    let freezeTokens  = state.freezeTokens
+    let badges        = state.badges
+    let rankXP        = state.rankXP
+    let daysActive    = state.daysActive
+    let restDays      = state.restDays
+    let weekRestUsed  = state.weekRestUsed
+    let newStreak: number | undefined
+
+    if (eligibleUpgrade) {
+      // Refund whatever XP penalty was deducted when this day was originally
+      // auto-resolved, using the exact same pure functions (deterministic
+      // given the same date/cfg/mood, so this reproduces the original
+      // amount precisely).
+      const penalty = wasAutoRest
+        ? restOrLightXpPenalty(dateKey, state.cfg, state.mood)
+        : streakBrokenXpPenalty(dateKey, state.mood)
+      rankXP += penalty
+
+      // Overflow past the daily minimum, same 2:1 ratio a normal submit uses.
+      const excess = Math.max(0, rxp - minPts)
+      rankXP += Math.floor(excess / WALLET_RATIO)
+
+      newStreak  = streak + 1
+      bestStreak = Math.max(bestStreak, newStreak)
+      const bonus = checkStreakMilestone(newStreak)
+      if (bonus > 0 && !badges.some(b => b.id === `s${newStreak}`)) {
+        badges = [...badges, { id: `s${newStreak}`, label: `${newStreak}-Day Streak`, icon: '🔥', date: dateKey }]
+        freezeTokens += bonus
+      }
+      streak = newStreak
+
+      // The "missed, no streak to protect" branch never counted this day as
+      // active; the rest-day branch already did — don't double-count it.
+      if (wasAutoMissed) daysActive += 1
+
+      if (wasAutoRest) {
+        const updatedRestDays = { ...restDays }
+        delete updatedRestDays[dateKey]
+        restDays = updatedRestDays
+        const mon = getWeekMonday(dateKey)
+        const stillUsedThisWeek = getWeekDates(mon).some(d => d !== dateKey && restDays[d])
+        weekRestUsed = { ...weekRestUsed, [mon]: stillUsedThisWeek }
+      }
+    }
+
     const newHistory = [...state.history]
     if (histIdx >= 0) {
-      newHistory[histIdx] = { ...newHistory[histIdx], done: doneTasks.length, total: dayTasks.length, pct, rxp, tasks: taskSnap, rewards: rewardsList }
+      newHistory[histIdx] = {
+        ...newHistory[histIdx],
+        done: doneTasks.length, total: dayTasks.length, pct, rxp, tasks: taskSnap, rewards: rewardsList,
+        ...(eligibleUpgrade ? { rest: false, late: true } : {}),
+      }
     } else {
       // No prior history entry (new user or day not processed by overnight logic yet).
       // Create one so the fix is persisted and shows up in streak history.
@@ -198,11 +275,17 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       rewardRedemptions,
       retroFixedDays:  { ...state.retroFixedDays, [dateKey]: true },
       submittedDays:   updatedSubmittedDays,
+      ...(eligibleUpgrade ? { streak, bestStreak, freezeTokens, badges, rankXP, daysActive, restDays, weekRestUsed } : {}),
     })
 
-    get().logChange('retro-submit', `Saved fix-missed-checkoff changes for ${dateKey}` + (reward?.title ? ` + redeemed "${reward.title.trim()}" (${reward.cost}pts)` : ''))
+    get().logChange(
+      'retro-submit',
+      `Saved fix-missed-checkoff changes for ${dateKey}`
+      + (eligibleUpgrade ? ` — upgraded to a completed day, streak now ${newStreak}` : '')
+      + (reward?.title ? ` + redeemed "${reward.title.trim()}" (${reward.cost}pts)` : '')
+    )
 
-    return { ok: true }
+    return { ok: true, ...(eligibleUpgrade ? { upgraded: true, newStreak } : {}) }
   },
 
   editTask(id, updates) {

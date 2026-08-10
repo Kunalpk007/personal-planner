@@ -168,7 +168,8 @@ function FriendTile({ friend, onRemove }: {
           </div>
         </button>
         <select value={friend.tags[0] ?? ''} onChange={e => setTags(friend.uid, e.target.value ? [e.target.value as FriendTag] : [])}
-          className="vx-field text-[11px] px-2 py-1 flex-shrink-0 w-auto"
+          className="vx-field text-[11px] px-2 py-1 flex-shrink-0"
+          style={{ width: 'auto' }}
           title="Friend type">
           <option value="">Type…</option>
           {FRIEND_TAGS.map(t => <option key={t} value={t}>{FRIEND_TAG_META[t].label}</option>)}

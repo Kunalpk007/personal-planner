@@ -376,12 +376,13 @@
     bottom: calc(8px + env(safe-area-inset-bottom));
   }
   @media (max-width: 1024px) {
-    /* Was 60px — the real `.vx-bottom-nav` pill (bottom:16px + its own
-       padding/icon/label stack) is taller than that, so the two overlapped
-       (the submit bar's bottom edge sat inside the nav pill's top edge).
-       Bumped so the bar's bottom edge clears the nav pill with a visible
-       gap regardless of exact nav height across devices. */
-    .fixed-bottom-bar { bottom: calc(92px + env(safe-area-inset-bottom)); }
+    /* `.vx-bottom-nav` is now a flush edge-to-edge bar (bottom: 0, ~70px
+       tall) instead of the old floating pill (bottom: 16px, ~67px tall —
+       83px of total clearance needed). The flush bar needs ~13px less
+       clearance; this bar's own bottom offset must still clear its top
+       edge with a visible gap regardless of exact nav height across
+       devices. */
+    .fixed-bottom-bar { bottom: calc(80px + env(safe-area-inset-bottom)); }
   }
 }
 
@@ -1278,22 +1279,41 @@ textarea.vx-field { resize: vertical; min-height: 64px; }
    earlier "nav always stays dark glass" decision per explicit user
    feedback. */
 .vx-bottom-nav {
-  /* Must include env(safe-area-inset-bottom) — every other fixed bottom
-     element that's supposed to sit above this nav (`.fixed-bottom-bar`'s
-     Submit-My-Day bar, `.vx-calm-fab`, `.vx-task-fab-wrap`) already adds the
-     safe-area inset to its own `bottom` offset, but this rule didn't, so on
-     any real device reporting a non-zero inset (Android gesture-nav phones,
-     iPhones with a home indicator) the nav stayed pinned at a flat 16px
-     while everything above it kept rising by the inset amount — opening a
-     growing gap between the Submit bar and the nav in exact proportion to
-     the device's inset. Invisible in desktop/emulator testing (inset is
-     always 0 there), only visible on a real device — see project.md +
-     BUGS.md for the full root-cause writeup. */
-  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50;
-  display: flex; gap: 2px; padding: 6px; border-radius: 22px;
-  background: var(--nav-bg-solid); border: 1px solid var(--vx-border); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-  box-shadow: 0 12px 32px rgba(0,0,0,0.18);
-  max-width: calc(100vw - 24px);
+  /* Reworked from a floating rounded "pill" (margins on every side, border,
+     box-shadow) to a flush edge-to-edge bar — like a standard app tab bar
+     (Teams, etc.): no border-box wrapping the icons, just a hairline
+     `border-top` divider. The pill design left visible gaps on the sides and
+     below it (down to the true screen edge) where scrolled page content was
+     visible peeking through — reading as "the nav isn't opaque/fixed" even
+     though the pill itself was solid. A flush full-width bar pinned to
+     `bottom: 0` has no such gaps by construction, so the separate opaque
+     backdrop strip that briefly existed here to patch that over was removed
+     — no longer needed once the bar itself has no gaps to hide.
+     `padding-bottom` adds env(safe-area-inset-bottom) directly instead of
+     via the outer `bottom` offset (the old floating-pill approach) — same
+     purpose (clear the home-indicator/gesture-nav area on real devices),
+     simpler now that the bar is flush to the edge. */
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: space-around;
+  padding: 8px 4px calc(8px + env(safe-area-inset-bottom)) 4px;
+  border-top: 1px solid var(--vx-border);
+  /* Same mobile-compositing bug already documented/fixed on `.vx-notif-panel`:
+     some mobile Chrome/WebView builds mis-composite `backdrop-filter`,
+     rendering the whole element as see-through instead of blurred-opaque.
+     `isolation: isolate` forces its own stacking/compositing context, an
+     explicit *non-alpha* `background-color` fallback guarantees real opacity
+     even if the blur never composites, and the blur itself is now gated
+     behind `@supports` so it only layers on top where it actually renders
+     correctly — never in place of the opaque fallback. */
+  isolation: isolate;
+  background-color: var(--vx-bg-deep);
+  background: var(--vx-bg-deep);
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .vx-bottom-nav {
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
 }
 .vx-nav-indicator { position: absolute; border-radius: 16px; background: var(--color-accent-dim); border: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent); z-index: 0; }
 .vx-nav-btn {
@@ -1395,7 +1415,12 @@ textarea.vx-field { resize: vertical; min-height: 64px; }
 
 @media (max-width: 1024px) {
   .vx-nav-top { display: none; }
-  .page-container { padding-bottom: 6.5rem; }
+  /* Was 6.5rem, tuned for the old floating pill nav (83px of total
+     clearance). `.vx-bottom-nav` is now a shorter flush bar (~70px) — this
+     reserved space only needs to clear that, not the old pill's extra
+     margin, so the blank gap above the bar before page content starts is
+     back to a normal amount instead of an oversized empty band. */
+  .page-container { padding-bottom: 5.5rem; }
 }
 @media (min-width: 1025px) {
   .vx-bottom-nav { display: none; }
@@ -1412,7 +1437,7 @@ textarea.vx-field { resize: vertical; min-height: 64px; }
    generic attention-grabbing throb. */
 .vx-calm-fab {
   position: fixed; right: 14px; z-index: 55;
-  bottom: calc(150px + env(safe-area-inset-bottom));
+  bottom: calc(137px + env(safe-area-inset-bottom));
   width: 64px; height: 64px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; flex-direction: column;
   padding: 0; text-align: center;
@@ -1512,12 +1537,19 @@ textarea.vx-field { resize: vertical; min-height: 64px; }
 }
 
 /* ── Top-of-viewport route-switch loading bar ────────────────────────────── */
+/* `top: 0` alone lands the bar UNDER the OS status bar on an installed
+   (standalone) PWA on iOS — the status bar is a translucent overlay drawn
+   on top of page content there, so a thin bar sitting exactly at the true
+   top edge gets tinted/masked by it and reads as "not showing up" even
+   though it's rendering correctly. Offsetting by env(safe-area-inset-top)
+   drops it just below that overlay, onto the actual visible canvas —
+   0 on any non-notched/browser-tab context, so this is a no-op there. */
 .vx-route-progress {
-  position: fixed; top: 0; left: 0; width: 100%; height: 3px;
+  position: fixed; top: env(safe-area-inset-top); left: 0; width: 100%; height: 4px;
   transform-origin: left center;
   background: linear-gradient(90deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 60%, #fff));
-  box-shadow: 0 0 10px color-mix(in srgb, var(--color-accent) 70%, transparent);
-  z-index: 300;
+  box-shadow: 0 0 14px 1px color-mix(in srgb, var(--color-accent) 85%, transparent);
+  z-index: 9999;
 }
 
 /* ── Tasks-page floating "+" action button ──────────────────────────────── */
@@ -1525,10 +1557,10 @@ textarea.vx-field { resize: vertical; min-height: 64px; }
   position: fixed; right: 14px; z-index: 65;
   /* Must clear the pinned Submit-My-Day bar (`.fixed-bottom-bar`, itself
      raised above `.vx-bottom-nav` — see that rule's comment), which sits
-     underneath it. 150px wasn't enough headroom once the bar's own offset
-     was corrected, so the FAB was landing on top of the bar instead of
-     above it. */
-  bottom: calc(210px + env(safe-area-inset-bottom));
+     underneath it. Shifted down 13px alongside `.fixed-bottom-bar`'s own
+     offset now that `.vx-bottom-nav` is a shorter flush bar instead of the
+     old floating pill. */
+  bottom: calc(198px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
 }
 @media (min-width: 1025px) {
