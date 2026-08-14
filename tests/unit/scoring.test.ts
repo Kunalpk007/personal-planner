@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   basePts, calcPts, getMoodMult, todayEarned, todayTarget, walletPtsFor, getMinPts, getMoodAdjustedMinPts,
+  taskAbandonPenalty,
 } from '@/lib/engine/scoring'
 import type { Task, AppConfig } from '@/store/types'
 
@@ -32,6 +33,23 @@ describe('basePts', () => {
 
   it('falls back to 10 when priority is not a known key', () => {
     expect(basePts(makeTask({ priority: 'unknown' as any }))).toBe(10)
+  })
+})
+
+describe('taskAbandonPenalty', () => {
+  it('is proportional to the task\'s own base points, not the carry-decayed calcPts', () => {
+    // A high-priority task carried 3 times has a shrunken calcPts (20 - 3*2 = 14),
+    // but the abandon penalty should still be based on the full 20-pt value.
+    const task = makeTask({ priority: 'high', carriedDays: 3 })
+    expect(taskAbandonPenalty(task)).toEqual({ xp: 20, wallet: 10 })
+  })
+
+  it('scales down for lower-priority tasks', () => {
+    expect(taskAbandonPenalty(makeTask({ priority: 'low', carriedDays: 3 }))).toEqual({ xp: 6, wallet: 3 })
+  })
+
+  it('uses specialPts for special tasks', () => {
+    expect(taskAbandonPenalty(makeTask({ isSpecial: true, specialPts: 9, carriedDays: 3 }))).toEqual({ xp: 9, wallet: 4 })
   })
 })
 

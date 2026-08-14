@@ -1,6 +1,6 @@
 import type { AppState, HistoryEntry, Task } from '@/store/types'
 import { getWeekMonday, daysBetween, pad, uid } from './cutoff'
-import { todayEarned, getMinPts } from './scoring'
+import { todayEarned, getMinPts, taskAbandonPenalty } from './scoring'
 import { goalPtsEarnedOn } from './goals'
 import { restOrLightXpPenalty, streakBrokenXpPenalty } from './xpPenalty'
 import { WALLET_RATIO, MAX_CARRY } from '@/constants/points'
@@ -67,6 +67,7 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
     bestStreak:    state.bestStreak,
     daysActive:    state.daysActive,
     rankXP:        state.rankXP ?? 0,
+    rewardWallet:  state.rewardWallet ?? 0,
     badges:        [...state.badges],
     history:       [...state.history],
     tasks:         [...state.tasks],
@@ -103,9 +104,13 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
     nd.setDate(nd.getDate() + 1)
     const nextKey = `${nd.getFullYear()}-${pad(nd.getMonth() + 1)}-${pad(nd.getDate())}`
     for (const t of dayTasks.filter(t => !t.done && !t.recurId && !t.cancelledAt)) {
-      // Blocked tasks carry forward without incrementing the penalty counter
+      // Blocked tasks carry forward without incrementing the penalty counter.
+      // Challenged tasks are exempt from the MAX_CARRY cutoff entirely — see
+      // the matching comment on carryTask in store/slices/tasks.slice.ts for
+      // why (a challenge is a commitment to a friend, not just a personal
+      // to-do that can be silently abandoned after a few days).
       const newCarried = t.blocked ? (t.carriedDays ?? 0) : (t.carriedDays ?? 0) + 1
-      if (t.blocked || newCarried <= MAX_CARRY) {
+      if (t.blocked || t.challengedBy || newCarried <= MAX_CARRY) {
         patch.tasks!.push({
           ...t,
           id:          uid(),
@@ -115,6 +120,13 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
           createdAt:   new Date().toISOString(),
           carriedDays: newCarried,
         } as Task)
+      } else {
+        // Abandoned — carried past MAX_CARRY days still incomplete, and
+        // never carried again. One-time XP + wallet hit, proportional to
+        // what the task was actually worth (see scoring.ts#taskAbandonPenalty).
+        const penalty = taskAbandonPenalty(t)
+        patch.rankXP       = Math.max(0, patch.rankXP! - penalty.xp)
+        patch.rewardWallet = Math.max(0, patch.rewardWallet! - penalty.wallet)
       }
     }
 
@@ -176,9 +188,16 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
     const prevDay = lastDate // yesterday in the typical case
     // Recurring-origin and cancelled tasks excluded here too — same reason as above.
     for (const t of state.tasks.filter(t => t.date === prevDay && !t.done && !t.recurId && !t.cancelledAt)) {
-      // Blocked tasks carry without penalty; unblocked tasks respect MAX_CARRY
+      // Blocked and challenged tasks carry without penalty/cap — see the
+      // matching comment above and on carryTask in tasks.slice.ts.
       const newCarried = t.blocked ? (t.carriedDays ?? 0) : (t.carriedDays ?? 0) + 1
-      if (!t.blocked && newCarried > MAX_CARRY) continue
+      if (!t.blocked && !t.challengedBy && newCarried > MAX_CARRY) {
+        // Abandoned — see the matching branch in the main loop above.
+        const penalty = taskAbandonPenalty(t)
+        patch.rankXP       = Math.max(0, patch.rankXP! - penalty.xp)
+        patch.rewardWallet = Math.max(0, patch.rewardWallet! - penalty.wallet)
+        continue
+      }
       // Dedup: skip if a carry of this task already exists in today's list
       const alreadyCarried = patch.tasks!.some(
         ct => ct.date === today && ct.title === t.title && ct.zone === t.zone

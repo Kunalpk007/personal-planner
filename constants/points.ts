@@ -30,7 +30,20 @@ export const FREEZE_COST  = 250   // wallet pts
 export const JOURNAL_XP   = 5     // rank XP first entry/day
 export const POMO_BONUS   = 5     // rank XP for completing task during pomo
 export const MAX_CARRY    = 3     // days before carried task expires
-export const CARRY_PENALTY = 2    // pts lost per carry day
+export const CARRY_PENALTY = 2    // pts lost per carry day (applied at completion time)
+
+// A task that carries past MAX_CARRY days still incomplete is "abandoned" —
+// a one-time XP + wallet hit, proportional to the task's own point value,
+// applied once at the moment it stops being carried forward (see
+// lib/engine/scoring.ts#taskAbandonPenalty). Wallet uses the same
+// pts-to-wallet conversion already used elsewhere (WALLET_RATIO) rather than
+// a second magic number.
+export const TASK_ABANDON_XP_MULT = 1 // XP penalty = basePts(task) * this
+
+// Deleting an incomplete task deducts XP equal to its own point value — but
+// not if it was created within this grace window, so fixing a typo or a
+// duplicate add doesn't get punished like abandoning a real commitment does.
+export const TASK_DELETE_GRACE_MINUTES = 15
 export const MAX_PAUSE_DAYS = 20  // streak pause expiry
 export const MAX_BOUGHT_FREEZES = 2
 

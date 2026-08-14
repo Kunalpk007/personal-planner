@@ -19,13 +19,73 @@ describe('markMorningQuoteShown', () => {
   })
 })
 
+describe('markMorningTop3Shown', () => {
+  it('marks the morning top-3 prompt as shown for a date', () => {
+    usePlannerStore.getState().markMorningTop3Shown('2024-01-08')
+    expect(usePlannerStore.getState().morningTop3Shown['2024-01-08']).toBe(true)
+  })
+})
+
 describe('setWeeklyReviewDone', () => {
-  it('stores the reflection and a timestamp', () => {
-    usePlannerStore.getState().setWeeklyReviewDone('2024-01-08', 'Great week!')
+  it('stores the three prompts and a timestamp', () => {
+    usePlannerStore.getState().setWeeklyReviewDone('2024-01-08', {
+      whatWorked: 'Stayed consistent', whatDidnt: 'Slept late', oneChange: 'Earlier wind-down',
+    })
     const entry = usePlannerStore.getState().weeklyReviewDone['2024-01-08']
     expect(entry).toBeDefined()
-    expect(entry.reflection).toBe('Great week!')
+    expect(entry.whatWorked).toBe('Stayed consistent')
+    expect(entry.whatDidnt).toBe('Slept late')
+    expect(entry.oneChange).toBe('Earlier wind-down')
     expect(entry.at).toBeTruthy()
+  })
+})
+
+describe('setFocusCheckin', () => {
+  it('stores the score, distraction tags, and a timestamp', () => {
+    usePlannerStore.getState().setFocusCheckin('2024-01-08', 4, ['Phone / social media'])
+    const entry = usePlannerStore.getState().focusCheckins['2024-01-08']
+    expect(entry).toBeDefined()
+    expect(entry.score).toBe(4)
+    expect(entry.distractions).toEqual(['Phone / social media'])
+    expect(entry.at).toBeTruthy()
+  })
+})
+
+describe('setLifestyleCheckin', () => {
+  it('stores sleep, moved, stress, and a timestamp', () => {
+    usePlannerStore.getState().setLifestyleCheckin('2024-01-08', 'great', true, 2)
+    const entry = usePlannerStore.getState().lifestyleCheckins['2024-01-08']
+    expect(entry).toBeDefined()
+    expect(entry.sleep).toBe('great')
+    expect(entry.moved).toBe(true)
+    expect(entry.stress).toBe(2)
+    expect(entry.at).toBeTruthy()
+  })
+
+  it('overwrites a same-day check-in rather than duplicating it', () => {
+    usePlannerStore.getState().setLifestyleCheckin('2024-01-08', 'poor', false, 5)
+    usePlannerStore.getState().setLifestyleCheckin('2024-01-08', 'ok', true, 3)
+    const entry = usePlannerStore.getState().lifestyleCheckins['2024-01-08']
+    expect(entry.sleep).toBe('ok')
+    expect(entry.moved).toBe(true)
+    expect(entry.stress).toBe(3)
+    expect(Object.keys(usePlannerStore.getState().lifestyleCheckins)).toHaveLength(1)
+  })
+})
+
+describe('setTomorrowTop3', () => {
+  it('stores up to 3 non-empty items and a timestamp', () => {
+    usePlannerStore.getState().setTomorrowTop3('2024-01-09', ['Ship the fix', '', 'Read', 'Gym', 'Extra'])
+    const entry = usePlannerStore.getState().tomorrowTop3['2024-01-09']
+    expect(entry).toBeDefined()
+    expect(entry.items).toEqual(['Ship the fix', 'Read', 'Gym'])
+    expect(entry.at).toBeTruthy()
+  })
+
+  it('overwrites a previous pick for the same date', () => {
+    usePlannerStore.getState().setTomorrowTop3('2024-01-09', ['First'])
+    usePlannerStore.getState().setTomorrowTop3('2024-01-09', ['Second'])
+    expect(usePlannerStore.getState().tomorrowTop3['2024-01-09'].items).toEqual(['Second'])
   })
 })
 

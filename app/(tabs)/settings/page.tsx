@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { usePlannerStore } from '@/store'
+import { useSocialStore } from '@/store/social/social.store'
 import { Accordion }       from '@/ui/Accordion'
 import { Modal }           from '@/ui/Modal'
 import { showToast }       from '@/ui/Toast'
@@ -25,6 +26,11 @@ import { getWeekMonday } from '@/lib/engine/cutoff'
 
 const SUPPORT_EMAIL = 'kunalpk007@gmail.com'
 const MAX_ZONE_NAME = 15
+
+function inviteLink(uid: string, name: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  return `${origin}/tasks?mode=friends&code=${encodeURIComponent(uid)}&name=${encodeURIComponent(name)}`
+}
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<'general' | 'streak' | 'rules' | 'phase2' | 'help'>('general')
@@ -92,6 +98,13 @@ export default function SettingsPage() {
   const [deleteText, setDeleteText] = useState('')
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [disableOpen, setDisableOpen] = useState(false)
+
+  // Friend code / invite link
+  const myName = useSocialStore(s => s.displayName)
+  const [myUid, setMyUid] = useState<string | null>(null)
+  useEffect(() => {
+    setMyUid(getClientAuth().currentUser?.uid ?? null)
+  }, [])
 
   // App PIN management modal
   const [pinModalOpen, setPinModalOpen] = useState(false)
@@ -372,7 +385,7 @@ export default function SettingsPage() {
           <SectionLabel>Refer the app</SectionLabel>
           <SettingCard>
             <SettingRow label="Share Personal Planner" sub="Sends the app URL">
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={() => {
                     navigator.clipboard?.writeText(APP_URL); showToast('App link copied.')
@@ -389,6 +402,31 @@ export default function SettingsPage() {
                 </button>
               </div>
             </SettingRow>
+            {myUid && (
+              <SettingRow label="Your friend code" sub="Share this so a friend can add you">
+                <div className="flex flex-col items-end gap-2 max-w-full">
+                  <div className="flex items-center gap-2 max-w-full">
+                    <code className="text-[12px] font-semibold truncate max-w-[140px]">{myUid}</code>
+                    <button onClick={() => { navigator.clipboard?.writeText(myUid); showToast('Code copied.') }}
+                      className="vx-btn vx-btn-ghost text-xs flex-shrink-0">Copy code</button>
+                  </div>
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    <button onClick={() => { navigator.clipboard?.writeText(inviteLink(myUid, myName)); showToast('Invite link copied.') }}
+                      className="vx-btn vx-btn-ghost text-xs">🔗 Copy invite link</button>
+                    <button
+                      onClick={() => {
+                        const link = inviteLink(myUid, myName)
+                        const msg = `Add me on Personal Planner — just open this link and tap Add Friend 💪\n\n${link}`
+                        window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
+                      }}
+                      className="vx-btn vx-btn-ghost text-xs" style={{ color: '#25D366' }}
+                      title="Share invite link via WhatsApp">
+                      📱 WhatsApp
+                    </button>
+                  </div>
+                </div>
+              </SettingRow>
+            )}
           </SettingCard>
 
           <SectionLabel>Account</SectionLabel>

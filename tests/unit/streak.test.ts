@@ -106,29 +106,76 @@ describe('runOvernightLogic', () => {
     expect(carried).toHaveLength(1) // no duplicate
   })
 
-  it('does NOT carry a task at MAX_CARRY via the gap=1 path', () => {
+  it('does NOT carry a task at MAX_CARRY via the gap=1 path, and applies the one-time abandonment penalty', () => {
     const tasks = [
-      makeTask({ id: 'maxed-gap1', date: '2024-01-09', done: false, carriedDays: 3 }),
+      makeTask({ id: 'maxed-gap1', date: '2024-01-09', done: false, carriedDays: 3, priority: 'high' }),
+    ]
+    const state = makeState({ history: [makeHistoryEntry('2024-01-09')], tasks, rankXP: 100, rewardWallet: 50 })
+
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
+    expect(carried).toHaveLength(0)
+    // Abandoned: basePts('high') = 20 XP, floor(20/2) = 10 wallet.
+    expect(result.rankXP).toBe(80)
+    expect(result.rewardWallet).toBe(40)
+  })
+
+  it('never lets the abandonment penalty push rankXP/rewardWallet below 0', () => {
+    const tasks = [
+      makeTask({ id: 'maxed-gap1-low', date: '2024-01-09', done: false, carriedDays: 3, priority: 'high' }),
+    ]
+    const state = makeState({ history: [makeHistoryEntry('2024-01-09')], tasks, rankXP: 5, rewardWallet: 2 })
+
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    expect(result.rankXP).toBe(0)
+    expect(result.rewardWallet).toBe(0)
+  })
+
+  it('DOES keep carrying a challenged task past MAX_CARRY via the gap=1 path — a challenge is not silently abandoned', () => {
+    const tasks = [
+      makeTask({ id: 'challenge-gap1', date: '2024-01-09', done: false, carriedDays: 3, challengedBy: 'friend-uid', challengeId: 'ch1' }),
     ]
     const state = makeState({ history: [makeHistoryEntry('2024-01-09')], tasks })
 
     const result = runOvernightLogic(state, '2024-01-10')
 
     const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
-    expect(carried).toHaveLength(0)
+    expect(carried).toHaveLength(1)
+    expect(carried[0].carriedDays).toBe(4)
   })
 
-  it('does NOT carry a task that has already been carried MAX_CARRY times', () => {
+  it('does NOT carry a task that has already been carried MAX_CARRY times, and applies the abandonment penalty', () => {
     const tasks = [
-      makeTask({ id: 'maxed', date: '2024-01-09', done: false, carriedDays: 3 }),
+      makeTask({ id: 'maxed', date: '2024-01-09', done: false, carriedDays: 3, priority: 'low' }),
     ]
-    const state = makeState({ history: [makeHistoryEntry('2024-01-08')], tasks })
+    const state = makeState({ history: [makeHistoryEntry('2024-01-08')], tasks, rankXP: 50, rewardWallet: 20 })
 
     const result = runOvernightLogic(state, '2024-01-10')
 
     // maxed-out carry should be skipped
     const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
     expect(carried).toHaveLength(0)
+    // The day itself also misses target (streak defaults to 0 in makeState), so the
+    // pre-existing streakBrokenXpPenalty (-10 flat) stacks with the new task-abandon
+    // penalty (basePts('low')=6 XP, floor(6/2)=3 wallet): 50 - 10 - 6 = 34. The day-level
+    // penalty never touches rewardWallet, so that side is just 20 - 3 = 17.
+    expect(result.rankXP).toBe(34)
+    expect(result.rewardWallet).toBe(17)
+  })
+
+  it('DOES keep carrying a challenged task past MAX_CARRY via the multi-day gap path', () => {
+    const tasks = [
+      makeTask({ id: 'challenge-maxed', date: '2024-01-09', done: false, carriedDays: 3, challengedBy: 'friend-uid', challengeId: 'ch1' }),
+    ]
+    const state = makeState({ history: [makeHistoryEntry('2024-01-08')], tasks })
+
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
+    expect(carried).toHaveLength(1)
+    expect(carried[0].carriedDays).toBe(4)
   })
 
   it('sorts history by date to find the true last entry, even when history is unsorted', () => {

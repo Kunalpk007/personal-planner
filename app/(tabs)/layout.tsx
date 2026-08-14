@@ -292,8 +292,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </motion.div>
       </main>
 
-      {/* Bottom mobile nav — flush edge-to-edge bar (not a floating pill —
-          see app/globals.css's `.vx-bottom-nav` comment for why). */}
+      {/* Bottom mobile nav — floating glass pill */}
       <nav className="vx-bottom-nav">
         {TABS.map(tab => {
           const Icon = TAB_ICONS[tab.href]

@@ -11,6 +11,7 @@ import { goalPtsEarnedOn }  from '@/lib/engine/goals'
 import { getDailyQuote }    from '@/lib/engine/quotes'
 import { writeBackupFile }  from '@/lib/persistence/fsBackup'
 import { syncNow }          from '@/lib/sync/sync'
+import { EndOfDayRitual }   from './EndOfDayRitual'
 import type { HistoryEntry, EodMood } from '@/store/types'
 
 const EOD_MOODS = [
@@ -40,6 +41,7 @@ export function SubmitArea({ today, pinned }: { today: string; pinned?: boolean 
   const [eodMood, setEodMoodLocal]    = useState<EodMood | ''>('')
   const [eveningQuote, setEveningQuote] = useState(false)
   const [celebrate, setCelebrate]     = useState<{ milestoneStreak: number | null; freezeBonus: number } | null>(null)
+  const [ritualActive, setRitualActive] = useState(false)
 
   const goalPtsToday = goalPtsEarnedOn(goals, today)
   const earned = todayEarned(done, mood, cfg, goalPtsToday)
@@ -82,8 +84,12 @@ export function SubmitArea({ today, pinned }: { today: string; pinned?: boolean 
     if (vx) {
       fireConfetti()
       setCelebrate({ milestoneStreak, freezeBonus })
-    } else if (cfg.quoteEvening) {
-      setEveningQuote(true)
+    } else {
+      // Tasks-page ("pinned") path has no celebration step — go straight
+      // into the end-of-day ritual (focus check-in / tomorrow's top 3 /
+      // Sunday weekly review), same as the vx path once its celebration
+      // modal is dismissed (see closeCelebrate below).
+      setRitualActive(true)
     }
     if (milestoneStreak) {
       showToast(`🎉 You've earned a Streak Freeze ❄ — ${milestoneStreak}-day streak! +${freezeBonus} freeze${freezeBonus > 1 ? 's' : ''}!`)
@@ -98,6 +104,22 @@ export function SubmitArea({ today, pinned }: { today: string; pinned?: boolean 
 
   function closeCelebrate() {
     setCelebrate(null)
+    setRitualActive(true)
+  }
+
+  // "Skip all" on the celebration screen — bypasses the entire end-of-day
+  // ritual (focus/lifestyle/top3/weekly) in one tap, going straight to
+  // whatever normally happens once the ritual finishes.
+  function skipCelebrateAndRitual() {
+    setCelebrate(null)
+    if (cfg.quoteEvening) setEveningQuote(true)
+  }
+
+  // Fires once the end-of-day ritual (focus check-in → tomorrow's top 3 →
+  // Sunday-only weekly review) finishes or is skipped through entirely —
+  // resumes whatever used to happen right after submit (the evening quote).
+  function finishRitual() {
+    setRitualActive(false)
     if (cfg.quoteEvening) setEveningQuote(true)
   }
 
@@ -227,12 +249,31 @@ export function SubmitArea({ today, pinned }: { today: string; pinned?: boolean 
       </div>
     )
 
-    return pinned ? createPortal(content, document.body) : content
+    // The ritual is rendered as a sibling of `content`, not nested inside
+    // it — `content` itself flips to the "✓ Day submitted" branch the
+    // instant handleSubmit() calls submitDay() (isSubmitted derives live
+    // from the store), which would otherwise unmount these modals mid-flow
+    // before the user ever sees them.
+    const wrapped = (
+      <>
+        {content}
+        <EndOfDayRitual today={today} active={ritualActive} onDone={finishRitual} />
+      </>
+    )
+    return pinned ? createPortal(wrapped, document.body) : wrapped
   }
 
   // ── Dashboard ("vx") path — vibrant redesign ──────────────────────────────
-  if (isSubmitted) {
-    return (
+  // NOTE: the submit-state card and the celebrate/ritual/evening-quote
+  // overlays are siblings, not nested inside an `if (isSubmitted) return`
+  // early exit. handleSubmit() calls submitDay() (which flips
+  // submittedDays[today] synchronously) in the same handler as
+  // setCelebrate(...) — React 18 batches both into one render, so an early
+  // return keyed on isSubmitted would unmount the celebration/ritual modals
+  // before they ever had a chance to show.
+  return (
+    <>
+    {isSubmitted ? (
       <motion.div
         className="vx-glass text-center"
         initial={{ opacity: 0, y: 22, scale: 0.97 }}
@@ -241,29 +282,28 @@ export function SubmitArea({ today, pinned }: { today: string; pinned?: boolean 
       >
         <div className="vx-eyebrow justify-center">✓ Day submitted</div>
       </motion.div>
-    )
-  }
-
-  return (
-    <motion.div
-      className="vx-glass"
-      initial={{ opacity: 0, y: 22, scale: 0.97, filter: 'blur(4px)' }}
-      animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.84 }}
-    >
-      <div className="vx-eyebrow mb-2">✅ Submit My Day</div>
-      <div className="text-xs text-[var(--text2)] mb-3">
-        {canSubmit
-          ? `${earned} pts — ready to submit! (min ${minPts})`
-          : `Need ${diff} more pts to submit (${earned}/${minPts})`}
-      </div>
-      <button
-        onClick={() => canSubmit && setModalOpen(true)}
-        disabled={!canSubmit}
-        className="vx-submit-btn"
+    ) : (
+      <motion.div
+        className="vx-glass"
+        initial={{ opacity: 0, y: 22, scale: 0.97, filter: 'blur(4px)' }}
+        animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.84 }}
       >
-        {canSubmit ? '✓ Submit My Day' : `Need ${diff} more pts`}
-      </button>
+        <div className="vx-eyebrow mb-2">✅ Submit My Day</div>
+        <div className="text-xs text-[var(--text2)] mb-3">
+          {canSubmit
+            ? `${earned} pts — ready to submit! (min ${minPts})`
+            : `Need ${diff} more pts to submit (${earned}/${minPts})`}
+        </div>
+        <button
+          onClick={() => canSubmit && setModalOpen(true)}
+          disabled={!canSubmit}
+          className="vx-submit-btn"
+        >
+          {canSubmit ? '✓ Submit My Day' : `Need ${diff} more pts`}
+        </button>
+      </motion.div>
+    )}
 
       {/* Evening quote overlay (shown after the celebration is dismissed) —
           portalled to <body> for the same reason as the non-vx overlay above:
@@ -302,9 +342,17 @@ export function SubmitArea({ today, pinned }: { today: string; pinned?: boolean 
               ? `${celebrate.milestoneStreak}-day streak — +${celebrate.freezeBonus} freeze${celebrate.freezeBonus > 1 ? 's' : ''} banked, on top of today's ${earned} pts.`
               : `${earned} pts locked in and your streak is protected. See you tomorrow.`}
           </p>
-          <button onClick={closeCelebrate} className="vx-celebrate-btn">Nice — keep going</button>
+          <div className="flex gap-2.5 justify-center">
+            <button onClick={skipCelebrateAndRitual} className="vx-btn vx-btn-ghost text-[12.5px]">Skip all</button>
+            <button onClick={closeCelebrate} className="vx-celebrate-btn">Nice — keep going</button>
+          </div>
         </div>
       </Modal>
+
+      {/* End-of-day ritual — focus check-in → tomorrow's top 3 → Sunday-only
+          weekly review. Also a sibling of the isSubmitted branch above, for
+          the same batching reason. */}
+      <EndOfDayRitual today={today} active={ritualActive} onDone={finishRitual} />
 
       {/* Submit modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Submit your day" variant="vx">
@@ -345,6 +393,6 @@ export function SubmitArea({ today, pinned }: { today: string; pinned?: boolean 
           </button>
         </div>
       </Modal>
-    </motion.div>
+    </>
   )
 }

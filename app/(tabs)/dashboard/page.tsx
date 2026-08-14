@@ -9,12 +9,15 @@ import { RankProgress }    from '@/features/dashboard/components/RankProgress'
 import { GradientRing }    from '@/ui/GradientRing'
 import { SubmitArea }      from '@/features/dashboard/components/SubmitArea'
 import { RetroFixPanel }   from '@/features/dashboard/components/RetroFixPanel'
+import { TomorrowTop3Card } from '@/features/dashboard/components/TomorrowTop3Card'
+import { SundayReviewNudge } from '@/features/dashboard/components/SundayReviewNudge'
 import { todayEarned, todayTarget } from '@/lib/engine/scoring'
 import { goalPtsEarnedOn } from '@/lib/engine/goals'
 import { getDailyQuote }   from '@/lib/engine/quotes'
 import { getManagerMessage } from '@/lib/engine/manager'
 import { StreakHistoryModal } from '@/features/dashboard/components/StreakHistoryModal'
 import { MorningQuoteOverlay } from '@/features/dashboard/components/MorningQuoteOverlay'
+import { MorningTop3Prompt } from '@/features/dashboard/components/MorningTop3Prompt'
 import { LifeScoreModal }  from '@/features/dashboard/components/LifeScoreCard'
 import { FocusTimeCard }   from '@/features/dashboard/components/FocusTimeCard'
 import { WaterTrackerCard } from '@/features/dashboard/components/WaterTrackerCard'
@@ -87,6 +90,7 @@ export default function DashboardPage() {
           "UI Redesign Initiative") — no longer duplicated per-page here. */}
       <div className="relative" style={{ zIndex: 1 }}>
         <MorningQuoteOverlay today={today} />
+        <MorningTop3Prompt today={today} />
         {/* Overnight banner */}
         {overnightMsg && (
           <div className="bg-[var(--blue-bg)] border border-[var(--blue)] rounded-[10px] p-3 mb-3.5 text-xs text-[var(--blue)] flex justify-between items-center">
@@ -94,6 +98,11 @@ export default function DashboardPage() {
             <button onClick={clearMsg} className="btn-icon">×</button>
           </div>
         )}
+
+        {/* Sunday-evening nudge: the Weekly Review only fires as part of
+            Submit My Day, so a Sunday you don't submit means it never shows
+            at all — see SundayReviewNudge.tsx. */}
+        <SundayReviewNudge today={today} />
 
         {/* Header */}
         <motion.div
@@ -138,6 +147,11 @@ export default function DashboardPage() {
             until a fixed, non-configurable 12:00 PM the day after. See
             RetroFixPanel.tsx / lib/engine/retroFix.ts. */}
         <RetroFixPanel today={today} />
+
+        {/* Priorities picked the night before via the end-of-day ritual —
+            see EndOfDayRitual.tsx / project.md's "Time/attention tracking +
+            weekly rituals". Renders nothing if none were picked for today. */}
+        <TomorrowTop3Card today={today} />
 
         <MoodBar today={today} />
 
