@@ -100,8 +100,7 @@ export default function RewardsPage() {
           <select
             value={notaryUid}
             onChange={e => setNotaryUid(e.target.value)}
-            className="vx-field text-[12px] px-2 py-1"
-            style={{ width: 'auto' }}
+            className="vx-field text-[12px] px-2 py-1 w-auto"
           >
             <option value="">None selected</option>
             {notaries.map(f => <option key={f.uid} value={f.uid}>{f.displayName}</option>)}

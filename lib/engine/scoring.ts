@@ -1,5 +1,5 @@
 import type { Task, AppConfig } from '@/store/types'
-import { PRIORITY_PTS, SLOT_HOURS, CARRY_PENALTY, WALLET_RATIO } from '@/constants/points'
+import { PRIORITY_PTS, SLOT_HOURS, CARRY_PENALTY, WALLET_RATIO, TASK_ABANDON_XP_MULT } from '@/constants/points'
 
 export function basePts(task: Task): number {
   if (task.isSpecial && task.specialPts) return task.specialPts
@@ -33,6 +33,22 @@ export function calcPts(task: Task): number {
   }
 
   return Math.max(1, pts)
+}
+
+/** One-time penalty for a task that's been carried past MAX_CARRY days and
+ *  is still incomplete — "abandoned" rather than finished. Proportional to
+ *  the task's own point value (`basePts`, not the already carry-decayed
+ *  `calcPts` — by day 3 that would've shrunk toward 1, which would make the
+ *  penalty for ignoring a high-priority task barely bigger than a low-
+ *  priority one, the opposite of what "proportional" should mean here).
+ *  Applied once, at the moment a task stops being carried forward — see the
+ *  three call sites in lib/engine/streak.ts and
+ *  store/slices/tasks.slice.ts#carryTask. Wallet reuses the existing
+ *  pts-to-wallet conversion (WALLET_RATIO) rather than a second ratio. */
+export function taskAbandonPenalty(task: Task): { xp: number; wallet: number } {
+  const xp = basePts(task) * TASK_ABANDON_XP_MULT
+  const wallet = Math.floor(xp / WALLET_RATIO)
+  return { xp, wallet }
 }
 
 export function getMoodMult(mood: string | undefined, cfg: Pick<AppConfig, 'moodMot' | 'moodSick'>): number {

@@ -1,17 +1,20 @@
 import type { StateCreator } from 'zustand'
 import type { AppState, Task, RecurringTemplate, Subtask } from '../types'
 import { uid, getWeekMonday, getWeekDates } from '@/lib/engine/cutoff'
-import { calcPts, walletPtsFor, todayEarned, getMinPts } from '@/lib/engine/scoring'
+import { calcPts, basePts, walletPtsFor, todayEarned, getMinPts, taskAbandonPenalty } from '@/lib/engine/scoring'
 import { goalPtsEarnedOn } from '@/lib/engine/goals'
 import { checkTaskMilestone } from '@/lib/engine/badges'
 import { checkStreakMilestone } from '@/lib/engine/streak'
 import { restOrLightXpPenalty, streakBrokenXpPenalty } from '@/lib/engine/xpPenalty'
-import { WALLET_RATIO } from '@/constants/points'
+import { WALLET_RATIO, MAX_CARRY, TASK_DELETE_GRACE_MINUTES } from '@/constants/points'
 
 export interface TasksSlice {
   // Actions
   addTask:        (task: Omit<Task, 'id' | 'createdAt' | 'done' | 'completedAt' | 'subtasks'>) => string
-  removeTask:     (id: string) => void
+  /** `now` is optional/injectable (defaults to the real clock) purely for
+   *  deterministic testing of the delete-grace-period check below — normal
+   *  call sites never pass it. */
+  removeTask:     (id: string, now?: Date) => void
   toggleTask:     (id: string) => { pts: number; walletPts: number } | null
   toggleTaskRetro:(id: string) => { pts: number; walletPts: number } | null
   submitRetroFix: (dateKey: string, reward?: { title: string; cost: number }) => { ok: boolean; reason?: string; upgraded?: boolean; newStreak?: number }
@@ -37,6 +40,14 @@ export interface TasksSlice {
   cancelTask: (taskId: string, reason: string) => boolean
 }
 
+/** Grace window so deleting a task minutes after creating it — a typo, an
+ *  accidental duplicate — never costs XP the way abandoning a real
+ *  commitment does. See TASK_DELETE_GRACE_MINUTES. */
+function withinDeleteGrace(task: Task, now: Date): boolean {
+  const ageMs = now.getTime() - new Date(task.createdAt).getTime()
+  return ageMs < TASK_DELETE_GRACE_MINUTES * 60 * 1000
+}
+
 export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set, get) => ({
   addTask(partial) {
     const task: Task = {
@@ -51,14 +62,28 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
     return task.id
   },
 
-  removeTask(id) {
+  removeTask(id, now = new Date()) {
     const task = get().tasks.find(t => t.id === id)
     if (task?.done) {
+      // Reversing an already-earned completion — undo the credit exactly,
+      // this isn't the new abandonment penalty below.
       const pts = calcPts(task)
       set(s => ({
         tasks:        s.tasks.filter(t => t.id !== id),
         rankXP:       Math.max(0, s.rankXP - pts),
         rewardWallet: Math.max(0, s.rewardWallet - walletPtsFor(pts)),
+        pinnedTaskId: s.pinnedTaskId === id ? null : s.pinnedTaskId,
+      }))
+    } else if (task && !withinDeleteGrace(task, now)) {
+      // Deleting an incomplete task is now a real decision, not a free
+      // escape hatch from a commitment (see the matching carry-forward
+      // abandonment penalty above/in lib/engine/streak.ts) — costs XP equal
+      // to what the task was worth. Exempt: tasks created within the last
+      // TASK_DELETE_GRACE_MINUTES, so fixing a typo or duplicate add stays free.
+      const xp = basePts(task)
+      set(s => ({
+        tasks:        s.tasks.filter(t => t.id !== id),
+        rankXP:       Math.max(0, s.rankXP - xp),
         pinnedTaskId: s.pinnedTaskId === id ? null : s.pinnedTaskId,
       }))
     } else {
@@ -386,13 +411,29 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       createdAt:   new Date().toISOString(),
       carriedDays: (task.carriedDays ?? 0) + 1,
     }
-    if (carried.carriedDays! <= 3) {
+    // A challenged task is a commitment to a friend, not just a personal
+    // to-do — letting it silently stop carrying forward after MAX_CARRY days
+    // (like an ordinary task) meant it fell out of every daily list forever
+    // while still sitting "in progress" with no way to complete or cancel it
+    // (see the same exemption for `blocked` tasks, and the matching fix in
+    // lib/engine/streak.ts's two carry-forward sites). It keeps carrying
+    // indefinitely until the user completes or explicitly cancels it.
+    if (task.challengedBy || carried.carriedDays! <= MAX_CARRY) {
       set(s => ({ tasks: [...s.tasks, carried] }))
+    } else if (!task.blocked) {
+      // Abandoned — carried past MAX_CARRY days still incomplete, and never
+      // carried again. Same one-time penalty as the automatic overnight
+      // path (lib/engine/streak.ts) — see scoring.ts#taskAbandonPenalty.
+      const penalty = taskAbandonPenalty(task)
+      set(s => ({
+        rankXP:       Math.max(0, s.rankXP - penalty.xp),
+        rewardWallet: Math.max(0, s.rewardWallet - penalty.wallet),
+      }))
     }
   },
 
   processExpiredCarries() {
-    set(s => ({ tasks: s.tasks.filter(t => !t.carriedDays || t.carriedDays <= 3) }))
+    set(s => ({ tasks: s.tasks.filter(t => t.challengedBy || !t.carriedDays || t.carriedDays <= MAX_CARRY) }))
   },
 
   // ─── Task validation — see docs/PHASE2_SOCIAL_LIFE_OS.md Section 1.3/1.4 ──

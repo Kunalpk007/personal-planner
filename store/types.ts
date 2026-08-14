@@ -256,6 +256,67 @@ export interface PausedStreak {
   streakAtPause: number
 }
 
+/** Fixed set of end-of-day distraction tags offered on the Focus Check-in —
+ *  kept as a plain string union (not a DB-editable list) since it mirrors
+ *  CANCEL_REASONS-style small fixed pick-lists used elsewhere in the app. */
+export const DISTRACTION_TAGS = [
+  'Phone / social media',
+  'Meetings ran long',
+  'Procrastination',
+  'Interruptions',
+  'Low energy / tired',
+  'Unclear priorities',
+  'Other',
+] as const
+export type DistractionTag = typeof DISTRACTION_TAGS[number]
+
+/** Non-scored end-of-day self-rating of focus/attention quality — see
+ *  project.md's "Time/attention tracking" design. `score` is 1 (scattered)
+ *  to 5 (deeply focused). Never touches rankXP/rewardWallet/history — it's
+ *  a signal for the Weekly Review, not a scoring input. */
+export interface FocusCheckin {
+  score:        1 | 2 | 3 | 4 | 5
+  distractions: DistractionTag[]
+  at:           string
+}
+
+/** Sleep quality is asked as a coarse 3-option scale, not hours — precision
+ *  isn't the point, a trend line is, and exact-hours input adds friction for
+ *  no real gain (see lifestyle-questions-analysis.md). */
+export const SLEEP_QUALITY_OPTIONS = ['poor', 'ok', 'great'] as const
+export type SleepQuality = typeof SLEEP_QUALITY_OPTIONS[number]
+
+/** Non-scored daily lifestyle signals (sleep quality, whether the person
+ *  moved their body, a 1-5 stress/overwhelm rating) — the three questions
+ *  proposed in lifestyle-questions-analysis.md. Captured together as part
+ *  of the Submit My Day flow (End-of-Day Ritual), per the user's explicit
+ *  placement decision — the doc originally proposed splitting sleep into a
+ *  separate AM touchpoint, but a single evening touchpoint was chosen
+ *  instead to avoid a second daily interruption. Never touches
+ *  rankXP/rewardWallet/history — same policy as FocusCheckin, this is a
+ *  signal for the Weekly Review, not a scoring input. Keyed by date. */
+export interface LifestyleCheckin {
+  sleep:  SleepQuality
+  moved:  boolean
+  stress: 1 | 2 | 3 | 4 | 5
+  at:     string
+}
+
+/** Up to 3 free-text priorities picked the night before for the next day. */
+export interface TomorrowTop3 {
+  items: string[]
+  at:    string
+}
+
+/** Sunday-only weekly reflection, keyed by that week's Monday date. Replaces
+ *  the old single `reflection: string` shape with three focused prompts. */
+export interface WeeklyReview {
+  whatWorked: string
+  whatDidnt:  string
+  oneChange:  string
+  at:         string
+}
+
 export type ThemeMode = 'light' | 'dark' | 'cream'
 export type FontScale = 'normal' | 'large' | 'xlarge'
 
@@ -357,8 +418,33 @@ export interface AppStateData {
 
   pinnedTaskId:          string | null
   engagementDays:        Record<string, boolean>
-  weeklyReviewDone:      Record<string, { reflection: string; at: string }>
+  /** Keyed by that week's Monday date (getWeekMonday). Restructured from a
+   *  single free-text `reflection` field to three focused prompts — see
+   *  WeeklyReview in features/dashboard/components/EndOfDayRitual.tsx. */
+  weeklyReviewDone:      Record<string, WeeklyReview>
+  /** Non-scored end-of-day focus/attention check-in (project.md "Time/
+   *  attention tracking" — a 1-5 self-rating plus optional distraction
+   *  tags), captured as part of the Submit My Day flow. Deliberately kept
+   *  out of the points/XP engine — see EndOfDayRitual.tsx. Keyed by date. */
+  focusCheckins:         Record<string, FocusCheckin>
+  /** Non-scored daily lifestyle signals (sleep/movement/stress) — see
+   *  LifestyleCheckin. Keyed by date, same pattern as focusCheckins, and
+   *  captured in the same End-of-Day Ritual step. */
+  lifestyleCheckins:     Record<string, LifestyleCheckin>
+  /** The up-to-3 priorities picked for a given date — keyed by the date they
+   *  apply TO (tomorrow's date when picked via the End-of-Day Ritual,
+   *  today's date when picked via the morning fallback prompt — see
+   *  MorningTop3Prompt.tsx), so looking up `tomorrowTop3[today]` on the
+   *  Dashboard shows "today's top 3". Picking any now also creates real
+   *  Task rows for that date (see EndOfDayRitual.tsx/MorningTop3Prompt.tsx)
+   *  — `items` is kept as a lightweight titles-only mirror for the
+   *  Dashboard card, not the source of truth for those tasks. */
+  tomorrowTop3:          Record<string, TomorrowTop3>
   morningQuoteShown:     Record<string, boolean>
+  /** Whether the morning fallback Top-3 prompt has already been shown (or
+   *  skipped) for a given date — prevents it from re-appearing on every
+   *  Dashboard load once dismissed. See MorningTop3Prompt.tsx. */
+  morningTop3Shown:      Record<string, boolean>
   appFirstUsed:          string | null
   overnightMsg:          string | null
   /** The most recent "you showed up" wallet bonus claimed via
@@ -387,7 +473,7 @@ export interface ChangeLogEntry {
 export interface AppActions {
   // Tasks
   addTask:               (task: Omit<Task, 'id' | 'createdAt' | 'done' | 'completedAt' | 'subtasks'>) => string
-  removeTask:            (id: string) => void
+  removeTask:            (id: string, now?: Date) => void
   toggleTask:            (id: string) => { pts: number; walletPts: number } | null
   toggleTaskRetro:       (id: string) => { pts: number; walletPts: number } | null
   submitRetroFix:        (dateKey: string, reward?: { title: string; cost: number }) => { ok: boolean; reason?: string; upgraded?: boolean; newStreak?: number }
@@ -508,7 +594,11 @@ export interface AppActions {
   // UI
   clearOvernightMsg:     () => void
   markMorningQuoteShown: (date: string) => void
-  setWeeklyReviewDone:   (date: string, reflection: string) => void
+  markMorningTop3Shown:  (date: string) => void
+  setWeeklyReviewDone:   (weekStart: string, review: Omit<WeeklyReview, 'at'>) => void
+  setFocusCheckin:       (date: string, score: FocusCheckin['score'], distractions: DistractionTag[]) => void
+  setLifestyleCheckin:   (date: string, sleep: SleepQuality, moved: boolean, stress: LifestyleCheckin['stress']) => void
+  setTomorrowTop3:       (date: string, items: string[]) => void
   markEngagementDay:     (date: string) => void
   setAppFirstUsed:       (date: string) => void
   applyOvernightPatch:   (patch: Partial<AppStateData>) => void

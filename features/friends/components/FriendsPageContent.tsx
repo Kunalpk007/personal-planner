@@ -3,18 +3,11 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useSocialStore } from '@/store/social/social.store'
 import { usePlannerStore } from '@/store'
-import { getClientAuth } from '@/lib/firebase/client'
-import { getPublicProfile } from '@/lib/firebase/firestore'
 import { FRIEND_TAGS, FRIEND_TAG_META, FRIEND_SOFT_CAP } from '@/constants/social'
 import type { FriendTag } from '@/constants/social'
 import { showToast } from '@/ui/Toast'
 import { Modal } from '@/ui/Modal'
 import type { SharedTask } from '@/store/social/types'
-
-function inviteLink(uid: string, name: string): string {
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  return `${origin}/tasks?mode=friends&code=${encodeURIComponent(uid)}&name=${encodeURIComponent(name)}`
-}
 
 export function FriendsPageContent() {
   const params = useSearchParams()
@@ -22,17 +15,11 @@ export function FriendsPageContent() {
   const loaded      = useSocialStore(s => s.loaded)
   const addFriend   = useSocialStore(s => s.addFriendDirect)
   const remove      = useSocialStore(s => s.remove)
-  const myName      = useSocialStore(s => s.displayName)
 
-  const [myUid, setMyUid] = useState<string | null>(null)
   const [toUid, setToUid] = useState('')
   const [toName, setToName] = useState('')
   const [confirmAdd, setConfirmAdd] = useState(false)
   const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    setMyUid(getClientAuth().currentUser?.uid ?? null)
-  }, [])
 
   // Prefill from an invite link (?code=&name=).
   useEffect(() => {
@@ -65,35 +52,6 @@ export function FriendsPageContent() {
 
   return (
     <div>
-      {/* Your code + share link */}
-      {myUid && (
-        <div className="vx-tile mb-3 text-[12px]">
-          <div style={{ color: 'var(--vx-fg-4)' }} className="mb-1">Your friend code / invite link</div>
-          <div className="flex items-center gap-2 mb-2">
-            <code className="flex-1 truncate text-[13px] font-semibold">{myUid}</code>
-            <button onClick={() => { navigator.clipboard?.writeText(myUid); showToast('Code copied.') }}
-              className="vx-btn vx-btn-ghost text-[11px] px-2 py-1">Copy code</button>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => { navigator.clipboard?.writeText(inviteLink(myUid, myName)); showToast('Invite link copied.') }}
-              className="vx-btn vx-btn-ghost text-[11px] px-2 py-1">🔗 Copy invite link</button>
-            <button
-              onClick={() => {
-                const link = inviteLink(myUid, myName)
-                const msg = `Add me on Personal Planner — just open this link and tap Add Friend 💪\n\n${link}`
-                window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
-              }}
-              className="vx-btn vx-btn-ghost text-[11px] px-2 py-1 whitespace-nowrap"
-              style={{ color: '#25D366' }}
-              title="Share invite link via WhatsApp">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"/></svg>
-              WhatsApp
-            </button>
-          </div>
-          <div className="text-[10px] mt-1.5" style={{ color: 'var(--vx-fg-4)' }}>Anyone who opens your link and taps Add Friend becomes your friend instantly — no approval needed.</div>
-        </div>
-      )}
-
       {/* Add a friend */}
       <div className="vx-tile p-3.5 mb-3">
         <div className="text-[13px] font-medium mb-2">Add a friend</div>
@@ -141,35 +99,25 @@ function FriendTile({ friend, onRemove }: {
   const checkReciprocal = useSocialStore(s => s.checkReciprocal)
   const addFriend       = useSocialStore(s => s.addFriendDirect)
 
-  const [xp, setXp] = useState<number | null>(null)
   const [reciprocal, setReciprocal] = useState(true)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
-    getPublicProfile(friend.uid).then(p => { if (alive && p?.rankXP != null) setXp(p.rankXP) })
     checkReciprocal(friend.uid).then(r => { if (alive) setReciprocal(r) })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [friend.uid])
 
-  const primaryType = friend.tags[0] ? FRIEND_TAG_META[friend.tags[0]].label : 'Friend'
-
   return (
     <div className="vx-tile mb-2">
-      <div className="flex items-center gap-2.5">
-        <button onClick={() => setHistoryOpen(true)} className="flex-1 min-w-0 text-left">
-          <div className="text-[13px] font-medium break-words [overflow-wrap:anywhere]">{friend.displayName}</div>
-          <div className="text-[11px] flex items-center gap-2 mt-0.5" style={{ color: 'var(--vx-fg-4)' }}>
-            <span>{primaryType}</span>
-            <span>·</span>
-            <span>{xp == null ? '… XP' : `${xp} XP`}</span>
-          </div>
-        </button>
+      <button onClick={() => setHistoryOpen(true)} className="block w-full text-left">
+        <div className="text-[13px] font-medium break-words">{friend.displayName}</div>
+      </button>
+      <div className="flex items-center justify-between gap-2 mt-2">
         <select value={friend.tags[0] ?? ''} onChange={e => setTags(friend.uid, e.target.value ? [e.target.value as FriendTag] : [])}
-          className="vx-field text-[11px] px-2 py-1 flex-shrink-0"
-          style={{ width: 'auto' }}
+          className="vx-field text-[11px] px-2 py-1 min-w-0 max-w-[55%]"
           title="Friend type">
           <option value="">Type…</option>
           {FRIEND_TAGS.map(t => <option key={t} value={t}>{FRIEND_TAG_META[t].label}</option>)}

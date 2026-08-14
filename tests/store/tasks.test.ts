@@ -153,15 +153,61 @@ describe('toggleTaskRetro', () => {
 })
 
 describe('removeTask', () => {
-  it('removes an incomplete task without touching XP', () => {
+  it('removes an incomplete task without touching XP when deleted within the grace window', () => {
     usePlannerStore.getState().addTask(taskInput())
     const id = usePlannerStore.getState().tasks[0].id
 
-    usePlannerStore.getState().removeTask(id)
+    usePlannerStore.getState().removeTask(id) // default `now` — immediately after creation, well within grace
 
     const state = usePlannerStore.getState()
     expect(state.tasks).toHaveLength(0)
     expect(state.rankXP).toBe(0)
+  })
+
+  it('deducts XP equal to the task\'s own point value when deleting an incomplete task past the grace window', () => {
+    usePlannerStore.getState().addTask(taskInput({ priority: 'high' }))
+    usePlannerStore.setState({ rankXP: 50 })
+    const id = usePlannerStore.getState().tasks[0].id
+    const past = new Date(Date.now() + 20 * 60 * 1000) // 20 min "later" — past TASK_DELETE_GRACE_MINUTES (15)
+
+    usePlannerStore.getState().removeTask(id, past)
+
+    const state = usePlannerStore.getState()
+    expect(state.tasks).toHaveLength(0)
+    expect(state.rankXP).toBe(30) // 50 - basePts('high'=20)
+  })
+
+  it('does not let the delete penalty push rankXP below 0', () => {
+    usePlannerStore.getState().addTask(taskInput({ priority: 'high' }))
+    usePlannerStore.setState({ rankXP: 5 })
+    const id = usePlannerStore.getState().tasks[0].id
+    const past = new Date(Date.now() + 20 * 60 * 1000)
+
+    usePlannerStore.getState().removeTask(id, past)
+
+    expect(usePlannerStore.getState().rankXP).toBe(0)
+  })
+
+  it('clears pinnedTaskId when a pinned, incomplete task is removed past the grace window', () => {
+    usePlannerStore.getState().addTask(taskInput({ priority: 'high' }))
+    const id = usePlannerStore.getState().tasks[0].id
+    usePlannerStore.getState().pinTask(id)
+    const past = new Date(Date.now() + 20 * 60 * 1000)
+
+    usePlannerStore.getState().removeTask(id, past)
+
+    expect(usePlannerStore.getState().pinnedTaskId).toBeNull()
+  })
+
+  it('still costs nothing to delete an incomplete task right at the edge of the grace window', () => {
+    usePlannerStore.getState().addTask(taskInput({ priority: 'high' }))
+    usePlannerStore.setState({ rankXP: 50 })
+    const id = usePlannerStore.getState().tasks[0].id
+    const justUnder = new Date(Date.now() + 14 * 60 * 1000) // 14 min — still within the 15-min grace
+
+    usePlannerStore.getState().removeTask(id, justUnder)
+
+    expect(usePlannerStore.getState().rankXP).toBe(50)
   })
 
   it('removes a completed task and deducts its points', () => {

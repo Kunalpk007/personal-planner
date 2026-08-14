@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { usePlannerStore } from '@/store'
 import { useSocialStore } from '@/store/social/social.store'
+import { Modal } from '@/ui/Modal'
 import { showToast } from '@/ui/Toast'
 import { usePagination } from '@/hooks/usePagination'
 import { Pagination } from '@/ui/Pagination'
@@ -11,6 +12,33 @@ import type { Task, Goal } from '@/store/types'
 import type { SharedTask } from '@/store/social/types'
 
 const PAGE_SIZE = 6
+
+const CANCEL_REASONS = [
+  'Changed my mind',
+  'No longer relevant',
+  'Too ambitious for now',
+  'Ran out of time',
+  'Other',
+]
+
+/** A challenged task carries forward day to day like any other incomplete
+ *  task (see carryTask/runOvernightLogic) — each carry gets a fresh task id
+ *  but keeps the same `challengeId`, so an ongoing challenge can have
+ *  several dated copies sitting in `tasks` at once (yesterday's now-orphaned
+ *  copy, today's active one, etc). Collapse to just the most recent one per
+ *  challenge so this list shows exactly one live row per challenge instead
+ *  of a growing pile of stale duplicates. */
+function latestPerChallenge(tasks: Task[]): Task[] {
+  const byChallenge = new Map<string, Task>()
+  for (const t of tasks) {
+    const key = t.challengeId ?? t.id
+    const existing = byChallenge.get(key)
+    if (!existing || t.date > existing.date || (t.date === existing.date && t.createdAt > existing.createdAt)) {
+      byChallenge.set(key, t)
+    }
+  }
+  return [...byChallenge.values()]
+}
 
 type AcceptedItem =
   | { kind: 'incoming'; key: string; data: SharedTask }
@@ -54,9 +82,22 @@ export function ChallengesPanel() {
 
   const tasks = usePlannerStore(s => s.tasks)
   const goals = usePlannerStore(s => s.goals)
+  const toggleTask              = usePlannerStore(s => s.toggleTask)
+  const cancelTask               = usePlannerStore(s => s.cancelTask)
+  const toggleGoalChecklistItem = usePlannerStore(s => s.toggleGoalChecklistItem)
+  const completeGoal            = usePlannerStore(s => s.completeGoal)
+  const uncompleteGoal          = usePlannerStore(s => s.uncompleteGoal)
+  const cancelGoal              = usePlannerStore(s => s.cancelGoal)
 
-  // Challenge items already on my own list (accepted earlier).
-  const acceptedTasks = tasks.filter(t => t.challengedBy)
+  const [cancelTarget, setCancelTarget] = useState<{ kind: 'task' | 'goal'; id: string; title: string; from?: string } | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
+
+  // Challenge items already on my own list (accepted earlier). Not filtered
+  // to "not cancelled/not done" — a completed or cancelled challenge should
+  // still show here (with its resolved status), just not editable further.
+  // See `latestPerChallenge`'s doc comment for why tasks need deduping and
+  // goals don't (goals aren't date-carried the way tasks are).
+  const acceptedTasks = latestPerChallenge(tasks.filter(t => t.challengedBy))
   const acceptedGoals = goals.filter(g => g.challengedBy)
 
   const sortedSent = useMemo(
@@ -169,38 +210,156 @@ export function ChallengesPanel() {
             }
             if (item.kind === 'goal') {
               const g = item.data
+              const items = g.checklist ?? []
+              const doneCount = items.filter(i => i.done).length
+              const allDone = items.length === 0 || items.every(i => i.done)
+              const completed = !!g.completedAt
+              const cancelled = !!g.cancelledAt
+              function handleComplete() {
+                if (completed) {
+                  const r = uncompleteGoal(g.id)
+                  if (r) showToast(`Goal unmarked — -${r.pts} RXP · -${r.walletPts} 🪙 reversed.`)
+                  return
+                }
+                if (!allDone) { showToast('Finish all subtasks first.'); return }
+                const r = completeGoal(g.id)
+                if (r) showToast(`🎯 Goal complete! +${r.pts} RXP · +${r.walletPts} 🪙`)
+              }
               return (
-                <div key={item.key} className="vx-tile mb-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-[12px] break-words [overflow-wrap:anywhere] min-w-0">
-                      <span className="vx-chip mr-1" data-tone="cyan">GOAL</span>
-                      {g.title} <span style={{ color: 'var(--vx-fg-4)' }}>· from {g.challengedBy}</span>
-                    </span>
-                    <span className="vx-chip flex-shrink-0" data-tone={g.completedAt ? 'emerald' : 'amber'}>
-                      {g.completedAt ? 'Completed ✓' : 'In progress'}
-                    </span>
+                <div key={item.key} className={`vx-tile vx-accent-l flex items-start gap-2.5 mb-2 ${cancelled ? 'opacity-45' : ''}`} data-tone="cyan">
+                  {!cancelled && (
+                    <button
+                      onClick={handleComplete}
+                      disabled={!completed && !allDone}
+                      title={completed ? 'Completed — tap to unmark' : allDone ? 'Mark goal complete' : 'Finish all subtasks first'}
+                      className={`vx-check mt-0.5 ${completed ? 'vx-done' : allDone ? 'vx-pending' : ''}`}
+                      style={allDone && !completed ? { borderColor: 'var(--vx-emerald)', color: 'var(--vx-emerald)' } : undefined}
+                    >
+                      {completed ? '✓' : allDone ? '✓' : ''}
+                    </button>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[12px] break-words [overflow-wrap:anywhere] min-w-0">
+                        <span className="vx-chip mr-1" data-tone="cyan">GOAL</span>
+                        <span className={completed ? 'line-through' : ''}>{g.title}</span>
+                        <span style={{ color: 'var(--vx-fg-4)' }}> · from {g.challengedBy}</span>
+                      </span>
+                      {!completed && !cancelled && (
+                        <button onClick={() => { setCancelTarget({ kind: 'goal', id: g.id, title: g.title, from: g.challengedBy }); setCancelReason('') }} className="vx-btn vx-btn-icon flex-shrink-0" title="Cancel goal" aria-label="Cancel goal">🚫</button>
+                      )}
+                    </div>
+                    <div className="text-[11px] mt-0.5" style={{ color: 'var(--vx-fg-4)' }}>
+                      {cancelled ? `Cancelled${g.cancelReason ? `: ${g.cancelReason}` : ''}` : items.length > 0 ? `${doneCount}/${items.length} done` : null}
+                    </div>
+                    {!cancelled && items.length > 0 && (
+                      <div className="mt-1.5 space-y-1">
+                        {items.map(gi => (
+                          <label key={gi.id} className="flex items-center gap-1.5 text-[12px] cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={gi.done}
+                              disabled={completed}
+                              onChange={() => {
+                                const r = toggleGoalChecklistItem(g.id, gi.id)
+                                if (r) showToast(`Goal unmarked — -${r.pts} RXP · -${r.walletPts} 🪙 reversed.`)
+                              }}
+                            />
+                            <span className="break-words [overflow-wrap:anywhere] min-w-0 flex-1" style={{ textDecoration: gi.done ? 'line-through' : 'none', color: gi.done ? 'var(--vx-fg-4)' : 'var(--vx-fg-2)' }}>
+                              {gi.title}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )
             }
             const t = item.data
+            const cancelled = !!t.cancelledAt
             return (
-              <div key={item.key} className="vx-tile mb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-[12px] break-words [overflow-wrap:anywhere] min-w-0">
-                    <span className="vx-chip mr-1" data-tone="violet">TASK</span>
-                    {t.title} <span style={{ color: 'var(--vx-fg-4)' }}>· from {t.challengedBy}</span>
-                  </span>
-                  <span className="vx-chip flex-shrink-0" data-tone={t.done ? 'emerald' : 'amber'}>
-                    {t.done ? 'Completed ✓' : 'In progress'}
-                  </span>
+              <div key={item.key} className="vx-tile flex items-start gap-2.5 mb-2">
+                {!cancelled && (
+                  <button
+                    onClick={() => {
+                      const r = toggleTask(t.id)
+                      if (r) showToast(`+${r.pts} RXP · +${r.walletPts} 🪙`)
+                    }}
+                    className={`vx-check mt-0.5 ${t.done ? 'vx-done' : ''}`}
+                    title={t.done ? 'Completed — tap to unmark' : 'Mark task complete'}
+                  >
+                    {t.done ? '✓' : ''}
+                  </button>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-[12px] break-words [overflow-wrap:anywhere] min-w-0">
+                      <span className="vx-chip mr-1" data-tone="violet">TASK</span>
+                      <span className={t.done ? 'line-through' : ''}>{t.title}</span>
+                      <span style={{ color: 'var(--vx-fg-4)' }}> · from {t.challengedBy}</span>
+                    </span>
+                    {!t.done && !cancelled && (
+                      <button onClick={() => { setCancelTarget({ kind: 'task', id: t.id, title: t.title, from: t.challengedBy }); setCancelReason('') }} className="vx-btn vx-btn-icon flex-shrink-0" title="Cancel task" aria-label="Cancel task">🚫</button>
+                    )}
+                  </div>
+                  {cancelled && (
+                    <div className="text-[11px] mt-0.5" style={{ color: 'var(--vx-fg-4)' }}>
+                      Cancelled{t.cancelReason ? `: ${t.cancelReason}` : ''}
+                    </div>
+                  )}
+                  {(t.carriedDays ?? 0) > 0 && !t.done && !cancelled && (
+                    <div className="text-[11px] mt-0.5" style={{ color: 'var(--vx-fg-4)' }}>
+                      Carried {t.carriedDays} day{t.carriedDays === 1 ? '' : 's'} — still open, no expiry on a challenge.
+                    </div>
+                  )}
                 </div>
               </div>
             )
           })}
           <Pagination page={accepted.page} totalPages={accepted.totalPages} hasPrev={accepted.hasPrev} hasNext={accepted.hasNext} onPrev={accepted.prevPage} onNext={accepted.nextPage} />
         </>
+
       )}
+
+      <Modal
+        open={!!cancelTarget}
+        onClose={() => { setCancelTarget(null); setCancelReason('') }}
+        title={`Cancel ${cancelTarget?.kind === 'goal' ? 'goal' : 'task'}?`}
+        variant="vx"
+      >
+        <p className="text-sm mb-3" style={{ color: 'var(--vx-fg-2)' }}>
+          Why are you cancelling &ldquo;{cancelTarget?.title}&rdquo;? {cancelTarget?.from} will be notified.
+        </p>
+        <div className="flex flex-col gap-1.5 mb-3">
+          {CANCEL_REASONS.map(r => (
+            <button
+              key={r}
+              onClick={() => setCancelReason(r)}
+              className={`vx-btn ${cancelReason === r ? 'vx-btn-primary' : 'vx-btn-ghost'} text-left justify-start w-full text-[13px]`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => { setCancelTarget(null); setCancelReason('') }} className="vx-btn vx-btn-ghost text-sm">Go back</button>
+          <button
+            onClick={() => {
+              if (!cancelReason || !cancelTarget) return
+              const ok = cancelTarget.kind === 'goal'
+                ? cancelGoal(cancelTarget.id, cancelReason)
+                : cancelTask(cancelTarget.id, cancelReason)
+              setCancelTarget(null); setCancelReason('')
+              if (ok) showToast(`${cancelTarget.kind === 'goal' ? 'Goal' : 'Task'} cancelled.`)
+            }}
+            disabled={!cancelReason}
+            className="vx-btn vx-btn-danger text-sm"
+          >
+            Cancel {cancelTarget?.kind === 'goal' ? 'goal' : 'task'}
+          </button>
+        </div>
+      </Modal>
     </div>
   )
 }

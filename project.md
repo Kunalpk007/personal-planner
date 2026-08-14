@@ -122,28 +122,41 @@ this file to resume cold. Not auto-loaded — see "How to use this file" at the 
     make Streak tile visually affordable/clickable; show Goals on Dashboard; add 7D bar graph
     to History page; remove Heatmap + Mood-correlation charts from History; redesign history
     tile to one line: `Thu, 30 Jul  7/10  Motivate :)  +70XP  >` (no year, no auto/late tags).
+11. **Task-abandonment penalties (closes the two "quietly disappear with zero consequence"
+    loopholes flagged in the 2026-08-11 app analysis)**:
+    - **Carry-forward expiry**: a task carried past `MAX_CARRY` (3) days and still incomplete
+      gets a **one-time** penalty, then is dropped — not a repeating daily bleed. Penalty size
+      is **proportional to the task's own point value** (`basePts`, not the already
+      carry-decayed `calcPts`), hitting both `rankXP` (full amount) and `rewardWallet` (the
+      same `WALLET_RATIO` 2:1 conversion used everywhere else, not a new ratio). See
+      `taskAbandonPenalty` in `lib/engine/scoring.ts`.
+    - **Deleting an incomplete task**: costs XP equal to the task's own point value (wallet
+      untouched — this is a discipline signal, not a wallet-economy one). **Exempt: tasks
+      created within the last `TASK_DELETE_GRACE_MINUTES` (15)**, so undoing a typo or a
+      duplicate add stays free — only abandoning a real commitment costs anything.
+    - Completed-task deletion is unaffected (still reverses the exact credit it earned, as
+      before) — these are two different code paths, not one rule with an exception.
 
 ## Open questions
 
-Two, both awaiting a user decision as of 2026-08-10 — see that date's Progress log entry
-for full context. Nothing else is pending; do not start either without an explicit go-ahead,
-per this session's established pattern of prototyping user-facing changes before touching
-real code.
+One carried-over item. Do not start it without an explicit go-ahead, per this session's
+established pattern of prototyping user-facing changes before touching real code.
 
-1. **Time/attention tracking + weekly rituals** — three prototype screens were designed and
-   sent to the user (image: a 3-panel mockup, not yet in the repo as real code): a non-scored
-   end-of-day "focus check-in" (5-point scale + distraction tags), a "Tomorrow's Top 3" step
-   appended to Submit My Day, and a Sunday-only Weekly Review screen wired to the existing but
-   never-surfaced `setWeeklyReviewDone` store action. **Not approved yet.** If the user says go
-   ahead, implement per the design described in the 2026-08-10 log entry below — note
-   `setWeeklyReviewDone`'s current signature (`date: string, reflection: string`) will likely
-   need restructuring to hold multiple prompts rather than one string.
-2. **Consolidating the 5 parallel progress systems** (Rank/XP ladder, streak, badges, reward
+1. **Consolidating the 5 parallel progress systems** (Rank/XP ladder, streak, badges, reward
    wallet, Life Score) — user flagged that even with a 21-day streak they "aren't sure if
    they're being productive," which points at the scoring being too spread out, not just the
    dashboard layout (already addressed separately, see below). Life Score was suggested as the
    strongest candidate for a single "is this actually working" number, with the rest pushed a
-   tap deeper rather than removed. **Offered to prototype next; user has not responded yet.**
+   tap deeper rather than removed. **Offered to prototype next (twice now — also re-offered as
+   an option in the 2026-08-11 clarifying-questions round); user has not picked it either time.**
+
+(Item 1 from the original "Time/attention tracking + weekly rituals" open question — the focus
+check-in, Tomorrow's Top 3, and Weekly Review prototypes — is **no longer open**: implemented
+and live-verified 2026-08-10. The lifestyle-questions item is **also no longer open**: built and
+live-verified 2026-08-12 — see that date's Progress log entry for the one placement decision the
+user gave directly, and the two remaining decisions from `lifestyle-questions-analysis.md` that
+were assumed rather than asked, per CLAUDE.md §15's "state the assumption, proceed" rule — flag
+if either assumption should be revisited.)
 
 ## UI Redesign Initiative (started 2026-08-03)
 
@@ -165,6 +178,216 @@ should feel "lively" and "premium."
 - **Status: Dashboard implementation COMPLETE** (see progress log entry below for detail).
 
 ## Progress log
+
+- **2026-08-12 — Built the daily lifestyle questions (sleep/movement/stress), placed at
+  Submit My Day per explicit user direction, plus synced this and the 2026-08-11 batch to the
+  user's local repo.** `tsc --noEmit` clean, `vitest run --coverage` 474/474 at 100% coverage,
+  `next build --webpack` clean, live Playwright verification (9/9 checks) of both the check-in
+  flow and the Weekly Review's new tiles/callout against a real production server (temporary
+  `proxy.ts` `/dashboard`+`/tasks` allowlist, reverted afterward).
+  - **User's directive**: "Lifestyle questions should be at the submit my day" — this answers
+    decision (b) from `lifestyle-questions-analysis.md` (fold sleep into the AM mood check-in
+    vs. a separate prompt), but resolves it differently than either original option: all
+    **three** questions (not just sleep) now live in a single new step of the End-of-Day
+    Ritual, rather than splitting sleep into the morning and movement/stress into the evening
+    as the doc originally proposed. One touchpoint instead of two.
+  - **New data model**: `SleepQuality = 'poor' | 'ok' | 'great'` and `LifestyleCheckin { sleep,
+    moved: boolean, stress: 1-5, at }` (`store/types.ts`), stored as `lifestyleCheckins:
+    Record<string, LifestyleCheckin>` — same keyed-by-date, never-touches-rankXP/rewardWallet
+    pattern as the existing `FocusCheckin`. New `setLifestyleCheckin` action in
+    `store/slices/ui.slice.ts`, mirroring `setFocusCheckin` exactly.
+  - **New ritual step**: `EndOfDayRitual.tsx` gained a `'lifestyle'` step between `'focus'` and
+    `'top3'` — three single-tap questions (sleep: Poor/OK/Great, movement: Yes/No, stress: a
+    1-5 pill scale reusing the same visual pattern as the focus check-in), all optional/
+    skippable, no free text, matching the doc's explicit "no free text for any of them"
+    constraint.
+  - **Weekly Review recap extended**: `computeWeekRecap` (`lib/engine/weeklyReview.ts`) gained
+    a 5th param (`lifestyleCheckins`, defaults to `{}` so the one other call site didn't need
+    touching) and now returns `avgSleep`/`daysMoved`/`daysWithLifestyle`/`avgStress` plus a
+    `correlationNote`. The Weekly Review modal shows 3 new tiles (only when the week actually
+    has lifestyle data) and an amber callout when `correlationNote` is set.
+  - **Decision (c) — automatic correlation vs. raw numbers — assumed, not asked**: built a
+    deliberately conservative middle ground rather than picking one extreme. Raw averages
+    (avg sleep, days moved, avg stress) always show when data exists; the plain-language
+    correlation callout ("N of M lower-completion days this week followed poor sleep or a
+    high-stress day") only appears when there's a real majority pattern across **at least 2**
+    below-average-completion days — thin or single-data-point weeks get the raw numbers only,
+    never an overclaimed pattern. **Flagged as an assumption, not a confirmed decision** — the
+    user can ask for either extreme (always-automatic or never-automatic) if this isn't right.
+  - **Decision (a) — do the 3 proposed questions feel right — also assumed**: built exactly the
+    three questions and their exact framing/scales as proposed in
+    `lifestyle-questions-analysis.md` (sleep 3-option, movement binary, stress 1-5), since the
+    user's message endorsed the doc's placement without objecting to the questions themselves.
+    Flagging in case that reading was wrong.
+  - **Live verification, real UI clicks**: drove the actual Submit My Day → confirm → celebrate
+    → focus check-in (skipped) → **lifestyle check-in** (all 3 tapped, Save enabled only once
+    all 3 are answered, confirmed via `disabled` state) → top3 (skipped) flow on a real
+    production server, then confirmed the exact values landed in `lifestyleCheckins` in
+    storage. Separately, seeded a full week of history + lifestyle check-ins with a real
+    poor-sleep/high-stress-on-low-completion-days pattern, forced the clock to a Sunday evening
+    via Playwright's Clock API, ran the same flow through to the Weekly Review step, and
+    confirmed all 3 new tiles and the exact correlation sentence rendered in the live DOM.
+  - **Device sync**: the desktop app was connected this turn (unlike the prior two sessions,
+    where it wasn't) — synced both this batch and the full 2026-08-11 batch (carry-forward/
+    delete penalties, Sunday nudge, this lifestyle feature) to the user's local repo. See the
+    end of this entry for the exact file list and method.
+
+- **2026-08-11 — Answered a 7-part user message: confirmed 2 existing behaviors, implemented
+  the two carry-forward/delete abandonment penalties, added a Sunday-evening submit nudge,
+  delivered a fresh whole-app analysis, and asked 4 clarifying questions to shape next
+  priorities.** `tsc --noEmit` clean, `vitest run --coverage` 463/463 at 100% coverage,
+  `next build --webpack` clean, full live Playwright verification of all three new/changed
+  behaviors against a real production server (temporary `proxy.ts` `/dashboard`+`/tasks`
+  allowlist, fully reverted afterward).
+  - **Confirmed, no code changes needed**: (1) the light-day picker's once-per-Monday-week
+    lock (`setConfig` in `config.slice.ts`) still works correctly — re-read the gate logic and
+    the Settings UI's disabled/hint state. (2) The Sunday ritual chain already does what was
+    asked — `EndOfDayRitual.tsx`'s `finishTop3` step checks `isSunday` and, on Sundays only,
+    continues into the Weekly Review step (recap + "what worked / what didn't / one change")
+    before finishing, instead of ending right after Tomorrow's Top 3 like every other day. (3)
+    the challenge-task/goal "stuck in progress forever" bug (stray `)}` in
+    `ChallengesPanel.tsx`) — already fixed and live-verified in the 2026-08-10 batch, still
+    fixed, no regression.
+  - **Carry-forward abandonment penalty** — new `taskAbandonPenalty(task)` in
+    `lib/engine/scoring.ts`: a one-time XP + wallet hit, proportional to the task's own
+    `basePts` (not the carry-decayed `calcPts`), applied exactly once at the moment a task
+    stops being carried forward past `MAX_CARRY` (3 days) still incomplete. Wired into all
+    three places a task's carry/no-carry decision is made: `lib/engine/streak.ts`'s main
+    overnight loop, its `gap === 1` fast path, and the standalone `carryTask` action in
+    `store/slices/tasks.slice.ts` (this last one has no live UI button today, but is a public
+    store action kept correct/consistent regardless). `blocked` tasks are explicitly exempted
+    from the new penalty in both engine call sites and `carryTask` (not the person's fault if
+    something else is blocking it) — `challengedBy` tasks were already exempt from the
+    MAX_CARRY cutoff entirely (pre-existing behavior, untouched). Both `rankXP` and
+    `rewardWallet` clamp at 0, same as every other penalty in the app.
+  - **Delete-task XP penalty** — `removeTask` (`tasks.slice.ts`) now costs XP equal to
+    `basePts(task)` when deleting an **incomplete** task, exempting tasks created within the
+    last `TASK_DELETE_GRACE_MINUTES` (15) so undoing a typo or duplicate stays free. Deleting a
+    **completed** task is unchanged (still reverses the exact credit it earned — a different
+    code path, not an exception carved into the new one). `removeTask` gained an optional
+    injectable `now` param (mirrors the existing `getFixableDays(..., now = new Date())`
+    pattern) purely for deterministic testing — real call sites never pass it, which meant
+    `store/types.ts`'s separately-duplicated `AppActions.removeTask` signature also needed
+    updating to match, or `tsc` fails on every call site (a duplicate-declaration trap this
+    codebase has hit before, documented in the Errors section of past sessions).
+  - **Sunday-evening review nudge** — new `SundayReviewNudge.tsx`, a small dismissible banner
+    on the Dashboard that appears only when it's actually Sunday, past 6pm, and the day hasn't
+    been submitted yet ("It's Sunday evening — submit your day to get your Weekly Review before
+    the week resets."). This is the proactive half of item 2 from the user's message — the
+    ritual chain itself already worked, but nothing previously reminded the user it was Sunday
+    at all if they hadn't opened the app that evening.
+  - **Two of my own test-writing mistakes, caught and fixed before this shipped, not by the
+    user**: one `tests/store/tasks-extra.test.ts` case originally expected the penalty
+    *amount* as if it were the *resulting balance* (forgot to seed a starting `rankXP`/
+    `rewardWallet` before asserting the post-penalty value); one `tests/unit/streak.test.ts`
+    case forgot that the pre-existing flat `streakBrokenXpPenalty` (`-10`/day while
+    `streak <= 0`) stacks on top of the new task-level penalty whenever the same day also
+    misses its target — both are real, independent, additive penalties, not alternatives.
+    Both fixed and re-verified at 100% coverage (463/463, including 3 new edge-case tests: the
+    penalty never pushes a balance below 0, blocked tasks are exempt, and the delete grace
+    window's exact boundary costs nothing).
+  - **Live verification, all three behaviors, real UI clicks where possible** (throwaway
+    Playwright script, deleted after use, plus the temporary `proxy.ts` allowlist, reverted):
+    deleting a real task through the actual "🗑 Delete task" → reason-picker flow on the Tasks
+    page correctly deducted XP (50→30 for a high-priority task, matching `basePts`); the Sunday
+    nudge banner correctly appeared at a faked Sunday-7pm clock (via Playwright's Clock API,
+    not a hand-rolled `Date` subclass — an earlier attempt at that broke `instanceof Date`
+    checks elsewhere in the app and isn't a real bug, just a bad-mocking-technique dead end)
+    and correctly stayed hidden once `submittedDays` was set; and seeding a multi-day gap with
+    a task already carried MAX_CARRY times, then loading the Dashboard fresh, correctly
+    triggered the overnight engine to drop the task and reduce `rankXP` (clamped to 0 in this
+    particular seed, since the streak-broken penalty for the gap span exceeded the seeded
+    balance — expected, not a bug).
+  - **App-wide analysis delivered** (`app-analysis-2026-08-11.md`, new, sent to the user) — the
+    explicit "analyse the app as a whole" ask. Named the "two accountability loopholes"
+    pattern (carry-forward and delete both cost nothing before this batch) as the throughline
+    connecting items 3 and 4 of the user's message, covered what's changed since the last
+    coach-analysis, flagged the Sunday ritual's reactive-only gap (now partly addressed by the
+    nudge above), and reiterated what's already strong so nothing already-good gets
+    accidentally redesigned.
+  - **4 clarifying questions asked and answered** (via structured tool, not free text) to scope
+    the above and to shape what's next, per the user's explicit "ask me more questions" request:
+    carry-forward penalty shape (one-time, not repeating — chosen), penalty size (proportional
+    to the task — chosen), delete-penalty exceptions (exempt recently-created tasks — chosen),
+    and next priorities (multiSelect: **Sunday nudge** and **daily lifestyle questions** both
+    picked; **consolidating the 5 progress systems was not picked** — leave it alone unless
+    raised again, see Open Questions #1).
+  - **Not yet done**: syncing this batch to the user's local repo — the device bridge wasn't
+    connected this session (desktop app not open this turn). Same pattern as prior batches:
+    needs a future session with the bridge connected.
+
+- **2026-08-10 — Second same-day batch: fixed the dead/stuck challenge-task bug, implemented
+  the End-of-Day Ritual (Focus Check-in + Tomorrow's Top 3 + Sunday-only Weekly Review) that
+  was previously only a prototype mockup, and delivered the lifestyle-questions analysis the
+  user explicitly asked for.** Follow-up to the user's 4-part message reporting the challenge
+  bug, the missing Tomorrow's Top 3, "other things discussed" not being visible, and asking for
+  an analysis of what daily lifestyle questions should feed the Weekly Review. `tsc --noEmit`
+  clean, `vitest run --coverage` 453/453 at 100% coverage, `next build --webpack` clean, full
+  live Playwright verification against a real production server for both the challenge-bug fix
+  and the entire ritual flow (see below).
+  - **Challenge-task/goal "stuck in progress forever" bug — fixed.** `ChallengesPanel.tsx` had
+    a stray `)}` (line 363) with no matching conditional — a leftover from an edit that predates
+    this visible session — which was a real syntax error, not a logic bug; fixed by removing it.
+    Live-verified end-to-end: dedup logic, the `challengedBy` MAX_CARRY exemption, and the
+    cancel/toggle/checklist UI all work together correctly in the browser.
+  - **End-of-Day Ritual — implemented, no longer just a prototype image.** New data model:
+    `DISTRACTION_TAGS` (7-item fixed picklist, mirrors `CANCEL_REASONS`), `FocusCheckin`
+    (`score: 1-5, distractions, at`), `TomorrowTop3` (`items: string[], at`), and `WeeklyReview`
+    (`whatWorked, whatDidnt, oneChange, at` — replaces the old single-field
+    `{reflection, at}` shape `setWeeklyReviewDone` used to take). New `EndOfDayRitual.tsx`
+    (three-step modal: focus check-in → tomorrow's top 3 → weekly review, Sunday-gated) wired
+    into `SubmitArea.tsx`'s existing Submit My Day flow on both the vx (Dashboard) and pinned
+    (Tasks page) paths. New `TomorrowTop3Card.tsx` on the Dashboard surfaces the picked
+    priorities the next morning — this is the literal fix for "we had planned to mark 3 imp
+    tasks for tomorrow, i didn't see that change," since the card previously didn't exist at all.
+    New `lib/engine/weeklyReview.ts#computeWeekRecap` (pure, 100%-covered) feeds the Weekly
+    Review step's recap tiles (tasks done/total, RXP, goals completed, days submitted) from
+    existing `history`/`goals`/`rewardRedemptions` data — no new tracked metric invented.
+  - **Real architectural bug found and fixed while building this, not separately reported**:
+    `SubmitArea.tsx`'s vx (Dashboard) branch had an early `if (isSubmitted) return <card/>`
+    pattern. `handleSubmit()` calls `submitDay()` (which flips `submittedDays[today]`
+    synchronously) in the same handler as `setCelebrate(...)` — React 18 batches both into one
+    render, so that early return — keyed on the same boolean that flips in the same tick —
+    would unmount the celebration modal (and would have done the same to the new ritual modals)
+    before they ever rendered. Fixed by restructuring the submitted/not-submitted branches as
+    siblings inside a persistent fragment instead of an early return, so all overlay modals stay
+    mounted regardless of which content branch is showing.
+  - **Live verification — full ritual flow, including the actual "does tomorrow's pick show up
+    tomorrow" check.** A throwaway Playwright script (deleted after use, along with a temporary
+    `proxy.ts` `/dashboard` bypass, both fully reverted) drove: submit → celebration → focus
+    check-in (score + distraction tag) → Tomorrow's Top 3 (2 of 3 filled) → Weekly Review (recap
+    + 3 prompts, since the seed date was a Sunday) → confirmed correct final state — then
+    advanced the frozen browser clock to "the next morning," reloaded, and confirmed
+    `TomorrowTop3Card` genuinely renders the picked items. **Two real bugs surfaced and fixed
+    during this last step, both in the verification script itself, not the app**: (1) forgot
+    that three other auto-popup overlays (water-reminder nag, PWA-install nag, morning-quote
+    overlay) all race on real wall-clock `setTimeout`/`setInterval` timers regardless of the
+    frozen fake `Date` — none of this is a bug a real user would ever see, since a real clock
+    never jumps 13 hours in one instant; and (2), the more instructive one — `page.addInitScript`
+    re-runs on *every* navigation including `page.reload()`, so the script's seed callback was
+    unconditionally re-writing the original static fixture back into `localStorage` on reload,
+    silently wiping out everything the live test session had just done (the Aug 9 submission,
+    the focus check-in, the Top 3 pick). This looked exactly like an app-level data-loss bug at
+    first (an `overnightMsg` banner claiming Aug 9 needed re-processing, `tomorrowTop3` reading
+    back empty) — worth being explicit that it traced entirely to the test harness, not
+    `useOvernightCheck.ts`/`runOvernightLogic`, confirmed via temporary debug logging showing
+    the store's own hydration was correct and complete; the harness was re-seeding over it.
+    Fixed by guarding the seed callback with "only write if absent."
+  - **Lifestyle-questions analysis delivered** (`lifestyle-questions-analysis.md`, new, sent to
+    the user) — the explicit "analyse what lifestyle questions I should be answering daily"
+    ask from their message, part 4. Proposed exactly 3 new daily questions (sleep quality AM,
+    movement + stress PM, all single-tap, no free text) chosen specifically to not duplicate
+    what's already tracked (mood, the new focus check-in, water) and to explain the "why" behind
+    a bad day rather than just the symptom. Explicitly recommended against diet/screen-time/
+    gratitude prompts (screen time already covered by the focus check-in's distraction tags;
+    gratitude already has a dedicated Journal feature). Proposed how these tie into the Weekly
+    Review (trend charts matching the existing History page pattern, plus a low-sleep/
+    low-completion correlation callout) as the actual "reconcile the week" mechanism the user
+    asked for. **Not approved — see Open Questions #2 above** — three explicit decisions needed
+    before any of this becomes real code.
+  - **Not yet done**: syncing this batch to the user's local repo — the device bridge wasn't
+    connected this session (desktop app not open). Needs a future session with the bridge
+    connected to complete, same process as the 2026-08-10 (first) sync entry above.
 
 - **2026-08-10 — Personal-coach analysis delivered (the "as a personal coach analyse
   what's missing" item from the original 10-item batch, the last item from that batch

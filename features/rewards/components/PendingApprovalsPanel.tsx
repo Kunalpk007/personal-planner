@@ -52,8 +52,7 @@ export function PendingApprovalsPanel() {
             <select
               defaultValue=""
               onChange={e => { if (e.target.value) handleReassign(a.id, e.target.value) }}
-              className="vx-field text-[11px] px-1.5 py-1"
-              style={{ width: 'auto' }}
+              className="vx-field text-[11px] px-1.5 py-1 w-auto"
             >
               <option value="">Reassign to…</option>
               {notaries.filter(f => f.uid !== a.notaryUid).map(f => <option key={f.uid} value={f.uid}>{f.displayName}</option>)}

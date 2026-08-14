@@ -254,18 +254,59 @@ describe('carryTask', () => {
     expect(carried.done).toBe(false)
   })
 
-  it('does not carry a task that has already been carried 3 times (MAX_CARRY)', () => {
-    usePlannerStore.getState().addTask(taskInput({ date: '2024-01-08', carriedDays: 3 }))
+  it('does not carry a task that has already been carried 3 times (MAX_CARRY), and applies the one-time abandonment penalty', () => {
+    usePlannerStore.setState({ rankXP: 100, rewardWallet: 50 })
+    usePlannerStore.getState().addTask(taskInput({ date: '2024-01-08', carriedDays: 3, priority: 'high' }))
     const id = usePlannerStore.getState().tasks[0].id
 
     usePlannerStore.getState().carryTask(id, '2024-01-09')
 
     expect(usePlannerStore.getState().tasks).toHaveLength(1) // no carry created
+    // basePts('high') = 20 XP, floor(20/2) = 10 wallet.
+    expect(usePlannerStore.getState().rankXP).toBe(80)
+    expect(usePlannerStore.getState().rewardWallet).toBe(40)
+  })
+
+  it('never lets the abandonment penalty push rankXP/rewardWallet below 0', () => {
+    usePlannerStore.setState({ rankXP: 5, rewardWallet: 2 })
+    usePlannerStore.getState().addTask(taskInput({ date: '2024-01-08', carriedDays: 3, priority: 'high' }))
+    const id = usePlannerStore.getState().tasks[0].id
+
+    usePlannerStore.getState().carryTask(id, '2024-01-09')
+
+    expect(usePlannerStore.getState().rankXP).toBe(0)
+    expect(usePlannerStore.getState().rewardWallet).toBe(0)
+  })
+
+  it('does not penalize a blocked task that stops carrying past MAX_CARRY — not the person\'s fault', () => {
+    usePlannerStore.getState().addTask(taskInput({ date: '2024-01-08', carriedDays: 3, priority: 'high', blocked: true }))
+    const id = usePlannerStore.getState().tasks[0].id
+    const xpBefore = usePlannerStore.getState().rankXP
+
+    usePlannerStore.getState().carryTask(id, '2024-01-09')
+
+    // blocked tasks aren't exempted from MAX_CARRY in carryTask (unlike
+    // streak.ts's automatic path — see the code comment), so no carry is
+    // created, but they must not be penalized either.
+    expect(usePlannerStore.getState().tasks.filter(t => t.date === '2024-01-09')).toHaveLength(0)
+    expect(usePlannerStore.getState().rankXP).toBe(xpBefore)
   })
 
   it('does nothing if task id does not exist', () => {
     usePlannerStore.getState().carryTask('ghost-id', '2024-01-09')
     expect(usePlannerStore.getState().tasks).toHaveLength(0)
+  })
+
+  it('keeps carrying a challenged task past MAX_CARRY — a challenge is a commitment, not abandoned after a few days', () => {
+    usePlannerStore.getState().addTask(taskInput({ date: '2024-01-08', carriedDays: 3, challengedBy: 'friend-uid', challengeId: 'ch1' }))
+    const id = usePlannerStore.getState().tasks[0].id
+
+    usePlannerStore.getState().carryTask(id, '2024-01-09')
+
+    const carried = usePlannerStore.getState().tasks.find(t => t.date === '2024-01-09')
+    expect(carried).toBeDefined()
+    expect(carried?.carriedDays).toBe(4)
+    expect(carried?.challengedBy).toBe('friend-uid')
   })
 })
 
@@ -280,6 +321,14 @@ describe('processExpiredCarries', () => {
     const remaining = usePlannerStore.getState().tasks
     expect(remaining).toHaveLength(2) // only carriedDays=3 and unset remain
     expect(remaining.every(t => !t.carriedDays || t.carriedDays <= 3)).toBe(true)
+  })
+
+  it('keeps an expired-carry challenged task instead of removing it', () => {
+    usePlannerStore.getState().addTask(taskInput({ date: '2024-01-05', carriedDays: 5, challengedBy: 'friend-uid', challengeId: 'ch1' }))
+
+    usePlannerStore.getState().processExpiredCarries()
+
+    expect(usePlannerStore.getState().tasks).toHaveLength(1)
   })
 })
 
