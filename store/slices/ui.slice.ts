@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand'
-import type { AppState, FocusCheckin, DistractionTag, LifestyleCheckin, SleepQuality } from '../types'
+import type { AppState, FocusCheckin, DistractionTag, LifestyleCheckin, SleepQuality, TomorrowTop3Item } from '../types'
 
 const MAX_CHANGE_LOG = 500
 
@@ -10,7 +10,7 @@ export interface UISlice {
   setWeeklyReviewDone:      (weekStart: string, review: { whatWorked: string; whatDidnt: string; oneChange: string }) => void
   setFocusCheckin:          (date: string, score: FocusCheckin['score'], distractions: DistractionTag[]) => void
   setLifestyleCheckin:      (date: string, sleep: SleepQuality, moved: boolean, stress: LifestyleCheckin['stress']) => void
-  setTomorrowTop3:          (date: string, items: string[]) => void
+  setTomorrowTop3:          (date: string, items: TomorrowTop3Item[]) => void
   markEngagementDay:        (date: string) => void
   setAppFirstUsed:          (date: string) => void
   applyOvernightPatch:      (patch: Partial<AppState>) => void
@@ -61,7 +61,7 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
     set(s => ({
       tomorrowTop3: {
         ...s.tomorrowTop3,
-        [date]: { items: items.filter(Boolean).slice(0, 3), at: new Date().toISOString() },
+        [date]: { items: items.slice(0, 3), at: new Date().toISOString() },
       },
     }))
   },

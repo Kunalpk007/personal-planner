@@ -1,5 +1,6 @@
-import type { HistoryEntry, Goal, LifestyleCheckin } from '@/store/types'
+import type { HistoryEntry, Goal, LifestyleCheckin, Zone } from '@/store/types'
 import { getWeekDates } from './cutoff'
+import { computeLifeScore } from './goals'
 
 export interface WeekRecap {
   weekMonday:      string
@@ -28,6 +29,10 @@ export interface WeekRecap {
    *  pattern from thin data (see lifestyle-questions-analysis.md's third
    *  open question — this is the built default until told otherwise). */
   correlationNote:   string | null
+  /** Lowest-scoring engaged zone over the last 7 days (Life Score, same
+   *  formula as the Dashboard card), only set when it's genuinely dragging
+   *  (score < 50) — the Weekly Review's neglected-zone callout. */
+  worstZone:         { name: string; score: number } | null
 }
 
 const SLEEP_SCORE: Record<LifestyleCheckin['sleep'], number> = { poor: 1, ok: 2, great: 3 }
@@ -42,6 +47,7 @@ export function computeWeekRecap(
   goals: Goal[],
   rewardRedemptions: Array<{ date: string }>,
   lifestyleCheckins: Record<string, LifestyleCheckin> = {},
+  zones: Zone[] = [],
 ): WeekRecap {
   const dates = new Set(getWeekDates(weekMonday))
   const weekHistory = history.filter(h => dates.has(h.date))
@@ -65,6 +71,18 @@ export function computeWeekRecap(
 
   const correlationNote = computeCorrelationNote(weekHistory, lifestyleCheckins)
 
+  let worstZone: { name: string; score: number } | null = null
+  if (zones.length > 0) {
+    const { byZone } = computeLifeScore(zones, history, 7)
+    const engaged = zones.filter(z => history.some(h => h.tasks.some(t => t.done && t.zone === z.id)))
+    const pool = engaged.length ? engaged : zones
+    // byZone always has an entry for every zone in `pool` (pool ⊆ zones, and
+    // computeLifeScore populates byZone for every zone passed in) — no
+    // fallback needed.
+    const worst = [...pool].map(z => ({ name: z.name, score: byZone[z.id] })).sort((a, b) => a.score - b.score)[0]
+    if (worst && worst.score < 50) worstZone = worst
+  }
+
   return {
     weekMonday,
     daysSubmitted: weekHistory.length,
@@ -78,6 +96,7 @@ export function computeWeekRecap(
     daysWithLifestyle,
     avgStress,
     correlationNote,
+    worstZone,
   }
 }
 

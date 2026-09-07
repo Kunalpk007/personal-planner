@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { computeWeekRecap } from '@/lib/engine/weeklyReview'
-import type { Goal, HistoryEntry, LifestyleCheckin } from '@/store/types'
+import type { Goal, HistoryEntry, LifestyleCheckin, Zone } from '@/store/types'
+
+function makeZone(id: string, name: string): Zone {
+  return { id, name, color: '#000' }
+}
 
 function makeCheckin(overrides: Partial<LifestyleCheckin> = {}): LifestyleCheckin {
   return { sleep: 'ok', moved: false, stress: 3, at: '2024-01-08T22:00:00.000Z', ...overrides }
@@ -69,12 +73,47 @@ describe('computeWeekRecap', () => {
       weekMonday: MONDAY, daysSubmitted: 0, tasksDone: 0, tasksTotal: 0,
       goalsCompleted: 0, rewardsRedeemed: 0, totalRxp: 0,
       avgSleep: null, daysMoved: 0, daysWithLifestyle: 0, avgStress: null, correlationNote: null,
+      worstZone: null,
     })
   })
 
   it('defaults lifestyleCheckins to {} when the 5th param is omitted', () => {
     const recap = computeWeekRecap(MONDAY, [], [], [])
     expect(recap.daysWithLifestyle).toBe(0)
+  })
+
+  it('flags a neglected-but-previously-engaged zone as worstZone', () => {
+    const zones = [makeZone('z1', 'Career'), makeZone('z2', 'Fitness')]
+    const oldEntry = makeEntry('2024-01-01', {
+      tasks: [{ title: 't', priority: 'high', done: true, zone: 'z2', completedAt: '2024-01-01T10:00:00.000Z', level: '' }],
+    })
+    const weekDates = ['2024-01-08', '2024-01-09', '2024-01-10', '2024-01-11', '2024-01-12', '2024-01-13', '2024-01-14']
+    const weekEntries = weekDates.map(d => makeEntry(d, {
+      tasks: [{ title: 't', priority: 'high', done: true, zone: 'z1', completedAt: `${d}T10:00:00.000Z`, level: '' }],
+    }))
+    const recap = computeWeekRecap(MONDAY, [oldEntry, ...weekEntries], [], [], {}, zones)
+    expect(recap.worstZone).toEqual({ name: 'Fitness', score: 0 })
+  })
+
+  it('leaves worstZone null when no engaged zone is dragging the score down', () => {
+    const zones = [makeZone('z1', 'Career')]
+    const weekDates = ['2024-01-08', '2024-01-09', '2024-01-10']
+    const weekEntries = weekDates.map(d => makeEntry(d, {
+      tasks: [{ title: 't', priority: 'high', done: true, zone: 'z1', completedAt: `${d}T10:00:00.000Z`, level: '' }],
+    }))
+    const recap = computeWeekRecap(MONDAY, weekEntries, [], [], {}, zones)
+    expect(recap.worstZone).toBeNull()
+  })
+
+  it('leaves worstZone null when no zones are passed (defaults to [])', () => {
+    const recap = computeWeekRecap(MONDAY, [makeEntry('2024-01-08')], [], [])
+    expect(recap.worstZone).toBeNull()
+  })
+
+  it('falls back to the full zone list when no zone has ever been engaged', () => {
+    const zones = [makeZone('z1', 'Career')]
+    const recap = computeWeekRecap(MONDAY, [makeEntry('2024-01-08', { tasks: [] })], [], [], {}, zones)
+    expect(recap.worstZone).toEqual({ name: 'Career', score: 0 })
   })
 })
 

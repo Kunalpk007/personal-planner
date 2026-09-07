@@ -16,12 +16,17 @@ const EOD_LABELS: Record<string, string> = {
   motivated: '⚡ Motivated', proud: '💪 Proud', content: '😌 Content', neutral: '😐 Neutral',
   tired: '😴 Tired', frustrated: '😤 Frustrated', anxious: '😰 Anxious', sad: '😢 Sad',
 }
+const AM_MOOD_LABELS: Record<string, string> = { motivated: '⚡ Motivated', neutral: '😐 Neutral', sick: '🤒 Sick' }
+const SLEEP_LABELS: Record<string, string> = { poor: '😩 Poor sleep', ok: '😐 OK sleep', great: '😴 Great sleep' }
 
 const PAGE_SIZE = 6
 
 export default function HistoryPage() {
   const history     = usePlannerStore(s => s.history)
   const redemptions = usePlannerStore(s => s.rewardRedemptions)
+  const amMood       = usePlannerStore(s => s.mood)
+  const focusCheckins = usePlannerStore(s => s.focusCheckins)
+  const lifestyleCheckins = usePlannerStore(s => s.lifestyleCheckins)
   const sorted  = [...history].reverse()
   const { page, totalPages, pageItems, hasPrev, hasNext, prevPage, nextPage } = usePagination(sorted, PAGE_SIZE)
 
@@ -65,6 +70,27 @@ export default function HistoryPage() {
               </div>
             </Accordion>
           )}
+          {(() => {
+            const focus = focusCheckins[e.date]
+            const life  = lifestyleCheckins[e.date]
+            const am    = amMood[e.date]
+            const chips: string[] = []
+            if (am) chips.push(AM_MOOD_LABELS[am] ?? am)
+            if (life?.sleep) chips.push(SLEEP_LABELS[life.sleep])
+            if (life?.moved !== undefined) chips.push(life.moved ? '🏃 Moved' : '🛋️ No movement')
+            if (life?.stress) chips.push(`😖 Stress ${life.stress}/5`)
+            if (focus?.score) chips.push(`🧠 Focus ${focus.score}/5`)
+            if (chips.length === 0) return null
+            return (
+              <Accordion variant="vx" title="🧭 Check-in">
+                <div className="flex flex-wrap gap-1.5 py-1">
+                  {chips.map((c, i) => (
+                    <span key={i} className="vx-chip text-[11px]">{c}</span>
+                  ))}
+                </div>
+              </Accordion>
+            )
+          })()}
           <Accordion variant="vx" title={`🎁 Rewards redeemed (${dayRewards.length})`}>
             {dayRewards.length === 0 ? (
               <p className="text-xs py-1" style={{ color: 'var(--vx-fg-4)' }}>None redeemed this day.</p>

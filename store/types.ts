@@ -106,11 +106,11 @@ export type RewardApprovalGate  = 'cost' | 'habit'
 export type PendingApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
 
 /** A completed Dashboard Focus Time session (see constants/points.ts's
- *  FOCUS_REWARDS) — logged so today's total focus time/reward can be shown
+ *  focusReward) — logged so today's total focus time/reward can be shown
  *  and so a session can never be double-counted (see completeFocusSession). */
 export interface FocusSessionLog {
   date:    string        // day-key the session was completed on
-  minutes: 25 | 45 | 60
+  minutes: number
   pts:     number
   xp:      number
   at:      string        // ISO completion timestamp
@@ -302,9 +302,15 @@ export interface LifestyleCheckin {
   at:     string
 }
 
-/** Up to 3 free-text priorities picked the night before for the next day. */
+/** Up to 3 priorities picked the night before for the next day. Each item
+ *  links back to the real Task row it created, so the Dashboard card can
+ *  cancel/delete it directly rather than being a disconnected text mirror. */
+export interface TomorrowTop3Item {
+  title:  string
+  taskId: string
+}
 export interface TomorrowTop3 {
-  items: string[]
+  items: TomorrowTop3Item[]
   at:    string
 }
 
@@ -530,7 +536,7 @@ export interface AppActions {
 
   // Focus Time (Dashboard) — completing a full, uninterrupted session credits
   // both the reward wallet and rank XP (see constants/points.ts FOCUS_REWARDS).
-  completeFocusSession: (today: string, minutes: 25 | 45 | 60) => { pts: number; xp: number }
+  completeFocusSession: (today: string, minutes: number) => { pts: number; xp: number }
 
   // Goals (Section 3 of docs/PHASE2_SOCIAL_LIFE_OS.md) — definitions only;
   // progress is always derived, never stored (see lib/engine/goals.ts).
@@ -598,7 +604,7 @@ export interface AppActions {
   setWeeklyReviewDone:   (weekStart: string, review: Omit<WeeklyReview, 'at'>) => void
   setFocusCheckin:       (date: string, score: FocusCheckin['score'], distractions: DistractionTag[]) => void
   setLifestyleCheckin:   (date: string, sleep: SleepQuality, moved: boolean, stress: LifestyleCheckin['stress']) => void
-  setTomorrowTop3:       (date: string, items: string[]) => void
+  setTomorrowTop3:       (date: string, items: TomorrowTop3Item[]) => void
   markEngagementDay:     (date: string) => void
   setAppFirstUsed:       (date: string) => void
   applyOvernightPatch:   (patch: Partial<AppStateData>) => void

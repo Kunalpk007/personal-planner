@@ -74,18 +74,27 @@ describe('setLifestyleCheckin', () => {
 })
 
 describe('setTomorrowTop3', () => {
-  it('stores up to 3 non-empty items and a timestamp', () => {
-    usePlannerStore.getState().setTomorrowTop3('2024-01-09', ['Ship the fix', '', 'Read', 'Gym', 'Extra'])
+  it('stores up to 3 items (each linked to its task id) and a timestamp', () => {
+    usePlannerStore.getState().setTomorrowTop3('2024-01-09', [
+      { title: 'Ship the fix', taskId: 't1' },
+      { title: 'Read', taskId: 't2' },
+      { title: 'Gym', taskId: 't3' },
+      { title: 'Extra', taskId: 't4' },
+    ])
     const entry = usePlannerStore.getState().tomorrowTop3['2024-01-09']
     expect(entry).toBeDefined()
-    expect(entry.items).toEqual(['Ship the fix', 'Read', 'Gym'])
+    expect(entry.items).toEqual([
+      { title: 'Ship the fix', taskId: 't1' },
+      { title: 'Read', taskId: 't2' },
+      { title: 'Gym', taskId: 't3' },
+    ])
     expect(entry.at).toBeTruthy()
   })
 
   it('overwrites a previous pick for the same date', () => {
-    usePlannerStore.getState().setTomorrowTop3('2024-01-09', ['First'])
-    usePlannerStore.getState().setTomorrowTop3('2024-01-09', ['Second'])
-    expect(usePlannerStore.getState().tomorrowTop3['2024-01-09'].items).toEqual(['Second'])
+    usePlannerStore.getState().setTomorrowTop3('2024-01-09', [{ title: 'First', taskId: 't1' }])
+    usePlannerStore.getState().setTomorrowTop3('2024-01-09', [{ title: 'Second', taskId: 't2' }])
+    expect(usePlannerStore.getState().tomorrowTop3['2024-01-09'].items).toEqual([{ title: 'Second', taskId: 't2' }])
   })
 })
 

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePlannerStore } from '@/store'
 import { showToast } from '@/ui/Toast'
+import type { Priority } from '@/store/types'
 
 /** Morning fallback for EndOfDayRitual's "Tomorrow's Top 3" step — if a
  *  day's picks never got made the night before (skipped, or the day wasn't
@@ -23,6 +24,8 @@ export function MorningTop3Prompt({ today }: { today: string }) {
 
   const [visible, setVisible] = useState(false)
   const [items, setItems] = useState<[string, string, string]>(['', '', ''])
+  const [itemZone, setItemZone] = useState<[string, string, string]>(['', '', ''])
+  const [itemPriority, setItemPriority] = useState<[Priority, Priority, Priority]>(['med', 'med', 'med'])
 
   useEffect(() => {
     const hours = new Date().getHours()
@@ -36,13 +39,20 @@ export function MorningTop3Prompt({ today }: { today: string }) {
 
   function finish(skip: boolean) {
     if (!skip) {
-      const filled = items.map(x => x.trim()).filter(x => x.length > 0)
-      if (filled.length > 0) {
-        const zoneId = zones[0]?.id ?? ''
-        for (const title of filled) {
-          addTask({ title, note: '', zone: zoneId, priority: 'med', slot: '', deadline: null, date: today, level: '', isSpecial: false, specialPts: 0 })
-        }
-        setTomorrowTop3(today, filled)
+      const created: Array<{ title: string; taskId: string }> = []
+      items.forEach((raw, i) => {
+        const title = raw.trim()
+        if (!title) return
+        const priority = itemPriority[i]
+        const taskId = addTask({
+          title, note: '', zone: itemZone[i] || (zones[0]?.id ?? ''), priority,
+          slot: '', deadline: null, date: today, level: '',
+          isSpecial: priority === 'special', specialPts: priority === 'special' ? 30 : 0,
+        })
+        created.push({ title, taskId })
+      })
+      if (created.length > 0) {
+        setTomorrowTop3(today, created)
         showToast('Top 3 tasks added ✓')
       }
     }
@@ -62,14 +72,32 @@ export function MorningTop3Prompt({ today }: { today: string }) {
         </p>
         <div className="flex flex-col gap-2 mb-4">
           {[0, 1, 2].map(i => (
-            <input
-              key={i}
-              className="vx-field"
-              placeholder={`Priority ${i + 1}${i === 0 ? '' : ' (optional)'}`}
-              value={items[i]}
-              maxLength={80}
-              onChange={e => setItems(prev => { const next = [...prev] as [string, string, string]; next[i] = e.target.value; return next })}
-            />
+            <div key={i} className="flex flex-col gap-1">
+              <input
+                className="vx-field"
+                placeholder={`Priority ${i + 1}${i === 0 ? '' : ' (optional)'}`}
+                value={items[i]}
+                maxLength={80}
+                onChange={e => setItems(prev => { const next = [...prev] as [string, string, string]; next[i] = e.target.value; return next })}
+              />
+              {items[i].trim() && (
+                <div className="flex gap-1.5">
+                  <select className="vx-field text-[11.5px]" style={{ flex: 1, padding: '0.4rem' }}
+                    value={itemZone[i] || zones[0]?.id || ''}
+                    onChange={e => setItemZone(prev => { const next = [...prev] as [string, string, string]; next[i] = e.target.value; return next })}>
+                    {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+                  </select>
+                  <select className="vx-field text-[11.5px]" style={{ flex: 1, padding: '0.4rem' }}
+                    value={itemPriority[i]}
+                    onChange={e => setItemPriority(prev => { const next = [...prev] as [Priority, Priority, Priority]; next[i] = e.target.value as Priority; return next })}>
+                    <option value="high">High</option>
+                    <option value="med">Medium</option>
+                    <option value="low">Low</option>
+                    <option value="special">Special</option>
+                  </select>
+                </div>
+              )}
+            </div>
           ))}
         </div>
         <div className="flex gap-2.5">

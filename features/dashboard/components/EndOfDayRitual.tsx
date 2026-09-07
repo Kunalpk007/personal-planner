@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react'
 import { usePlannerStore } from '@/store'
 import { Modal } from '@/ui/Modal'
 import { showToast } from '@/ui/Toast'
-import { DISTRACTION_TAGS, type DistractionTag, type FocusCheckin, type SleepQuality, type LifestyleCheckin } from '@/store/types'
+import { DISTRACTION_TAGS, type DistractionTag, type FocusCheckin, type SleepQuality, type LifestyleCheckin, type Priority } from '@/store/types'
 import { getNextDayKey, getWeekMonday, formatDateShort } from '@/lib/engine/cutoff'
 import { computeWeekRecap } from '@/lib/engine/weeklyReview'
+import { getZoneNeglectMessage } from '@/lib/engine/manager'
 
 const FOCUS_SCALE: Array<{ score: FocusCheckin['score']; emoji: string; label: string }> = [
   { score: 1, emoji: '😵‍💫', label: 'Scattered' },
@@ -59,6 +60,7 @@ export function EndOfDayRitual({ today, active, onDone }: { today: string; activ
   const goals               = usePlannerStore(s => s.goals)
   const rewardRedemptions   = usePlannerStore(s => s.rewardRedemptions)
   const lifestyleCheckins   = usePlannerStore(s => s.lifestyleCheckins)
+  const cfg                = usePlannerStore(s => s.cfg)
 
   const isSunday = new Date(`${today}T12:00:00`).getDay() === 0
   const weekMonday = getWeekMonday(today)
@@ -70,6 +72,8 @@ export function EndOfDayRitual({ today, active, onDone }: { today: string; activ
   const [moved, setMoved] = useState<boolean | null>(null)
   const [stress, setStress] = useState<LifestyleCheckin['stress'] | null>(null)
   const [top3, setTop3] = useState<[string, string, string]>(['', '', ''])
+  const [top3Zone, setTop3Zone] = useState<[string, string, string]>(['', '', ''])
+  const [top3Priority, setTop3Priority] = useState<[Priority, Priority, Priority]>(['med', 'med', 'med'])
   const [whatWorked, setWhatWorked] = useState('')
   const [whatDidnt, setWhatDidnt] = useState('')
   const [oneChange, setOneChange] = useState('')
@@ -84,6 +88,8 @@ export function EndOfDayRitual({ today, active, onDone }: { today: string; activ
       setMoved(null)
       setStress(null)
       setTop3(['', '', ''])
+      setTop3Zone(['', '', ''])
+      setTop3Priority(['med', 'med', 'med'])
       setWhatWorked('')
       setWhatDidnt('')
       setOneChange('')
@@ -107,14 +113,19 @@ export function EndOfDayRitual({ today, active, onDone }: { today: string; activ
   function finishTop3(skip: boolean) {
     if (!skip) {
       const tomorrow = getNextDayKey(today)
-      const filled = top3.map(x => x.trim()).filter(x => x.length > 0)
-      if (filled.length > 0) {
-        const zoneId = zones[0]?.id ?? ''
-        for (const title of filled) {
-          addTask({ title, note: '', zone: zoneId, priority: 'med', slot: '', deadline: null, date: tomorrow, level: '', isSpecial: false, specialPts: 0 })
-        }
-        setTomorrowTop3(tomorrow, filled)
-      }
+      const created: Array<{ title: string; taskId: string }> = []
+      top3.forEach((raw, i) => {
+        const title = raw.trim()
+        if (!title) return
+        const priority = top3Priority[i]
+        const taskId = addTask({
+          title, note: '', zone: top3Zone[i] || (zones[0]?.id ?? ''), priority,
+          slot: '', deadline: null, date: tomorrow, level: '',
+          isSpecial: priority === 'special', specialPts: priority === 'special' ? 30 : 0,
+        })
+        created.push({ title, taskId })
+      })
+      if (created.length > 0) setTomorrowTop3(tomorrow, created)
     }
     if (isSunday) {
       setStep('weekly')
@@ -133,7 +144,7 @@ export function EndOfDayRitual({ today, active, onDone }: { today: string; activ
     onDone()
   }
 
-  const recap = computeWeekRecap(weekMonday, history, goals, rewardRedemptions, lifestyleCheckins)
+  const recap = computeWeekRecap(weekMonday, history, goals, rewardRedemptions, lifestyleCheckins, zones)
 
   return (
     <>
@@ -255,14 +266,32 @@ export function EndOfDayRitual({ today, active, onDone }: { today: string; activ
         </p>
         <div className="flex flex-col gap-2 mb-4">
           {[0, 1, 2].map(i => (
-            <input
-              key={i}
-              className="vx-field"
-              placeholder={`Priority ${i + 1}${i === 0 ? '' : ' (optional)'}`}
-              value={top3[i]}
-              maxLength={80}
-              onChange={e => setTop3(prev => { const next = [...prev] as [string, string, string]; next[i] = e.target.value; return next })}
-            />
+            <div key={i} className="flex flex-col gap-1">
+              <input
+                className="vx-field"
+                placeholder={`Priority ${i + 1}${i === 0 ? '' : ' (optional)'}`}
+                value={top3[i]}
+                maxLength={80}
+                onChange={e => setTop3(prev => { const next = [...prev] as [string, string, string]; next[i] = e.target.value; return next })}
+              />
+              {top3[i].trim() && (
+                <div className="flex gap-1.5">
+                  <select className="vx-field text-[11.5px]" style={{ flex: 1, padding: '0.4rem' }}
+                    value={top3Zone[i] || zones[0]?.id || ''}
+                    onChange={e => setTop3Zone(prev => { const next = [...prev] as [string, string, string]; next[i] = e.target.value; return next })}>
+                    {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+                  </select>
+                  <select className="vx-field text-[11.5px]" style={{ flex: 1, padding: '0.4rem' }}
+                    value={top3Priority[i]}
+                    onChange={e => setTop3Priority(prev => { const next = [...prev] as [Priority, Priority, Priority]; next[i] = e.target.value as Priority; return next })}>
+                    <option value="high">High</option>
+                    <option value="med">Medium</option>
+                    <option value="low">Low</option>
+                    <option value="special">Special</option>
+                  </select>
+                </div>
+              )}
+            </div>
           ))}
         </div>
         <div className="flex gap-2.5">
@@ -310,6 +339,11 @@ export function EndOfDayRitual({ today, active, onDone }: { today: string; activ
         {recap.correlationNote && (
           <p className="text-[11.5px] mb-2 p-2 rounded-lg" style={{ background: 'var(--amber-bg)', color: 'var(--amber)' }}>
             💡 {recap.correlationNote}
+          </p>
+        )}
+        {recap.worstZone && (
+          <p className="text-[11.5px] mb-2 p-2 rounded-lg" style={{ background: 'var(--amber-bg)', color: 'var(--amber)' }}>
+            🧭 {getZoneNeglectMessage(recap.worstZone.name, cfg.tone)}
           </p>
         )}
         <p className="text-[11px] text-[var(--vx-fg-4)] mb-3">Week of {formatDateShort(weekMonday)} — optional, skip any time.</p>

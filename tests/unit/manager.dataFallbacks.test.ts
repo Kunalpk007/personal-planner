@@ -34,6 +34,9 @@ const {
   getTaskCompleteMessage,
   getConcernMessage,
   getMilestoneMessage,
+  getInactivityMessage,
+  getDayEndMessage,
+  getZoneNeglectMessage,
 } = await import('@/lib/engine/manager')
 
 function mockHour(h: number) {
@@ -73,5 +76,25 @@ describe('manager message data fallbacks (mocked incomplete data file)', () => {
   it('falls back to the hardcoded default milestone message when no streak_* keys exist', () => {
     const msg = getMilestoneMessage(7, 'no_streak' as any)
     expect(msg).toBe('Milestone reached!')
+  })
+
+  it('falls back to the hardcoded default inactivity message when no inactivity key exists', () => {
+    const msg = getInactivityMessage(5, 'no_complete' as any)
+    expect(msg).toBe("It's been 5 days. Time to get back to it.")
+  })
+
+  it('falls back to the hardcoded default eod_praise message when missing', () => {
+    const msg = getDayEndMessage(1, 1, 0, 'no_complete' as any)
+    expect(msg).toBe('Every high-priority task done today.')
+  })
+
+  it('falls back to the hardcoded default eod_scold message when missing', () => {
+    const msg = getDayEndMessage(0, 0, 0, 'no_complete' as any)
+    expect(msg).toBe('You just cleared the bar today.')
+  })
+
+  it('falls back to the hardcoded default zone_neglect message when missing', () => {
+    const msg = getZoneNeglectMessage('Fitness', 'no_complete' as any)
+    expect(msg).toBe('Fitness needs attention this week.')
   })
 })

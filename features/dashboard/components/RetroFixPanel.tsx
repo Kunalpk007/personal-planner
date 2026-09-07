@@ -94,7 +94,7 @@ export function RetroFixPanel({ today }: { today: string }) {
           <div>
             <h3 className="text-[16px] font-extrabold tracking-tight mb-0.5">Fix Yesterday&apos;s Tasks?</h3>
             <p className="text-[12px] text-[var(--vx-fg-3)]">
-              {formatDateShort(date)} got auto-marked as a {entry?.rest ? 'Rest Day' : 'missed day'}. Fixable until 12 PM today.
+              {formatDateShort(date)} got auto-marked as a {entry?.rest ? 'Rest Day' : entry?.frozen ? 'streak-freeze day' : 'missed day'}. Fixable until 12 PM today.
             </p>
           </div>
         </div>

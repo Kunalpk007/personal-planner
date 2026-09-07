@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { getManagerMessage, getTaskCompleteMessage, getConcernMessage, getMilestoneMessage } from '@/lib/engine/manager'
+import { getManagerMessage, getTaskCompleteMessage, getConcernMessage, getMilestoneMessage, getInactivityMessage, getDayEndMessage, getZoneNeglectMessage } from '@/lib/engine/manager'
 
 const CFG_TONE = 'balanced' as const
 
@@ -116,5 +116,48 @@ describe('getMilestoneMessage', () => {
 
   it('falls back to "balanced" when an unknown tone is provided', () => {
     expect(getMilestoneMessage(7, 'unknown' as any).length).toBeGreaterThan(0)
+  })
+})
+
+describe('getInactivityMessage', () => {
+  it('returns null when below the threshold', () => {
+    expect(getInactivityMessage(2, CFG_TONE)).toBeNull()
+  })
+
+  it('returns an escalating message with the day count once past the threshold', () => {
+    const msg = getInactivityMessage(10, CFG_TONE)
+    expect(msg).toContain('10')
+  })
+
+  it('falls back to "balanced" when an unknown tone is provided', () => {
+    expect(getInactivityMessage(5, 'unknown' as any)).toContain('5')
+  })
+})
+
+describe('getDayEndMessage', () => {
+  it('praises when every high-priority task is done', () => {
+    expect(getDayEndMessage(2, 2, 10, CFG_TONE)?.length).toBeGreaterThan(0)
+  })
+
+  it('scolds a bare-minimum day (no overflow, high tasks incomplete)', () => {
+    expect(getDayEndMessage(0, 2, 0, CFG_TONE)?.length).toBeGreaterThan(0)
+  })
+
+  it('returns null for a normal day (overflow, no high tasks to judge)', () => {
+    expect(getDayEndMessage(0, 0, 10, CFG_TONE)).toBeNull()
+  })
+
+  it('falls back to "balanced" when an unknown tone is provided', () => {
+    expect(getDayEndMessage(1, 1, 0, 'unknown' as any)?.length).toBeGreaterThan(0)
+  })
+})
+
+describe('getZoneNeglectMessage', () => {
+  it('names the zone in the message', () => {
+    expect(getZoneNeglectMessage('Fitness', CFG_TONE)).toContain('Fitness')
+  })
+
+  it('falls back to "balanced" when an unknown tone is provided', () => {
+    expect(getZoneNeglectMessage('Career', 'unknown' as any)).toContain('Career')
   })
 })

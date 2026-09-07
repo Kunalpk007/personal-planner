@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint:fix": "eslint --fix .",
-    "verify": "vitest run --coverage && next build --webpack"
+    "verify": "vitest run --coverage && next build --webpack && playwright test tests/e2e/verify-batch-fixes.spec.ts"
   },
   "dependencies": {
     "@dataconnect/admin-generated": "file:src/dataconnect-admin-generated",

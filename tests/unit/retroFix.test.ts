@@ -59,9 +59,17 @@ describe('getFixableDays', () => {
     expect(getFixableDays(state, '2024-01-10', new Date('2024-01-10T09:00:00'))).toEqual([])
   })
 
-  it('excludes a frozen day', () => {
+  it('includes an auto-consumed freeze day (an automatic verdict, same as rest/miss)', () => {
     const state = makeState({
       history: [makeHistoryEntry('2024-01-09', { rxp: 0, rest: false, frozen: true, auto: true })],
+      tasks: [makeTask({ date: '2024-01-09' })],
+    })
+    expect(getFixableDays(state, '2024-01-10', new Date('2024-01-10T09:00:00'))).toEqual(['2024-01-09'])
+  })
+
+  it('excludes a manually-frozen day (useFreeze stamps auto: false)', () => {
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-09', { rxp: 0, rest: false, frozen: true, auto: false })],
       tasks: [makeTask({ date: '2024-01-09' })],
     })
     expect(getFixableDays(state, '2024-01-10', new Date('2024-01-10T09:00:00'))).toEqual([])

@@ -6,7 +6,7 @@ import { goalPtsEarnedOn } from '@/lib/engine/goals'
 import { checkTaskMilestone } from '@/lib/engine/badges'
 import { checkStreakMilestone } from '@/lib/engine/streak'
 import { restOrLightXpPenalty, streakBrokenXpPenalty } from '@/lib/engine/xpPenalty'
-import { WALLET_RATIO, MAX_CARRY, TASK_DELETE_GRACE_MINUTES } from '@/constants/points'
+import { WALLET_RATIO, MAX_CARRY, TASK_DELETE_GRACE_MINUTES, FREEZE_USED_XP_PENALTY } from '@/constants/points'
 
 export interface TasksSlice {
   // Actions
@@ -222,17 +222,20 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
 
     const minPts       = getMinPts(dateKey, state.cfg)
     const wasAutoRest   = !!prevEntry?.auto && prevEntry.rest
+    const wasAutoFrozen = !!prevEntry?.auto && prevEntry.frozen
     const wasAutoMissed = !!prevEntry?.auto && !prevEntry.rest && !prevEntry.frozen
-    const eligibleUpgrade = (wasAutoRest || wasAutoMissed) && rxp >= minPts
+    const eligibleUpgrade = (wasAutoRest || wasAutoFrozen || wasAutoMissed) && rxp >= minPts
 
     let streak       = state.streak
     let bestStreak    = state.bestStreak
     let freezeTokens  = state.freezeTokens
+    let freezesUsed   = state.freezesUsed
     let badges        = state.badges
     let rankXP        = state.rankXP
     let daysActive    = state.daysActive
     let restDays      = state.restDays
     let weekRestUsed  = state.weekRestUsed
+    let frozenDays    = state.frozenDays
     let newStreak: number | undefined
 
     if (eligibleUpgrade) {
@@ -242,6 +245,8 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       // amount precisely).
       const penalty = wasAutoRest
         ? restOrLightXpPenalty(dateKey, state.cfg, state.mood)
+        : wasAutoFrozen
+        ? FREEZE_USED_XP_PENALTY
         : streakBrokenXpPenalty(dateKey, state.mood)
       rankXP += penalty
 
@@ -258,9 +263,10 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       }
       streak = newStreak
 
-      // The "missed, no streak to protect" branch never counted this day as
-      // active; the rest-day branch already did — don't double-count it.
-      if (wasAutoMissed) daysActive += 1
+      // The "missed, no streak to protect" and auto-frozen branches never
+      // counted this day as active; the rest-day branch already did — don't
+      // double-count it.
+      if (wasAutoMissed || wasAutoFrozen) daysActive += 1
 
       if (wasAutoRest) {
         const updatedRestDays = { ...restDays }
@@ -270,6 +276,16 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
         const stillUsedThisWeek = getWeekDates(mon).some(d => d !== dateKey && restDays[d])
         weekRestUsed = { ...weekRestUsed, [mon]: stillUsedThisWeek }
       }
+
+      // A freeze token (and the tally of freezes used) is refunded too —
+      // the day genuinely didn't need protecting after all.
+      if (wasAutoFrozen) {
+        freezeTokens += 1
+        freezesUsed   = Math.max(0, freezesUsed - 1)
+        const updatedFrozenDays = { ...frozenDays }
+        delete updatedFrozenDays[dateKey]
+        frozenDays = updatedFrozenDays
+      }
     }
 
     const newHistory = [...state.history]
@@ -277,7 +293,7 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       newHistory[histIdx] = {
         ...newHistory[histIdx],
         done: doneTasks.length, total: dayTasks.length, pct, rxp, tasks: taskSnap, rewards: rewardsList,
-        ...(eligibleUpgrade ? { rest: false, late: true } : {}),
+        ...(eligibleUpgrade ? { rest: false, frozen: false, late: true } : {}),
       }
     } else {
       // No prior history entry (new user or day not processed by overnight logic yet).
@@ -300,7 +316,7 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
       rewardRedemptions,
       retroFixedDays:  { ...state.retroFixedDays, [dateKey]: true },
       submittedDays:   updatedSubmittedDays,
-      ...(eligibleUpgrade ? { streak, bestStreak, freezeTokens, badges, rankXP, daysActive, restDays, weekRestUsed } : {}),
+      ...(eligibleUpgrade ? { streak, bestStreak, freezeTokens, freezesUsed, frozenDays, badges, rankXP, daysActive, restDays, weekRestUsed } : {}),
     })
 
     get().logChange(
@@ -393,7 +409,18 @@ export const createTasksSlice: StateCreator<AppState, [], [], TasksSlice> = (set
         isSpecial:   r.isSpecial,
         specialPts:  r.specialPts,
       }))
-    if (newTasks.length) set(s => ({ tasks: [...s.tasks, ...newTasks] }))
+    // A stale incomplete instance from a prior day is never carried forward
+    // (a fresh instance is created above instead), but nothing previously
+    // deleted it either — it just sat inert forever. Drop any incomplete
+    // recurring instance dated before today for a template that's getting a
+    // fresh instance now (no penalty — a fresh instance already covers
+    // today, this is cleanup of a system artifact, not user abandonment).
+    const recurIdsToday = new Set(recurring.map(r => r.id))
+    const staleIds = new Set(
+      tasks.filter(t => t.recurId && recurIdsToday.has(t.recurId) && t.date < today && !t.done).map(t => t.id)
+    )
+    const keptTasks = staleIds.size ? tasks.filter(t => !staleIds.has(t.id)) : tasks
+    if (newTasks.length || staleIds.size) set({ tasks: [...keptTasks, ...newTasks] })
   },
 
   carryTask(taskId, tomorrowKey) {

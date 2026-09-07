@@ -3,7 +3,7 @@ import { getWeekMonday, daysBetween, pad, uid } from './cutoff'
 import { todayEarned, getMinPts, taskAbandonPenalty } from './scoring'
 import { goalPtsEarnedOn } from './goals'
 import { restOrLightXpPenalty, streakBrokenXpPenalty } from './xpPenalty'
-import { WALLET_RATIO, MAX_CARRY } from '@/constants/points'
+import { WALLET_RATIO, MAX_CARRY, FREEZE_USED_XP_PENALTY } from '@/constants/points'
 import defaults from '@/data/defaults.json'
 
 const FREEZE_SCH: Record<number, number> = defaults.freezeSchedule as unknown as Record<number, number>
@@ -82,6 +82,14 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
 
     if (patch.submittedDays![mk] || patch.restDays![mk] || patch.frozenDays![mk]) continue
 
+    // While the streak is paused, days inside the pause window are skipped
+    // entirely — no history entry, no penalty, no streak effect — instead of
+    // being silently reprocessed as missed days once the pause ends.
+    if (state.pausedStreak && mk >= state.pausedStreak.date.slice(0, 10)) {
+      patch.submittedDays![mk] = true
+      continue
+    }
+
     const dayTasks  = state.tasks.filter(t => t.date === mk && !t.cancelledAt)
     const doneTasks = dayTasks.filter(t => t.done)
     const earned    = todayEarned(doneTasks, state.mood[mk], state.cfg, goalPtsEarnedOn(state.goals, mk))
@@ -155,20 +163,14 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
 
     const mon = getWeekMonday(mk)
 
-    // Rest day takes precedence over the streak whenever the day's tasks
-    // weren't completed: an incomplete day is always auto-protected as a Rest
-    // Day (streak held, not incremented), ahead of ever spending a freeze or
-    // breaking the streak. There's no once-per-week cap on this — a rest day
-    // always wins over losing the streak. With the streak already at 0 there's
-    // nothing to protect, so the day is just recorded as a plain missed day —
-    // and, unlike a protected rest day, it bleeds a flat per-day XP penalty
-    // for as long as the streak stays broken (see xpPenalty.ts).
-    if (patch.streak! <= 0) {
-      const penalty = streakBrokenXpPenalty(mk, state.mood)
-      patch.rankXP = Math.max(0, patch.rankXP! - penalty)
-      patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: false })
-      overnightMsg = `😔 ${mk} missed (${earned}/${minPts} pts). No streak yet to protect. Actually finished it? Fix it below.`
-    } else {
+    // Rest day protects an incomplete day, but only once per week (mirrors
+    // the manual "Take Rest Day" button's cap). Once that week's rest day is
+    // already used, a streak freeze token is auto-spent instead if available;
+    // only once both are exhausted does the streak actually break — and with
+    // the streak already at 0 there's nothing left to protect either way, so
+    // it's just recorded as a plain missed day, bleeding a flat per-day XP
+    // penalty for as long as the streak stays broken (see xpPenalty.ts).
+    if (patch.streak! > 0 && !patch.weekRestUsed![mon]) {
       const penalty = restOrLightXpPenalty(mk, state.cfg, state.mood)
       patch.rankXP = Math.max(0, patch.rankXP! - penalty)
       patch.weekRestUsed![mon] = true
@@ -177,6 +179,28 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
       patch.daysActive         = (patch.daysActive ?? 0) + 1
       patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: true })
       overnightMsg = `🟡 Rest Day auto-applied for ${mk} (${earned}/${minPts} pts). Streak protected. Forgot to tick something off? Fix it below.`
+    } else if (patch.streak! > 0 && patch.freezeTokens! > 0) {
+      patch.freezeTokens  = patch.freezeTokens! - 1
+      patch.freezesBought = Math.max(0, (patch.freezesBought ?? 0) - 1)
+      patch.freezesUsed   = (patch.freezesUsed ?? 0) + 1
+      patch.frozenDays![mk]    = true
+      patch.submittedDays![mk] = true
+      patch.rankXP = Math.max(0, patch.rankXP! - FREEZE_USED_XP_PENALTY)
+      patch.history!.push({ ...baseEntry, rxp: earned, frozen: true, rest: false })
+      overnightMsg = `❄️ Rest day already used this week — a streak freeze was auto-spent for ${mk} (${earned}/${minPts} pts). Streak protected.`
+    } else if (patch.streak! <= 0) {
+      const penalty = streakBrokenXpPenalty(mk, state.mood)
+      patch.rankXP = Math.max(0, patch.rankXP! - penalty)
+      patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: false })
+      overnightMsg = `😔 ${mk} missed (${earned}/${minPts} pts). No streak yet to protect. Actually finished it? Fix it below.`
+    } else {
+      // Streak was positive but this week's rest day and all freeze tokens
+      // are already spent — the streak genuinely breaks.
+      patch.streak = 0
+      const penalty = streakBrokenXpPenalty(mk, state.mood)
+      patch.rankXP = Math.max(0, patch.rankXP! - penalty)
+      patch.history!.push({ ...baseEntry, rxp: earned, frozen: false, rest: false })
+      overnightMsg = `💔 Streak broken — ${mk} missed (${earned}/${minPts} pts), this week's rest day and freezes are used up.`
     }
   }
 
@@ -184,7 +208,7 @@ export function runOvernightLogic(state: AppState, today: string): Partial<AppSt
   // When gap=1 (lastDate = yesterday — the normal daily login), the loop
   // condition `d < 1` is false immediately, so carry-forward never runs.
   // We handle that case explicitly here.
-  if (gap === 1) {
+  if (gap === 1 && !(state.pausedStreak && lastDate >= state.pausedStreak.date.slice(0, 10))) {
     const prevDay = lastDate // yesterday in the typical case
     // Recurring-origin and cancelled tasks excluded here too — same reason as above.
     for (const t of state.tasks.filter(t => t.date === prevDay && !t.done && !t.recurId && !t.cancelledAt)) {

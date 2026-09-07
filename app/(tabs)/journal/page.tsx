@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useDayKey }       from '@/hooks/useDayKey'
 import { formatDate }      from '@/lib/engine/cutoff'
@@ -15,6 +15,15 @@ import { tryUnlock, encryptText, decryptText, validatePassphrase } from '@/lib/c
 import { hasJournalKey, getJournalKey, setJournalKey, clearJournalKey } from '@/lib/crypto/journal-key'
 import { createEncryptionKey } from '@/lib/crypto/journal-encrypt'
 
+/** Grows the textarea to fit its content instead of staying a fixed size
+ *  with an internal scrollbar — used as both a ref callback (initial size on
+ *  mount/entry switch) and an onInput handler (as the user types). */
+function autosizeTextarea(el: HTMLTextAreaElement | null) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
 export default function JournalPage() {
   const { today }   = useDayKey()
   const [mode, setMode] = useState<'write' | 'history'>('write')
@@ -22,6 +31,12 @@ export default function JournalPage() {
   const [editKey, setEditKey]   = useState<string | null>(null)
   const [deleteKey, setDeleteKey] = useState<string | null>(null)
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Resize to fit whenever the loaded/cleared entry changes (new entry,
+  // switching to edit an old one, or discarding) — typing itself is also
+  // covered live by the textarea's own onInput handler.
+  useEffect(() => { autosizeTextarea(textareaRef.current) }, [editKey, text])
 
   const journal     = usePlannerStore(s => s.journal)
   const encToken    = usePlannerStore(s => s.journalEncryptionToken)
@@ -379,10 +394,12 @@ export default function JournalPage() {
               </div>
               <VoiceControls dateKey={today} onAppendText={(t) => setText(prev => (prev ? prev.replace(/\s*$/, ' ') : '') + t)} />
               <textarea
+                ref={textareaRef}
                 value={text}
                 onChange={e => setText(e.target.value)}
+                onInput={e => autosizeTextarea(e.currentTarget)}
                 placeholder="What's on your mind today? Thoughts, wins, blockers, reflections..."
-                className="w-full min-h-[140px] vx-field leading-relaxed"
+                className="w-full min-h-[140px] vx-field leading-relaxed resize-none overflow-hidden"
               />
               <div className="flex gap-2 mt-2.5 items-center flex-wrap">
                 <button onClick={requestSave} className="vx-btn vx-btn-primary text-xs">

@@ -48,6 +48,8 @@ export default function SettingsPage() {
   const rankXP      = usePlannerStore(s => s.rankXP)
   const badges      = usePlannerStore(s => s.badges)
   const pauseStreak = usePlannerStore(s => s.pauseStreak)
+  const restoreStreak = usePlannerStore(s => s.restoreStreak)
+  const pausedStreak = usePlannerStore(s => s.pausedStreak)
   const resetRank   = usePlannerStore(s => s.resetRankXP)
   const journalPin  = usePlannerStore(s => s.journalPin)
   const journalPinLength = usePlannerStore(s => s.journalPinLength)
@@ -87,6 +89,7 @@ export default function SettingsPage() {
   const [zoneColor,  setZoneColor] = useState('#639922')
   const [pauseReason, setPauseReason] = useState('')
   const [pauseOpen,  setPauseOpen] = useState(false)
+  const [resumeOpen, setResumeOpen] = useState(false)
   const [rrText,     setRrText]    = useState('')
   const [rrOpen,     setRrOpen]    = useState(false)
   const [rrPinOk,    setRrPinOk]   = useState(false)
@@ -522,7 +525,9 @@ export default function SettingsPage() {
 
           <SectionLabel>Streak controls</SectionLabel>
           <div className="flex gap-2.5 flex-wrap mb-2">
-            <button onClick={() => setPauseOpen(true)} className="vx-btn vx-btn-ghost text-xs" style={{ color: 'var(--vx-amber)' }}>⏸ Pause Streak</button>
+            {pausedStreak
+              ? <button onClick={() => setResumeOpen(true)} className="vx-btn vx-btn-ghost text-xs" style={{ color: 'var(--vx-amber)' }}>▶ Resume Streak</button>
+              : <button onClick={() => setPauseOpen(true)} className="vx-btn vx-btn-ghost text-xs" style={{ color: 'var(--vx-amber)' }}>⏸ Pause Streak</button>}
             <button onClick={() => setRrOpen(true)}    className="vx-btn vx-btn-ghost text-xs">↺ Reset Rank XP</button>
           </div>
           <p className="text-xs" style={{ color: 'var(--vx-fg-4)' }}>Pause for off-grid trips. Reset rank if you want a fresh start.</p>
@@ -748,6 +753,19 @@ export default function SettingsPage() {
           <button onClick={() => { if (!pauseReason.trim()) { showToast('Describe your situation.'); return }; pauseStreak(pauseReason); setPauseOpen(false); showToast('Streak paused.') }}
             className="vx-btn vx-btn-ghost text-sm" style={{ color: 'var(--vx-amber)' }}>
             Pause Streak
+          </button>
+        </div>
+      </Modal>
+
+      <Modal open={resumeOpen} onClose={() => setResumeOpen(false)} title="▶ Resume Streak" variant="vx">
+        <p className="text-sm text-[var(--text2)] mb-3">
+          Restore your streak to <strong style={{ color: 'var(--vx-fg-1)' }}>{pausedStreak?.streakAtPause ?? 0}</strong> and resume normal tracking?
+        </p>
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => setResumeOpen(false)} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
+          <button onClick={() => { restoreStreak(); setResumeOpen(false); showToast('Streak resumed.') }}
+            className="vx-btn vx-btn-ghost text-sm" style={{ color: 'var(--vx-amber)' }}>
+            Resume Streak
           </button>
         </div>
       </Modal>
