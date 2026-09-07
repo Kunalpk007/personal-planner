@@ -1244,8 +1244,15 @@ textarea.vx-field { resize: vertical; min-height: 64px; }
 .vx-milestone .vx-m-icon { width: 30px; height: 30px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; background: var(--vx-surface-tint); }
 .vx-milestone.vx-current .vx-m-icon { background: var(--vx-grad-hero); }
 
+/* ── Minute wheel (FocusTimeCard duration picker) ── */
+.vx-minute-wheel { position: relative; height: 180px; overflow-y: scroll; scroll-snap-type: y mandatory; text-align: center; -webkit-overflow-scrolling: touch; }
+.vx-minute-wheel-item { display: flex; align-items: center; justify-content: center; scroll-snap-align: center; font-size: 15px; color: var(--vx-fg-4); transition: color .15s, font-weight .15s; }
+.vx-minute-wheel-item[data-active="true"] { color: var(--vx-fg-1); font-weight: 800; font-size: 17px; }
+.vx-minute-wheel-highlight { position: absolute; left: 0; right: 0; top: 50%; height: 36px; transform: translateY(-50%); border-top: 1px solid var(--vx-border); border-bottom: 1px solid var(--vx-border); pointer-events: none; }
+
 /* ── Streak calendar chip (StreakHistoryModal) ── */
-.vx-cal-chip { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 40px; height: 52px; border-radius: 10px; border: 1px solid var(--vx-border); background: var(--vx-card); font-size: 13px; gap: 1px; }
+.vx-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.vx-cal-chip { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; aspect-ratio: 40 / 52; border-radius: 10px; border: 1px solid var(--vx-border); background: var(--vx-card); font-size: 13px; gap: 1px; }
 
 /* ── Confetti + celebration overlay ── */
 #vx-confetti-layer { position: fixed; inset: 0; z-index: 260; pointer-events: none; overflow: hidden; }

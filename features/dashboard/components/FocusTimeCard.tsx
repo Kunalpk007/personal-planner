@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePlannerStore } from '@/store'
@@ -8,11 +8,39 @@ import { showToast } from '@/ui/Toast'
 import { fireConfetti } from '@/ui/Confetti'
 import { GradientRing } from '@/ui/GradientRing'
 
-const DURATIONS: Array<{ minutes: 25 | 45 | 60; label: string }> = [
-  { minutes: 25, label: '25 min' },
-  { minutes: 45, label: '45 min' },
-  { minutes: 60, label: '1 hr' },
-]
+const MINUTE_OPTIONS = Array.from({ length: 24 }, (_, i) => (i + 1) * 5) // 5..120, step 5
+const WHEEL_ITEM_H = 36
+
+/** iOS-alarm-style scrollable minute picker — native CSS scroll-snap, no
+ *  dependency. The centered item (tracked via scroll position) is the value. */
+function MinuteWheel({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    ref.current?.scrollTo({ top: MINUTE_OPTIONS.indexOf(value) * WHEEL_ITEM_H })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleScroll() {
+    const el = ref.current
+    if (!el) return
+    const idx = Math.min(MINUTE_OPTIONS.length - 1, Math.max(0, Math.round(el.scrollTop / WHEEL_ITEM_H)))
+    const v = MINUTE_OPTIONS[idx]
+    if (v !== value) onChange(v)
+  }
+
+  return (
+    <div className="vx-minute-wheel" ref={ref} onScroll={handleScroll}>
+      <div style={{ height: WHEEL_ITEM_H }} />
+      {MINUTE_OPTIONS.map(m => (
+        <div key={m} className="vx-minute-wheel-item" data-active={m === value} style={{ height: WHEEL_ITEM_H }}>
+          {m} min
+        </div>
+      ))}
+      <div style={{ height: WHEEL_ITEM_H }} />
+      <div className="vx-minute-wheel-highlight" />
+    </div>
+  )
+}
 
 function fmt(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60)
@@ -20,21 +48,22 @@ function fmt(totalSeconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-/** Dashboard Focus Time. The tile itself only shows the three duration
- *  buttons — no reward preview, per explicit request (the reward still
- *  applies on completion, it's just not advertised up front). Starting a
- *  session requires an explicit confirmation, then runs in a dedicated
- *  full-screen overlay (not inline on the tile) that blocks interaction with
- *  the rest of the app for the duration — the closest a web app can get to
- *  an OS-level focus lock. Cancelling early forfeits the reward — otherwise
- *  there'd be nothing stopping someone from starting and immediately
- *  cancelling repeatedly to farm points. */
+/** Dashboard Focus Time. Tapping the tile opens a duration picker (an
+ *  iOS-alarm-style scrollable minute wheel) — no reward preview on the tile
+ *  itself, per explicit request (the reward still applies on completion,
+ *  it's just not advertised up front). Starting a session runs in a
+ *  dedicated full-screen overlay (not inline on the tile) that blocks
+ *  interaction with the rest of the app for the duration — the closest a web
+ *  app can get to an OS-level focus lock. Cancelling early forfeits the
+ *  reward — otherwise there'd be nothing stopping someone from starting and
+ *  immediately cancelling repeatedly to farm points. */
 export function FocusTimeCard({ today }: { today: string }) {
   const completeFocusSession = usePlannerStore(s => s.completeFocusSession)
   const focusSessions = usePlannerStore(s => s.focusSessions)
 
-  const [confirmMinutes, setConfirmMinutes] = useState<25 | 45 | 60 | null>(null)
-  const [activeMinutes, setActiveMinutes]   = useState<25 | 45 | 60 | null>(null)
+  const [pickerOpen, setPickerOpen]         = useState(false)
+  const [pickedMinutes, setPickedMinutes]   = useState(25)
+  const [activeMinutes, setActiveMinutes]   = useState<number | null>(null)
   const [secondsLeft, setSecondsLeft]       = useState(0)
 
   useEffect(() => {
@@ -50,15 +79,10 @@ export function FocusTimeCard({ today }: { today: string }) {
     return () => clearTimeout(id)
   }, [activeMinutes, secondsLeft, completeFocusSession, today])
 
-  function requestStart(minutes: 25 | 45 | 60) {
-    setConfirmMinutes(minutes)
-  }
-
   function confirmStart() {
-    if (confirmMinutes === null) return
-    setSecondsLeft(confirmMinutes * 60)
-    setActiveMinutes(confirmMinutes)
-    setConfirmMinutes(null)
+    setSecondsLeft(pickedMinutes * 60)
+    setActiveMinutes(pickedMinutes)
+    setPickerOpen(false)
   }
 
   function cancelRun() {
@@ -86,28 +110,20 @@ export function FocusTimeCard({ today }: { today: string }) {
         <p className="text-[11.5px] text-[var(--text3)] mb-3 leading-relaxed">
           Start an uninterrupted focus session to earn bonus reward points and XP.
         </p>
-        <div className="flex gap-2 flex-wrap">
-          {DURATIONS.map(d => (
-            <button
-              key={d.minutes}
-              onClick={() => requestStart(d.minutes)}
-              className="vx-pill vx-tinted flex-1 min-w-[90px] justify-center py-2.5"
-              data-tone="cyan"
-            >
-              <span className="font-semibold">{d.label}</span>
-            </button>
-          ))}
-        </div>
+        <button onClick={() => setPickerOpen(true)} className="vx-pill vx-tinted w-full justify-center py-2.5" data-tone="cyan">
+          <span className="font-semibold">🕐 Set Focus Time</span>
+        </button>
       </motion.div>
 
-      {/* Confirm before starting — a focus session locks the screen until it
-          ends or is explicitly cancelled, so it's worth a deliberate step. */}
-      <Modal open={confirmMinutes !== null} onClose={() => setConfirmMinutes(null)} title="Start focus session?" variant="vx" maxWidth="max-w-sm">
-        <p style={{ color: 'var(--vx-fg-2)', fontSize: 13, marginBottom: 16 }}>
-          Start a {confirmMinutes}-minute focus session? This will take over the screen until it ends — you can cancel any time, but an interrupted session earns no reward.
+      {/* Duration picker doubles as the confirm step — a focus session locks
+          the screen until it ends, so picking a length is the deliberate step. */}
+      <Modal open={pickerOpen} onClose={() => setPickerOpen(false)} title="Start focus session?" variant="vx" maxWidth="max-w-sm">
+        <MinuteWheel value={pickedMinutes} onChange={setPickedMinutes} />
+        <p style={{ color: 'var(--vx-fg-2)', fontSize: 12.5, margin: '14px 0 16px', textAlign: 'center' }}>
+          Takes over the screen until it ends — you can cancel any time, but an interrupted session earns no reward.
         </p>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="vx-btn vx-btn-ghost" onClick={() => setConfirmMinutes(null)}>Cancel</button>
+          <button className="vx-btn vx-btn-ghost" onClick={() => setPickerOpen(false)}>Cancel</button>
           <button className="vx-btn vx-btn-primary" onClick={confirmStart}>Start Focus</button>
         </div>
       </Modal>
@@ -118,7 +134,7 @@ export function FocusTimeCard({ today }: { today: string }) {
 }
 
 function FocusRunOverlay({ activeMinutes, secondsLeft, onCancel }: {
-  activeMinutes: 25 | 45 | 60 | null; secondsLeft: number; onCancel: () => void
+  activeMinutes: number | null; secondsLeft: number; onCancel: () => void
 }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])

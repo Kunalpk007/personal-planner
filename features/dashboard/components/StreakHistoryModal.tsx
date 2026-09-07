@@ -102,7 +102,7 @@ export function StreakHistoryModal({ open, onClose }: { open: boolean; onClose: 
             return (
               <div key={key}>
                 <div className="text-xs font-semibold text-[var(--text2)] mb-1.5">{MONTHS[+m - 1]} {y}</div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="vx-cal-grid">
                   {[...entries].sort((a, b) => a.date.localeCompare(b.date)).map(e => (
                     <div
                       key={e.date}

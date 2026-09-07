@@ -238,6 +238,29 @@ describe('recurring templates', () => {
     usePlannerStore.getState().injectRecurring('2024-01-08')
     expect(usePlannerStore.getState().tasks).toHaveLength(1)
   })
+
+  it('injectRecurring deletes a stale incomplete instance from a prior day (no penalty)', () => {
+    usePlannerStore.getState().addRecurring({
+      title: 'Daily standup', note: '', zone: 'z1',
+      priority: 'med', slot: '', level: '', isSpecial: false, specialPts: 0,
+    })
+    const recurId = usePlannerStore.getState().recurring[0].id
+
+    // Yesterday's instance never got done, and a completed one for two days ago
+    // (kept — done instances aren't stale/incomplete).
+    usePlannerStore.getState().injectRecurring('2024-01-06')
+    const oldId = usePlannerStore.getState().tasks[0].id
+    usePlannerStore.getState().toggleTask(oldId) // mark done
+    usePlannerStore.getState().injectRecurring('2024-01-07')
+    const staleId = usePlannerStore.getState().tasks.find(t => t.date === '2024-01-07')!.id
+
+    usePlannerStore.getState().injectRecurring('2024-01-08')
+
+    const tasks = usePlannerStore.getState().tasks
+    expect(tasks.find(t => t.id === staleId)).toBeUndefined() // stale incomplete instance deleted
+    expect(tasks.find(t => t.id === oldId)).toBeDefined() // completed instance untouched
+    expect(tasks.find(t => t.date === '2024-01-08' && t.recurId === recurId)).toBeDefined()
+  })
 })
 
 describe('carryTask', () => {
@@ -553,7 +576,7 @@ describe('submitRetroFix — upgrading an auto-resolved day that actually met ta
     expect(usePlannerStore.getState().restDays['2024-01-09']).toBe(true) // still a rest day
   })
 
-  it('does NOT upgrade a frozen day even if auto were somehow true', () => {
+  it('upgrades an auto-consumed freeze day, refunding the freeze token and XP penalty', () => {
     for (let i = 0; i < 4; i++) {
       usePlannerStore.getState().addTask(taskInput({ date: '2024-01-09', priority: 'high' }))
     }
@@ -562,12 +585,42 @@ describe('submitRetroFix — upgrading an auto-resolved day that actually met ta
     usePlannerStore.setState({
       history: [histEntry('2024-01-09', { rxp: 0, rest: false, frozen: true, auto: true })],
       streak: 5, bestStreak: 5, rankXP: 100,
+      freezeTokens: 1, freezesUsed: 1, freezesBought: 0,
+      frozenDays: { '2024-01-09': true },
+    })
+
+    const result = usePlannerStore.getState().submitRetroFix('2024-01-09')
+
+    const state = usePlannerStore.getState()
+    expect(result).toMatchObject({ ok: true, upgraded: true, newStreak: 6 })
+    expect(state.streak).toBe(6)
+    expect(state.rankXP).toBe(100 + 50 + 5) // +FREEZE_USED_XP_PENALTY refund, +overflow floor((80-70)/2)
+    expect(state.freezeTokens).toBe(2) // token refunded
+    expect(state.freezesUsed).toBe(0)
+    expect(state.frozenDays['2024-01-09']).toBeUndefined()
+    const entry = state.history.find(h => h.date === '2024-01-09')
+    expect(entry).toMatchObject({ rest: false, frozen: false, late: true })
+  })
+
+  it('does NOT upgrade a manually-frozen day (useFreeze stamps auto: false)', () => {
+    for (let i = 0; i < 4; i++) {
+      usePlannerStore.getState().addTask(taskInput({ date: '2024-01-09', priority: 'high' }))
+    }
+    usePlannerStore.getState().tasks.forEach(t => usePlannerStore.getState().toggleTaskRetro(t.id))
+
+    usePlannerStore.setState({
+      history: [histEntry('2024-01-09', { rxp: 0, rest: false, frozen: true, auto: false })],
+      streak: 5, bestStreak: 5, rankXP: 100,
+      freezeTokens: 1, freezesUsed: 1,
+      frozenDays: { '2024-01-09': true },
     })
 
     const result = usePlannerStore.getState().submitRetroFix('2024-01-09')
 
     expect(result).toEqual({ ok: true })
-    expect(usePlannerStore.getState().streak).toBe(5) // unchanged
-    expect(usePlannerStore.getState().rankXP).toBe(100) // no refund
+    const state = usePlannerStore.getState()
+    expect(state.streak).toBe(5) // unchanged
+    expect(state.rankXP).toBe(100) // no refund
+    expect(state.freezeTokens).toBe(1) // no refund
   })
 })

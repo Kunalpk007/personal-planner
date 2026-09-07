@@ -68,3 +68,32 @@ export function getMilestoneMessage(streak: number, tone: AppConfig['tone']): st
   const pool = bank[key] ?? bank.streak_7 ?? ['Milestone reached!']
   return pickRand(pool)
 }
+
+const INACTIVITY_THRESHOLD_DAYS = 3
+
+/** On-open callout when real progress has been stale for a while — used
+ *  instead of the normal completion-based greeting once inactivity crosses
+ *  the threshold, so a long gap can't just keep showing a generic quote. */
+export function getInactivityMessage(daysSinceActive: number, tone: AppConfig['tone']): string | null {
+  if (daysSinceActive < INACTIVITY_THRESHOLD_DAYS) return null
+  const bank = (managerData as Record<ToneKey, MsgBank>)[tone] ?? managerData.balanced
+  const pool = bank.inactivity ?? [`It's been {days} days. Time to get back to it.`]
+  return pickRand(pool).replace('{days}', String(daysSinceActive))
+}
+
+/** Fires once, right after a day is submitted — scolds a bare-minimum day,
+ *  praises a day where every high-priority task actually got done. */
+export function getDayEndMessage(highDone: number, highTotal: number, overflowPts: number, tone: AppConfig['tone']): string | null {
+  const bank = (managerData as Record<ToneKey, MsgBank>)[tone] ?? managerData.balanced
+  if (highTotal > 0 && highDone === highTotal) return pickRand(bank.eod_praise ?? ['Every high-priority task done today.'])
+  if (overflowPts <= 0) return pickRand(bank.eod_scold ?? ['You just cleared the bar today.'])
+  return null
+}
+
+/** Weekly Review's neglected-zone callout — names the worst-performing zone
+ *  by its real configured name and pushes for action next week. */
+export function getZoneNeglectMessage(zoneName: string, tone: AppConfig['tone']): string {
+  const bank = (managerData as Record<ToneKey, MsgBank>)[tone] ?? managerData.balanced
+  const pool = bank.zone_neglect ?? [`{zone} needs attention this week.`]
+  return pickRand(pool).replace('{zone}', zoneName)
+}

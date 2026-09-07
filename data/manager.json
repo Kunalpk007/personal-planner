@@ -22,7 +22,11 @@
     "zero_pm": ["Afternoon and nothing done. This separates intent from action.", "Half the day gone. Start now."],
     "zero_late": ["Late, and zero done. Twenty focused minutes beats nothing.", "The day isn't over. One task before bed."],
     "comeback": ["Every long streak started with a day after a broken one.", "You lost the streak. You still have the habit. Rebuild.", "The comeback is always stronger than the setback.", "Today is day 1 again. That's not failure — it's a reset."],
-    "concern_sick": ["Two sick days in a row — take care of yourself first. If this keeps up, let's rethink the plan together.", "Noticed you've been sick a couple of days now. Rest is productive too — just don't let it become a habit unnoticed."]
+    "concern_sick": ["Two sick days in a row — take care of yourself first. If this keeps up, let's rethink the plan together.", "Noticed you've been sick a couple of days now. Rest is productive too — just don't let it become a habit unnoticed."],
+    "inactivity": ["It's been {days} days since you last showed up. That's a long silence — what's going on?", "{days} days of nothing. The streak you built is slipping. Let's get back to it."],
+    "eod_scold": ["You just cleared the bar — nothing more. There was room for more today.", "Target met, barely. That's not the same as a good day."],
+    "eod_praise": ["Every high-priority task done today — that's exactly the kind of day that compounds.", "You didn't just meet the target, you beat it. That's the standard to keep."],
+    "zone_neglect": ["{zone} hasn't seen real attention in a while. Worth putting something there this week.", "Your {zone} score is dragging the rest down. One small step there this week would help."]
   },
   "strict": {
     "complete_high_morning": ["High priority done. Expected. Don't slow down.", "That was the most important task. Execute the next."],
@@ -44,7 +48,11 @@
     "zero_pm": ["Half day gone. Zero. That's a choice.", "Start."],
     "zero_late": ["Late. Nothing done.", "Excuses don't count."],
     "comeback": ["Reset. Start again. No excuses.", "Streak gone. The only response is action.", "Yesterday is over. Today counts."],
-    "concern_sick": ["Two sick days back to back. Recover properly — but don't let 'sick' become an excuse pattern.", "Noted: second sick day in a row. Get well. Then get back to it."]
+    "concern_sick": ["Two sick days back to back. Recover properly — but don't let 'sick' become an excuse pattern.", "Noted: second sick day in a row. Get well. Then get back to it."],
+    "inactivity": ["{days} days gone. No excuse covers that. Show up today.", "{days} days of silence is a choice. Reverse it now."],
+    "eod_scold": ["Barely made the number. Barely isn't the goal.", "You met the minimum. The minimum isn't the point."],
+    "eod_praise": ["Every high-priority task, done. That's the bar. Hold it.", "Beat the target and cleared the hard tasks. That's a real day."],
+    "zone_neglect": ["{zone} is being ignored. Fix that this week — no more excuses.", "{zone} is dragging your score down. Put in the work."]
   },
   "encouraging": {
     "complete_high_morning": ["Look at you! Big task done before noon! 🎉", "That's the hardest one! The rest will feel amazing.", "Morning energy + big task = perfect start 💪", "You crushed the most important task first!"],
@@ -66,6 +74,10 @@
     "zero_pm": ["Afternoon check-in! Even one task now would feel great.", "Hey — just begin. You've got this 💙"],
     "zero_late": ["Evening — still time! Even one focused effort matters.", "It's late but you're here. That counts."],
     "comeback": ["You didn't lose the streak. You lost one day. Come back.", "Every champion has a comeback story. This is yours.", "One missed day doesn't erase all those days you showed up.", "The streak broke. Your character didn't. Start again 💙"],
-    "concern_sick": ["Two sick days in a row 💙 — please rest properly. I just want to check in and make sure you're really okay.", "Noticed you've felt sick two days running. Take the time you need — your health comes first."]
+    "concern_sick": ["Two sick days in a row 💙 — please rest properly. I just want to check in and make sure you're really okay.", "Noticed you've felt sick two days running. Take the time you need — your health comes first."],
+    "inactivity": ["It's been {days} days 💙 — I miss seeing you show up. Let's start again today, even small.", "{days} days quiet. No judgment — but let's turn this around together, starting now."],
+    "eod_scold": ["You made it — just barely. I know you have more in you tomorrow 💪", "Target met, but only just. Let's aim higher next time!"],
+    "eod_praise": ["Every high-priority task done today — that's an incredible day! 🎉", "You went past the target AND handled the hard stuff. So proud of this one!"],
+    "zone_neglect": ["{zone} could use a little love this week 💙 — even one small step would help.", "I've noticed {zone} slipping — nothing big, just one thing this week?"]
   }
 }

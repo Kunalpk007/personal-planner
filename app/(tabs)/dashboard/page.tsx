@@ -14,7 +14,8 @@ import { SundayReviewNudge } from '@/features/dashboard/components/SundayReviewN
 import { todayEarned, todayTarget } from '@/lib/engine/scoring'
 import { goalPtsEarnedOn } from '@/lib/engine/goals'
 import { getDailyQuote }   from '@/lib/engine/quotes'
-import { getManagerMessage } from '@/lib/engine/manager'
+import { getManagerMessage, getInactivityMessage } from '@/lib/engine/manager'
+import { daysBetween } from '@/lib/engine/cutoff'
 import { StreakHistoryModal } from '@/features/dashboard/components/StreakHistoryModal'
 import { MorningQuoteOverlay } from '@/features/dashboard/components/MorningQuoteOverlay'
 import { MorningTop3Prompt } from '@/features/dashboard/components/MorningTop3Prompt'
@@ -68,6 +69,7 @@ export default function DashboardPage() {
   const pinnedTaskId = usePlannerStore(s => s.pinnedTaskId)
   const streak       = usePlannerStore(s => s.streak)
   const allGoals     = usePlannerStore(s => s.goals)
+  const history      = usePlannerStore(s => s.history)
 
   const [streakHistoryOpen, setStreakHistoryOpen] = useState(false)
   const [lifeScoreOpen, setLifeScoreOpen] = useState(false)
@@ -81,7 +83,14 @@ export default function DashboardPage() {
     ?? tasks.find(t => !t.done && (t.isSpecial || t.priority === 'high'))
     ?? tasks.find(t => !t.done)
 
-  const managerMsg = getManagerMessage(pct, tasks.length, cfg.tone, mood, today)
+  // A day auto-protected as a rest/freeze day isn't real progress — only a
+  // genuine manual submission with real points earned counts as "active"
+  // for the inactivity callout, so a long streak of auto-protected days
+  // (see the weekly-cap fix in lib/engine/streak.ts) can't hide the gap.
+  const lastActiveDate = [...history].filter(h => !h.auto && h.rxp > 0).map(h => h.date).sort().pop()
+  const daysSinceActive = lastActiveDate ? daysBetween(lastActiveDate, today) : 0
+  const inactivityMsg = getInactivityMessage(daysSinceActive, cfg.tone)
+  const managerMsg = inactivityMsg ?? getManagerMessage(pct, tasks.length, cfg.tone, mood, today)
 
   return (
     <div className="relative">

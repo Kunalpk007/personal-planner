@@ -59,11 +59,11 @@ export const SHOWED_UP_BONUS_PCT      = 0.05 // wallet-only bonus, 5% of the day
 
 // ─── Focus Time (Dashboard) ─────────────────────────────────────────────────
 // A completed, uninterrupted focus session credits both the reward wallet and
-// rank XP. Keyed by session length in minutes.
-export const FOCUS_REWARDS: Record<25 | 45 | 60, { pts: number; xp: number }> = {
-  25: { pts: 2,  xp: 4  },
-  45: { pts: 5,  xp: 10 },
-  60: { pts: 10, xp: 20 },
+// rank XP, scaled by the user-chosen session length (minutes). Rate is
+// calibrated off the old fixed 60min→10pts anchor; xp is always 2x pts.
+export function focusReward(minutes: number): { pts: number; xp: number } {
+  const pts = Math.max(1, Math.round(minutes / 6))
+  return { pts, xp: pts * 2 }
 }
 
 export const PIN_LENGTH           = 6               // digits

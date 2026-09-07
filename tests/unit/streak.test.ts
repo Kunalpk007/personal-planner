@@ -250,7 +250,7 @@ describe('runOvernightLogic', () => {
     expect(result.overnightMsg).toMatch(/^🟡/)
   })
 
-  it('still uses a rest day even when the week rest was already used and freezes exist (no weekly cap, rest beats freeze)', () => {
+  it('auto-spends a freeze once the week rest day is already used', () => {
     const tasks = [makeTask({ id: 'a', date: '2024-01-09' })] // 20 pts < minPts 70
     const state = makeState({
       history: [makeHistoryEntry('2024-01-08')],
@@ -263,20 +263,20 @@ describe('runOvernightLogic', () => {
     })
     const result = runOvernightLogic(state, '2024-01-10')
 
-    // Freeze is never spent — rest day always protects instead.
-    expect(result.freezeTokens).toBe(2)
-    expect(result.freezesUsed).toBe(0)
-    expect(result.restDays?.['2024-01-09']).toBe(true)
-    expect(result.frozenDays?.['2024-01-09']).toBeUndefined()
+    expect(result.freezeTokens).toBe(1)
+    expect(result.freezesUsed).toBe(1)
+    expect(result.freezesBought).toBe(0)
+    expect(result.frozenDays?.['2024-01-09']).toBe(true)
+    expect(result.restDays?.['2024-01-09']).toBeUndefined()
     expect(result.submittedDays?.['2024-01-09']).toBe(true)
-    expect(result.streak).toBe(5) // unchanged
+    expect(result.streak).toBe(5) // unchanged — protected by the freeze
 
     const entry = result.history?.[1]
-    expect(entry).toMatchObject({ date: '2024-01-09', rxp: 20, frozen: false, rest: true })
-    expect(result.overnightMsg).toMatch(/^🟡/)
+    expect(entry).toMatchObject({ date: '2024-01-09', rxp: 20, frozen: true, rest: false, auto: true })
+    expect(result.overnightMsg).toMatch(/^❄️/)
   })
 
-  it('never breaks a live streak on a short day — rest day always protects it', () => {
+  it('breaks a live streak once both the week rest day and all freezes are used up', () => {
     const tasks = [makeTask({ id: 'a', date: '2024-01-09' })] // 20 pts < minPts 70
     const state = makeState({
       history: [makeHistoryEntry('2024-01-08')],
@@ -287,13 +287,14 @@ describe('runOvernightLogic', () => {
     })
     const result = runOvernightLogic(state, '2024-01-10')
 
-    expect(result.streak).toBe(5) // unchanged — never breaks
-    expect(result.restDays?.['2024-01-09']).toBe(true)
-    expect(result.submittedDays?.['2024-01-09']).toBe(true)
+    expect(result.streak).toBe(0) // genuinely broken
+    expect(result.restDays?.['2024-01-09']).toBeUndefined()
+    expect(result.frozenDays?.['2024-01-09']).toBeUndefined()
+    expect(result.submittedDays?.['2024-01-09']).toBeUndefined()
 
     const entry = result.history?.[1]
-    expect(entry).toMatchObject({ date: '2024-01-09', rxp: 20, frozen: false, rest: true })
-    expect(result.overnightMsg).toMatch(/^🟡/)
+    expect(entry).toMatchObject({ date: '2024-01-09', rxp: 20, frozen: false, rest: false })
+    expect(result.overnightMsg).toMatch(/^💔/)
   })
 
   it('records a plain missed day (no rest) when the streak is already 0', () => {
@@ -451,5 +452,68 @@ describe('runOvernightLogic', () => {
     expect(result.history).toHaveLength(1)
     expect(result.overnightMsg).toBeNull()
     expect(result.streak).toBe(3)
+  })
+
+  it('skips days inside a pause window entirely — no history entry, no streak effect', () => {
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-06')],
+      tasks: [],
+      streak: 5,
+      pausedStreak: { date: '2024-01-07T09:00:00.000Z', reason: 'trip', streakAtPause: 5 },
+    })
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    // 01-07, 01-08, 01-09 are all inside the pause window — none get a history entry
+    expect(result.history).toHaveLength(1)
+    expect(result.streak).toBe(5)
+    expect(result.submittedDays?.['2024-01-07']).toBe(true)
+    expect(result.submittedDays?.['2024-01-08']).toBe(true)
+    expect(result.submittedDays?.['2024-01-09']).toBe(true)
+  })
+
+  it('clamps freezesBought to 0 and defaults undefined freezesBought/freezesUsed when auto-spending a freeze', () => {
+    const tasks = [makeTask({ id: 'a', date: '2024-01-09' })] // 20 pts < minPts 70
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-08')],
+      tasks,
+      streak: 5,
+      weekRestUsed: { '2024-01-08': true },
+      freezeTokens: 1,
+      freezesBought: undefined as unknown as number,
+      freezesUsed: undefined as unknown as number,
+    })
+    const result = runOvernightLogic(state, '2024-01-10')
+    expect(result.freezesBought).toBe(0)
+    expect(result.freezesUsed).toBe(1)
+  })
+
+  it('still runs the gap=1 carry-forward when a pause exists but started after yesterday', () => {
+    // lastDate (history) = 2024-01-09 = yesterday relative to today (2024-01-10) -> gap=1
+    const tasks = [makeTask({ id: 'p1', date: '2024-01-09', done: false })]
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-09')],
+      tasks,
+      streak: 5,
+      pausedStreak: { date: '2024-01-11T09:00:00.000Z', reason: 'trip', streakAtPause: 5 },
+    })
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
+    expect(carried).toHaveLength(1)
+  })
+
+  it('skips the gap=1 carry-forward step when yesterday is inside a pause window', () => {
+    // lastDate (history) = 2024-01-09 = yesterday relative to today (2024-01-10) -> gap=1
+    const tasks = [makeTask({ id: 'p1', date: '2024-01-09', done: false })]
+    const state = makeState({
+      history: [makeHistoryEntry('2024-01-09')],
+      tasks,
+      streak: 5,
+      pausedStreak: { date: '2024-01-09T09:00:00.000Z', reason: 'trip', streakAtPause: 5 },
+    })
+    const result = runOvernightLogic(state, '2024-01-10')
+
+    const carried = result.tasks?.filter(t => t.date === '2024-01-10') ?? []
+    expect(carried).toHaveLength(0)
   })
 })

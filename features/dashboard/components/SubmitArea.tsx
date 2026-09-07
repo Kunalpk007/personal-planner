@@ -11,6 +11,8 @@ import { goalPtsEarnedOn }  from '@/lib/engine/goals'
 import { getDailyQuote }    from '@/lib/engine/quotes'
 import { writeBackupFile }  from '@/lib/persistence/fsBackup'
 import { syncNow }          from '@/lib/sync/sync'
+import { getDayEndMessage } from '@/lib/engine/manager'
+import { showManagerMessage } from '@/ui/ManagerModal'
 import { EndOfDayRitual }   from './EndOfDayRitual'
 import type { HistoryEntry, EodMood } from '@/store/types'
 
@@ -100,6 +102,11 @@ export function SubmitArea({ today, pinned }: { today: string; pinned?: boolean 
       writeBackupFile(usePlannerStore.getState())
     }
     syncNow()
+
+    const highTasks = tasks.filter(t => t.priority === 'high' || t.isSpecial)
+    const highDone  = highTasks.filter(t => t.done).length
+    const dayEndMsg = getDayEndMessage(highDone, highTasks.length, earned - minPts, cfg.tone)
+    if (dayEndMsg) showManagerMessage(dayEndMsg)
   }
 
   function closeCelebrate() {

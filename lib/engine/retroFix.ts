@@ -28,11 +28,12 @@ export function retroFixDeadline(dateStr: string): Date {
  * app at a normal hour ever actually saw it.
  *
  * A day is fixable when it was auto-resolved (`auto: true` — this flag is
- * ONLY ever set by `runOvernightLogic`; every deliberate action
- * — on-time submit, `declareRestDay`, `useFreeze` — stamps `auto: false`,
- * so a day the user explicitly chose to rest on or spend a freeze on is
- * never silently overridden here), it wasn't a freeze day, it still falls
- * short of that day's target (nothing to fix once it already succeeded),
+ * ONLY ever set by `runOvernightLogic`, including its auto-spent-a-freeze
+ * branch; every deliberate action — on-time submit, `declareRestDay`,
+ * manual `useFreeze` — stamps `auto: false`, so a day the user explicitly
+ * chose to rest on or spend a freeze on is never silently overridden
+ * here), it still falls short of that day's target (nothing to fix once it
+ * already succeeded),
  * it has real tasks recorded, it hasn't already been fixed, and it's still
  * before its fix deadline: a fixed, non-configurable 12:00 PM the day
  * after (was a Settings-configurable rolling window; simplified to one
@@ -55,7 +56,7 @@ export function getFixableDays(
 ): string[] {
   return state.history
     .filter(h => {
-      if (!h.auto || h.frozen) return false
+      if (!h.auto) return false
       if (h.date >= today) return false
       if (state.retroFixedDays[h.date]) return false
       if (now >= retroFixDeadline(h.date)) return false
