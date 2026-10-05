@@ -64,7 +64,7 @@ export function ConsistencyRow({ today, earned, target, done, total }: {
             <div className="text-[10.5px] mt-1" style={{ color: 'var(--text3)' }}>{todayPct}% logged today</div>
           </>
         ) : (
-          <div className="text-[12px] mt-2" style={{ color: 'var(--text3)' }}>Set up your 100-day run →</div>
+          <div className="text-[12px] mt-2" style={{ color: 'var(--text3)' }}>Set up your consistency run →</div>
         )}
       </motion.button>
     </div>

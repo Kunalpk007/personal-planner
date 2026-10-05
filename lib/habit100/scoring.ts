@@ -1,9 +1,12 @@
-import type { HabitDef, Habit100Day, Habit100Meta, Habit100Value } from '@/store/habit100/types'
+import type { BookValue, HabitDef, Habit100Day, Habit100Meta, Habit100Value } from '@/store/habit100/types'
 import { daysBetween, getNextDayKey, getPrevDayKey, getWeekDates } from '@/lib/engine/cutoff'
 
 /** Pure scoring/streak logic for the Consistency Tracker — fully separate
  *  from lib/engine/scoring.ts (the main planner's engine). No side effects,
- *  no store access — everything here is a plain function of (meta, days). */
+ *  no store access — everything here is a plain function of (meta, days).
+ *  Every habit in meta.habits counts toward the score — there's no
+ *  "tracked but not counted" state (removed per explicit decision: if a
+ *  habit shouldn't affect the %, it's removed from the list, not flagged). */
 
 /** "HH:MM" -> minutes since midnight, for `time`-type habits (stored/compared
  *  as a plain number, same as any other numeric habit). */
@@ -19,6 +22,10 @@ export function minutesToTimeStr(minutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
+function isBookValue(value: unknown): value is BookValue {
+  return typeof value === 'object' && value !== null && 'pages' in value
+}
+
 export function isHabitDone(habit: HabitDef, value: Habit100Value | undefined): boolean {
   if (value === undefined || value === null) return false
   switch (habit.type) {
@@ -31,19 +38,22 @@ export function isHabitDone(habit: HabitDef, value: Habit100Value | undefined): 
       if (typeof value !== 'number' || habit.target === undefined) return false
       return habit.comparison === 'lte' ? value <= habit.target : value >= habit.target
     }
+    case 'book': {
+      if (!isBookValue(value) || habit.target === undefined) return false
+      return habit.comparison === 'lte' ? value.pages <= habit.target : value.pages >= habit.target
+    }
     default:
       return false
   }
 }
 
-export interface DayStats { countedTotal: number; countedDone: number; pct: number }
+export interface DayStats { habitTotal: number; habitDone: number; pct: number }
 
 export function dayStats(meta: Habit100Meta, day: Habit100Day | undefined): DayStats {
-  const counted = meta.habits.filter(h => h.counted)
-  const countedTotal = counted.length
-  if (!day || countedTotal === 0) return { countedTotal, countedDone: 0, pct: 0 }
-  const countedDone = counted.filter(h => isHabitDone(h, day.values[h.id])).length
-  return { countedTotal, countedDone, pct: Math.round((countedDone / countedTotal) * 100) }
+  const habitTotal = meta.habits.length
+  if (!day || habitTotal === 0) return { habitTotal, habitDone: 0, pct: 0 }
+  const habitDone = meta.habits.filter(h => isHabitDone(h, day.values[h.id])).length
+  return { habitTotal, habitDone, pct: Math.round((habitDone / habitTotal) * 100) }
 }
 
 export function isDisciplined(meta: Habit100Meta, day: Habit100Day | undefined): boolean {
@@ -51,7 +61,7 @@ export function isDisciplined(meta: Habit100Meta, day: Habit100Day | undefined):
   return dayStats(meta, day).pct >= meta.disciplinedThresholdPct
 }
 
-/** 1-based day number within the 100-day run (can be <=0 before start, or
+/** 1-based day number within the run (can be <=0 before start, or
  *  >totalDays once finished — callers clamp as needed). */
 export function programDayIndex(startDate: string, dateStr: string): number {
   return daysBetween(startDate, dateStr) + 1
@@ -109,22 +119,20 @@ function countedDateRange(meta: Habit100Meta, today: string, dayMap: Map<string,
 }
 
 export function overallPct(meta: Habit100Meta, days: Habit100Day[], today: string): number {
-  const counted = meta.habits.filter(h => h.counted)
-  if (counted.length === 0) return 0
+  if (meta.habits.length === 0) return 0
   const map = new Map(days.map(d => [d.date, d]))
   const dates = countedDateRange(meta, today, map)
   if (dates.length === 0) return 0
   let doneSlots = 0
   for (const d of dates) {
     const day = map.get(d)
-    doneSlots += counted.filter(h => isHabitDone(h, day?.values[h.id])).length
+    doneSlots += meta.habits.filter(h => isHabitDone(h, day?.values[h.id])).length
   }
-  return Math.round((doneSlots / (dates.length * counted.length)) * 100)
+  return Math.round((doneSlots / (dates.length * meta.habits.length)) * 100)
 }
 
 export function weekPct(meta: Habit100Meta, days: Habit100Day[], weekMonday: string, today: string): number {
-  const counted = meta.habits.filter(h => h.counted)
-  if (counted.length === 0) return 0
+  if (meta.habits.length === 0) return 0
   const map = new Map(days.map(d => [d.date, d]))
   const weekDates = new Set(getWeekDates(weekMonday))
   const dates = countedDateRange(meta, today, map).filter(d => weekDates.has(d))
@@ -132,18 +140,17 @@ export function weekPct(meta: Habit100Meta, days: Habit100Day[], weekMonday: str
   let doneSlots = 0
   for (const d of dates) {
     const day = map.get(d)
-    doneSlots += counted.filter(h => isHabitDone(h, day?.values[h.id])).length
+    doneSlots += meta.habits.filter(h => isHabitDone(h, day?.values[h.id])).length
   }
-  return Math.round((doneSlots / (dates.length * counted.length)) * 100)
+  return Math.round((doneSlots / (dates.length * meta.habits.length)) * 100)
 }
 
 export interface HabitBreakdownEntry { habitId: string; label: string; pct: number }
 
 export function habitBreakdown(meta: Habit100Meta, days: Habit100Day[], today: string): HabitBreakdownEntry[] {
-  const counted = meta.habits.filter(h => h.counted)
   const map = new Map(days.map(d => [d.date, d]))
   const dates = countedDateRange(meta, today, map)
-  return counted.map(h => {
+  return meta.habits.map(h => {
     if (dates.length === 0) return { habitId: h.id, label: h.label, pct: 0 }
     const done = dates.filter(d => isHabitDone(h, map.get(d)?.values[h.id])).length
     return { habitId: h.id, label: h.label, pct: Math.round((done / dates.length) * 100) }
@@ -174,12 +181,20 @@ export function cellStatus(meta: Habit100Meta, day: Habit100Day | undefined, dat
   return 'partial'
 }
 
-export const MILESTONE_DAYS = [25, 50, 75, 100] as const
+/** Proportional milestones (25%/50%/75%/100% of the run length) rather than
+ *  fixed day-numbers — a fixed 25/50/75/100 only made sense when every run
+ *  was 100 days; now that totalDays is user-configurable, a 30-day run
+ *  needs its own milestones (~8/15/23/30), not the 100-day ones. */
+export const MILESTONE_PCTS = [0.25, 0.5, 0.75, 1] as const
+
+export function milestoneDays(totalDays: number): number[] {
+  return MILESTONE_PCTS.map(p => Math.max(1, Math.round(totalDays * p)))
+}
 
 /** Returns the single newest milestone day index crossed since
  *  `alreadyUnlocked`, or null if none — called once per Home load so the
  *  milestone banner fires exactly once per threshold crossed. */
-export function checkNewMilestone(dayIndex: number, alreadyUnlocked: number[]): number | null {
-  const next = MILESTONE_DAYS.find(m => dayIndex >= m && !alreadyUnlocked.includes(m))
+export function checkNewMilestone(dayIndex: number, totalDays: number, alreadyUnlocked: number[]): number | null {
+  const next = milestoneDays(totalDays).find(m => dayIndex >= m && !alreadyUnlocked.includes(m))
   return next ?? null
 }

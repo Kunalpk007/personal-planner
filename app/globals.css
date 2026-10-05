@@ -1255,6 +1255,16 @@ textarea.vx-field { resize: vertical; min-height: 64px; }
 .habit100-cell[data-status="missed"] { background: color-mix(in srgb, var(--red) 16%, transparent); border-color: color-mix(in srgb, var(--red) 35%, transparent); color: var(--red); }
 .habit100-cell[data-status="today"] { border: 2px solid var(--vx-violet); color: var(--vx-fg-1); }
 
+/* Setup wizard's habit card — label and controls stack on their own lines
+   (not crammed into one flex-wrap row), with the remove button ALWAYS
+   pinned to the card's top-right corner regardless of content length —
+   fixes both the mobile wrapping mess and the "cancel button should be
+   top-right, not wherever the text ends" alignment request. */
+.habit100-card { position: relative; padding: 14px 42px 14px 14px; border-radius: 14px; background: var(--vx-card); border: 1px solid var(--vx-border); display: flex; flex-direction: column; gap: 10px; }
+.habit100-card-remove { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--vx-border); background: var(--vx-surface-tint); color: var(--vx-fg-3); font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+.habit100-card-label { font-size: 13px; color: var(--vx-fg-1); font-weight: 600; }
+.habit100-card-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
 /* ── Streak calendar chip (StreakHistoryModal) ── */
 .vx-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .vx-cal-chip { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; aspect-ratio: 40 / 52; border-radius: 10px; border: 1px solid var(--vx-border); background: var(--vx-card); font-size: 13px; gap: 1px; }

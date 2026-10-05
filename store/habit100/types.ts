@@ -2,7 +2,11 @@
  *  store/engine by design (see project.md's "Consistency Tracker" design
  *  discussion: own streak, own scoring, never touches rankXP/streak/wallet). */
 
-export type HabitType = 'checkbox' | 'numeric' | 'time' | 'text'
+/** `book` is a special, fixed-shape entry (title/topic/pages in one card) —
+ *  used only by the default seed template, never offered as a type you can
+ *  pick when adding a new custom habit (see SetupWizard's add-habit type
+ *  list, which deliberately excludes it). */
+export type HabitType = 'checkbox' | 'numeric' | 'time' | 'text' | 'book'
 export type Comparison = 'gte' | 'lte'
 
 export interface HabitDef {
@@ -11,31 +15,37 @@ export interface HabitDef {
   type:        HabitType
   /** Display unit for numeric habits (e.g. 'min', 'L', 'hrs', 'steps', 'kcal', 'g', 'pages'). */
   unit?:       string
-  /** Numeric target (numeric type) or minutes-since-midnight (time type). */
+  /** Numeric target (numeric/book types) or minutes-since-midnight (time type). */
   target?:     number
-  /** Only meaningful for numeric/time types — 'gte' = hit at or above target
-   *  (e.g. 8k steps), 'lte' = hit at or below target (e.g. screen time under 4hrs). */
+  /** Only meaningful for numeric/time/book types — 'gte' = hit at or above
+   *  target (e.g. 8k steps), 'lte' = hit at or below target (e.g. screen
+   *  time under 4hrs). */
   comparison?: Comparison
-  /** Counts toward the disciplined-day % — editable per habit at setup. */
-  counted:     boolean
   /** Optional visual grouping label (e.g. 'Nutrition') — display-only. */
   category?:   string
 }
 
 export interface Habit100Meta {
   startDate:                string   // yyyy-mm-dd
-  totalDays:                number   // fixed 100
+  totalDays:                number   // user-configurable at setup, default 100
   disciplinedThresholdPct:  number   // default 80
   habits:                   HabitDef[]
   goals:                    string[] // up to 3 pinned goals
-  /** Milestone day numbers (25/50/75/100) already shown — prevents the
-   *  banner from re-firing on every Home load once unlocked. */
+  /** Milestone day numbers already shown (derived from MILESTONE_PCTS ×
+   *  totalDays at the time each was crossed) — prevents the banner from
+   *  re-firing on every Home load once unlocked. */
   badges:                   number[]
   createdAt:                string
   updatedAt:                string
 }
 
-export type Habit100Value = boolean | number | string
+export interface BookValue {
+  title: string
+  topic: string
+  pages: number
+}
+
+export type Habit100Value = boolean | number | string | BookValue
 
 export interface Habit100Day {
   date:        string

@@ -5,7 +5,7 @@ import { HabitGrid } from './HabitGrid'
 import { useDebouncedSave } from '@/hooks/useDebouncedSave'
 import {
   currentStreak, bestStreak, overallPct, weekPct, habitBreakdown, mostBrokenHabit,
-  programDayIndex, checkNewMilestone, MILESTONE_DAYS,
+  programDayIndex, checkNewMilestone, milestoneDays,
 } from '@/lib/habit100/scoring'
 import { formatDate, getWeekMonday, getNextDayKey } from '@/lib/engine/cutoff'
 import type { Habit100Day, Habit100Meta } from '@/store/habit100/types'
@@ -39,7 +39,7 @@ export function ProgressView({ today }: { today: string }) {
   const worst = mostBrokenHabit(meta, dayList, today)
   const week = weeks[weekIndex]
 
-  const newMilestone = checkNewMilestone(dayIndex, meta.badges)
+  const newMilestone = checkNewMilestone(dayIndex, meta.totalDays, meta.badges)
   if (newMilestone && bannerShownFor !== newMilestone) {
     // Unlock on render is safe here — unlockMilestone is idempotent (checks
     // meta.badges.includes already) and this only fires once per threshold
@@ -87,7 +87,7 @@ export function ProgressView({ today }: { today: string }) {
         <StatCard label="Current streak" value={streak} sub={`best ${best}`} />
         <StatCard label="Overall" value={`${overall}%`} />
         <StatCard label="This week" value={`${thisWeek}%`} />
-        <StatCard label="Milestones" value={meta.badges.length} sub={`of ${MILESTONE_DAYS.length}`} />
+        <StatCard label="Milestones" value={meta.badges.length} sub={`of ${milestoneDays(meta.totalDays).length}`} />
       </div>
 
       <div className="vx-glass">
@@ -217,7 +217,7 @@ function EndOfCycleReport({ meta, days, today }: { meta: Habit100Meta; days: Hab
 
   return (
     <div className="vx-glass" style={{ background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)', borderColor: 'color-mix(in srgb, var(--color-accent) 25%, transparent)' }}>
-      <div className="text-[15px] font-extrabold mb-3">🎉 100 days complete</div>
+      <div className="text-[15px] font-extrabold mb-3">🎉 {meta.totalDays} days complete</div>
       <div className="flex flex-col gap-1.5 text-[12.5px]" style={{ color: 'var(--vx-fg-2)' }}>
         {best && <div>Best habit: <b>{best.label}</b> ({best.pct}%)</div>}
         {worst && <div>Needs the most work: <b>{worst.label}</b> ({worst.pct}%)</div>}

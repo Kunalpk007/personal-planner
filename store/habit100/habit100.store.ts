@@ -23,7 +23,7 @@ export interface Habit100State {
   weeks:  Record<number, Habit100Week>
 
   init:               (uid: string | null) => void
-  setupTracker:       (habits: HabitDef[], startDate: string, disciplinedThresholdPct: number, goals: string[]) => void
+  setupTracker:       (habits: HabitDef[], startDate: string, disciplinedThresholdPct: number, goals: string[], totalDays: number) => void
   setDayValue:        (date: string, habitId: string, value: Habit100Value | undefined) => void
   setDayExtra:        (date: string, field: 'mood' | 'energy' | 'stress' | 'anxiety' | 'sleepHours' | 'weight' | 'gratitude' | 'wrong', value: number | string | undefined) => void
   lockDay:            (date: string) => void
@@ -61,10 +61,10 @@ export const useHabit100Store = create<Habit100State>()(
         set({ uid, loaded: true })
       },
 
-      setupTracker(habits, startDate, disciplinedThresholdPct, goals) {
+      setupTracker(habits, startDate, disciplinedThresholdPct, goals, totalDays) {
         const now = new Date().toISOString()
         const meta: Habit100Meta = {
-          startDate, totalDays: 100, disciplinedThresholdPct,
+          startDate, totalDays, disciplinedThresholdPct,
           habits, goals: goals.slice(0, 3), badges: [],
           createdAt: now, updatedAt: now,
         }
