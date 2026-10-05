@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest'
 import {
   timeStrToMinutes, minutesToTimeStr, isHabitDone, dayStats, isDisciplined, programDayIndex,
   currentStreak, bestStreak, overallPct, weekPct, habitBreakdown, mostBrokenHabit, cellStatus,
-  checkNewMilestone, MILESTONE_DAYS,
+  checkNewMilestone, milestoneDays, MILESTONE_PCTS,
 } from '@/lib/habit100/scoring'
 import type { HabitDef, Habit100Day, Habit100Meta } from '@/store/habit100/types'
 
 function makeHabit(overrides: Partial<HabitDef> = {}): HabitDef {
-  return { id: 'h1', label: 'Habit', type: 'checkbox', counted: true, ...overrides }
+  return { id: 'h1', label: 'Habit', type: 'checkbox', ...overrides }
 }
 
 function makeMeta(overrides: Partial<Habit100Meta> = {}): Habit100Meta {
@@ -86,6 +86,25 @@ describe('isHabitDone', () => {
     expect(isHabitDone(h, 500)).toBe(true)
     expect(isHabitDone(h, 600)).toBe(false)
   })
+  it('book: false when value is not a book object', () => {
+    const h = makeHabit({ type: 'book', target: 10, comparison: 'gte' })
+    expect(isHabitDone(h, 'oops' as unknown as number)).toBe(false)
+    expect(isHabitDone(h, 5)).toBe(false)
+  })
+  it('book: false when habit has no target', () => {
+    const h = makeHabit({ type: 'book' })
+    expect(isHabitDone(h, { title: 'X', topic: 'Y', pages: 50 })).toBe(false)
+  })
+  it('book: decided by pages alone (gte), title/topic are detail only', () => {
+    const h = makeHabit({ type: 'book', target: 10, comparison: 'gte' })
+    expect(isHabitDone(h, { title: '', topic: '', pages: 10 })).toBe(true)
+    expect(isHabitDone(h, { title: 'Full detail', topic: 'Fiction', pages: 5 })).toBe(false)
+  })
+  it('book: lte comparison', () => {
+    const h = makeHabit({ type: 'book', target: 50, comparison: 'lte' })
+    expect(isHabitDone(h, { title: '', topic: '', pages: 50 })).toBe(true)
+    expect(isHabitDone(h, { title: '', topic: '', pages: 51 })).toBe(false)
+  })
   it('falls back to false for an unrecognized habit type', () => {
     const h = makeHabit({ type: 'bogus' as unknown as HabitDef['type'] })
     expect(isHabitDone(h, 'anything')).toBe(false)
@@ -95,17 +114,17 @@ describe('isHabitDone', () => {
 describe('dayStats / isDisciplined', () => {
   it('dayStats returns zeros when day is undefined', () => {
     const meta = makeMeta()
-    expect(dayStats(meta, undefined)).toEqual({ countedTotal: 1, countedDone: 0, pct: 0 })
+    expect(dayStats(meta, undefined)).toEqual({ habitTotal: 1, habitDone: 0, pct: 0 })
   })
-  it('dayStats returns zeros when there are no counted habits', () => {
-    const meta = makeMeta({ habits: [makeHabit({ counted: false })] })
+  it('dayStats returns zeros when there are no habits at all', () => {
+    const meta = makeMeta({ habits: [] })
     const day = makeDay('2026-01-01')
-    expect(dayStats(meta, day)).toEqual({ countedTotal: 0, countedDone: 0, pct: 0 })
+    expect(dayStats(meta, day)).toEqual({ habitTotal: 0, habitDone: 0, pct: 0 })
   })
-  it('dayStats computes pct from counted habits only', () => {
-    const meta = makeMeta({ habits: [makeHabit({ id: 'a', counted: true }), makeHabit({ id: 'b', counted: true }), makeHabit({ id: 'c', counted: false })] })
-    const day = makeDay('2026-01-01', { values: { a: true, b: false, c: true } })
-    expect(dayStats(meta, day)).toEqual({ countedTotal: 2, countedDone: 1, pct: 50 })
+  it('dayStats computes pct across every habit (everything counts)', () => {
+    const meta = makeMeta({ habits: [makeHabit({ id: 'a' }), makeHabit({ id: 'b' })] })
+    const day = makeDay('2026-01-01', { values: { a: true, b: false } })
+    expect(dayStats(meta, day)).toEqual({ habitTotal: 2, habitDone: 1, pct: 50 })
   })
   it('isDisciplined is false when day is undefined', () => {
     expect(isDisciplined(makeMeta(), undefined)).toBe(false)
@@ -145,7 +164,6 @@ describe('currentStreak', () => {
     const days = [
       makeDay('2026-01-01', { values: { h1: true } }),
       makeDay('2026-01-02', { values: { h1: true } }),
-      // 2026-01-03 (today) has no data yet
     ]
     expect(currentStreak(meta, days, '2026-01-03')).toBe(2)
   })
@@ -197,8 +215,8 @@ describe('bestStreak', () => {
 })
 
 describe('overallPct / weekPct', () => {
-  it('overallPct is 0 with no counted habits', () => {
-    const meta = makeMeta({ habits: [makeHabit({ counted: false })] })
+  it('overallPct is 0 with no habits at all', () => {
+    const meta = makeMeta({ habits: [] })
     expect(overallPct(meta, [], '2026-01-01')).toBe(0)
   })
 
@@ -222,8 +240,8 @@ describe('overallPct / weekPct', () => {
     expect(overallPct(meta, [], '2026-01-01')).toBe(0)
   })
 
-  it('weekPct is 0 with no counted habits', () => {
-    const meta = makeMeta({ habits: [makeHabit({ counted: false })] })
+  it('weekPct is 0 with no habits at all', () => {
+    const meta = makeMeta({ habits: [] })
     expect(weekPct(meta, [], '2026-01-05', '2026-01-08')).toBe(0)
   })
 
@@ -282,7 +300,7 @@ describe('mostBrokenHabit', () => {
     expect(mostBrokenHabit(meta, days, '2026-01-01')).toBeNull()
   })
 
-  it('identifies the worst-performing counted habit', () => {
+  it('identifies the worst-performing habit', () => {
     const meta = makeMeta({ habits: [makeHabit({ id: 'a', label: 'Good' }), makeHabit({ id: 'b', label: 'Bad' })], startDate: '2026-01-01' })
     const days = [
       makeDay('2026-01-01', { values: { a: true, b: false } }),
@@ -319,21 +337,40 @@ describe('cellStatus', () => {
   })
 })
 
+describe('milestoneDays', () => {
+  it('matches the original fixed 25/50/75/100 for a 100-day run', () => {
+    expect(milestoneDays(100)).toEqual([25, 50, 75, 100])
+  })
+  it('scales proportionally for a shorter run', () => {
+    expect(milestoneDays(30)).toEqual([8, 15, 23, 30])
+  })
+  it('never returns a day below 1', () => {
+    for (const d of milestoneDays(1)) expect(d).toBeGreaterThanOrEqual(1)
+  })
+  it('MILESTONE_PCTS is exposed for callers that need the raw percentages', () => {
+    expect(MILESTONE_PCTS).toEqual([0.25, 0.5, 0.75, 1])
+  })
+})
+
 describe('checkNewMilestone', () => {
   it('returns null when no threshold has been crossed yet', () => {
-    expect(checkNewMilestone(10, [])).toBeNull()
+    expect(checkNewMilestone(10, 100, [])).toBeNull()
   })
   it('returns the crossed milestone when not yet unlocked', () => {
-    expect(checkNewMilestone(25, [])).toBe(25)
+    expect(checkNewMilestone(25, 100, [])).toBe(25)
   })
   it('returns null once that milestone is already unlocked', () => {
-    expect(checkNewMilestone(25, [25])).toBeNull()
+    expect(checkNewMilestone(25, 100, [25])).toBeNull()
   })
   it('returns the earliest un-unlocked milestone when multiple are crossed at once', () => {
-    expect(checkNewMilestone(100, [])).toBe(25)
-    expect(checkNewMilestone(100, [25, 50])).toBe(75)
+    expect(checkNewMilestone(100, 100, [])).toBe(25)
+    expect(checkNewMilestone(100, 100, [25, 50])).toBe(75)
   })
   it('returns null once every milestone is unlocked', () => {
-    expect(checkNewMilestone(100, [...MILESTONE_DAYS])).toBeNull()
+    expect(checkNewMilestone(100, 100, milestoneDays(100))).toBeNull()
+  })
+  it('scales to a custom run length', () => {
+    expect(checkNewMilestone(8, 30, [])).toBe(8)
+    expect(checkNewMilestone(30, 30, [8, 15, 23])).toBe(30)
   })
 })

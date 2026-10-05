@@ -3,7 +3,7 @@ import { useHabit100Store, partializeHabit100 } from '@/store/habit100/habit100.
 import type { HabitDef, Habit100Day, Habit100Meta, Habit100Week } from '@/store/habit100/types'
 
 function habit(overrides: Partial<HabitDef> = {}): HabitDef {
-  return { id: 'h1', label: 'Habit', type: 'checkbox', counted: true, ...overrides }
+  return { id: 'h1', label: 'Habit', type: 'checkbox', ...overrides }
 }
 
 beforeEach(() => {
@@ -31,8 +31,8 @@ describe('init', () => {
 })
 
 describe('setupTracker', () => {
-  it('creates meta with the given habits/dates/threshold/goals', () => {
-    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, ['Goal A'])
+  it('creates meta with the given habits/dates/threshold/goals/totalDays', () => {
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, ['Goal A'], 100)
     const meta = useHabit100Store.getState().meta!
     expect(meta.startDate).toBe('2026-01-01')
     expect(meta.totalDays).toBe(100)
@@ -43,14 +43,19 @@ describe('setupTracker', () => {
   })
 
   it('caps goals at 3', () => {
-    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, ['A', 'B', 'C', 'D'])
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, ['A', 'B', 'C', 'D'], 100)
     expect(useHabit100Store.getState().meta!.goals).toEqual(['A', 'B', 'C'])
+  })
+
+  it('respects a custom totalDays (not hardcoded to 100)', () => {
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [], 30)
+    expect(useHabit100Store.getState().meta!.totalDays).toBe(30)
   })
 })
 
 describe('setDayValue', () => {
   beforeEach(() => {
-    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [])
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [], 100)
   })
 
   it('creates a day record on first write', () => {
@@ -80,7 +85,7 @@ describe('setDayValue', () => {
 
 describe('setDayExtra', () => {
   beforeEach(() => {
-    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [])
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [], 100)
   })
 
   it('sets an extra field on a new day', () => {
@@ -129,13 +134,13 @@ describe('unlockMilestone', () => {
   })
 
   it('adds a milestone to meta.badges', () => {
-    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [])
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [], 100)
     useHabit100Store.getState().unlockMilestone(25)
     expect(useHabit100Store.getState().meta!.badges).toEqual([25])
   })
 
   it('does not duplicate an already-unlocked milestone', () => {
-    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [])
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [], 100)
     useHabit100Store.getState().unlockMilestone(25)
     useHabit100Store.getState().unlockMilestone(25)
     expect(useHabit100Store.getState().meta!.badges).toEqual([25])
@@ -144,7 +149,7 @@ describe('unlockMilestone', () => {
 
 describe('resetTracker', () => {
   it('clears meta/days/weeks', () => {
-    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [])
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [], 100)
     useHabit100Store.getState().setDayValue('2026-01-01', 'h1', true)
     useHabit100Store.getState().saveWeeklyReview(1, 'a', 'b')
     useHabit100Store.getState().resetTracker()
@@ -172,7 +177,7 @@ describe('mergeFromCloud', () => {
   })
 
   it('keeps local meta when cloud is null', () => {
-    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [])
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [], 100)
     const local = useHabit100Store.getState().meta
     useHabit100Store.getState().mergeFromCloud(null, [], [])
     expect(useHabit100Store.getState().meta).toEqual(local)

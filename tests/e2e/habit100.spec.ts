@@ -22,7 +22,7 @@ async function seedHabit100(page: Page, state: Record<string, unknown>) {
 }
 
 function habit(overrides: Record<string, unknown> = {}) {
-  return { id: 'h1', label: 'Drink water', type: 'checkbox', counted: true, ...overrides }
+  return { id: 'h1', label: 'Drink water', type: 'checkbox', ...overrides }
 }
 
 function meta(overrides: Record<string, unknown> = {}) {
@@ -40,10 +40,10 @@ test.describe('Consistency Tracker (habit100)', () => {
     await setupAuthenticatedPage(page, context, { morningQuoteShown: { [TODAY]: true }, morningTop3Shown: { [TODAY]: true } })
     await page.goto('/dashboard')
 
-    await expect(page.getByText('Set up your 100-day run')).toBeVisible()
-    await page.getByText('Set up your 100-day run').click()
+    await expect(page.getByText('Set up your consistency run')).toBeVisible()
+    await page.getByText('Set up your consistency run').click()
     await expect(page).toHaveURL(/\/habit100$/)
-    await expect(page.getByText('Set up your 100-day run')).toBeVisible() // the SetupWizard itself
+    await expect(page.getByText('Set up your consistency run')).toBeVisible() // the SetupWizard itself
   })
 
   test('Setup wizard: remove a habit, start the run, land on Home with Day 1', async ({ page, context }) => {
@@ -51,12 +51,44 @@ test.describe('Consistency Tracker (habit100)', () => {
     await setupAuthenticatedPage(page, context, { morningQuoteShown: { [TODAY]: true }, morningTop3Shown: { [TODAY]: true } })
     await page.goto('/habit100')
 
-    await expect(page.getByText('Set up your 100-day run')).toBeVisible()
-    // Remove the first habit row
-    await page.getByRole('button', { name: /Remove/ }).first().click()
+    await expect(page.getByText('Set up your consistency run')).toBeVisible()
+    // Remove the first habit card
+    await page.locator('.habit100-card-remove').first().click()
     await page.getByRole('button', { name: 'Start my 100 days' }).click()
 
     await expect(page.getByText(/Day 1 \/ 100/)).toBeVisible()
+  })
+
+  test('Setup wizard: a time-type habit\'s target shows a real time picker, not raw minutes', async ({ page, context }) => {
+    await freezeRandomAndSuppressPopups(page)
+    await setupAuthenticatedPage(page, context, { morningQuoteShown: { [TODAY]: true }, morningTop3Shown: { [TODAY]: true } })
+    await page.goto('/habit100')
+
+    const card = page.locator('.habit100-card').filter({ hasText: 'Asleep before' })
+    const timeInput = card.locator('input[type="time"]')
+    await expect(timeInput).toHaveValue('23:00') // not "1380"
+    // No raw number input should be showing for this card
+    await expect(card.locator('input[type="number"]')).toHaveCount(0)
+
+    await timeInput.fill('22:30')
+    await page.getByRole('button', { name: 'Start my 100 days' }).click()
+    await expect(page.getByText(/Day 1 \/ 100/)).toBeVisible()
+
+    const state = await page.evaluate(() => JSON.parse(localStorage.getItem('habit100_v1')!).state)
+    const sleepHabit = state.meta.habits.find((h: { id: string }) => h.id === 'sleep11')
+    expect(sleepHabit.target).toBe(22 * 60 + 30)
+  })
+
+  test('Setup wizard: picking a custom run length changes the "Start my N days" button label', async ({ page, context }) => {
+    await freezeRandomAndSuppressPopups(page)
+    await setupAuthenticatedPage(page, context, { morningQuoteShown: { [TODAY]: true }, morningTop3Shown: { [TODAY]: true } })
+    await page.goto('/habit100')
+
+    await page.getByRole('button', { name: '30', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Start my 30 days' })).toBeVisible()
+    await page.getByRole('button', { name: 'Start my 30 days' }).click()
+
+    await expect(page.getByText(/Day 1 \/ 30/)).toBeVisible()
   })
 
   test('Home: habit log autosaves (checkbox immediate, numeric on blur) without a submit button', async ({ page, context }) => {
