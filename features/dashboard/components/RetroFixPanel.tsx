@@ -23,10 +23,10 @@ import { getFixableDays }  from '@/lib/engine/retroFix'
  *  Rest Day/miss verdict and restores the streak, refunding the XP/reward
  *  points that were deducted (see submitRetroFix in tasks.slice.ts).
  *
- *  The fixable window is a fixed rule — 12:00 PM the day after — not a
- *  Settings-configurable option (see lib/engine/retroFix.ts). Because of
- *  that rule, there is only ever at most one fixable day at a time, always
- *  "yesterday" relative to whenever this is checked. */
+ *  The fixable window is a fixed rule — through the end of the day after —
+ *  not a Settings-configurable option (see lib/engine/retroFix.ts). Because
+ *  of that rule, there is only ever at most one fixable day at a time,
+ *  always "yesterday" relative to whenever this is checked. */
 export function RetroFixPanel({ today }: { today: string }) {
   const history         = usePlannerStore(s => s.history)
   const allTasks         = usePlannerStore(s => s.tasks)
@@ -94,7 +94,7 @@ export function RetroFixPanel({ today }: { today: string }) {
           <div>
             <h3 className="text-[16px] font-extrabold tracking-tight mb-0.5">Fix Yesterday&apos;s Tasks?</h3>
             <p className="text-[12px] text-[var(--vx-fg-3)]">
-              {formatDateShort(date)} got auto-marked as a {entry?.rest ? 'Rest Day' : entry?.frozen ? 'streak-freeze day' : 'missed day'}. Fixable until 12 PM today.
+              {formatDateShort(date)} got auto-marked as a {entry?.rest ? 'Rest Day' : entry?.frozen ? 'streak-freeze day' : 'missed day'}. Fixable until end of day today.
             </p>
           </div>
         </div>

@@ -153,7 +153,7 @@ export default function DashboardPage() {
 
         {/* Missed check-offs reconciliation — a two-step confirm+checklist
             modal (auto-opens, doesn't sit as a persistent banner), fixable
-            until a fixed, non-configurable 12:00 PM the day after. See
+            until a fixed, non-configurable end of the day after. See
             RetroFixPanel.tsx / lib/engine/retroFix.ts. */}
         <RetroFixPanel today={today} />
 
