@@ -59,6 +59,26 @@ test.describe('Consistency Tracker (habit100)', () => {
     await expect(page.getByText(/Day 1 \/ 100/)).toBeVisible()
   })
 
+  test('Setup wizard: a time-type habit\'s target shows a real time picker, not raw minutes', async ({ page, context }) => {
+    await freezeRandomAndSuppressPopups(page)
+    await setupAuthenticatedPage(page, context, { morningQuoteShown: { [TODAY]: true }, morningTop3Shown: { [TODAY]: true } })
+    await page.goto('/habit100')
+
+    const row = page.locator('.habit100-row').filter({ hasText: 'Asleep before 11 PM' })
+    const timeInput = row.locator('input[type="time"]')
+    await expect(timeInput).toHaveValue('23:00') // not "1380"
+    // No raw number input should be showing for this row
+    await expect(row.locator('input[type="number"]')).toHaveCount(0)
+
+    await timeInput.fill('22:30')
+    await page.getByRole('button', { name: 'Start my 100 days' }).click()
+    await expect(page.getByText(/Day 1 \/ 100/)).toBeVisible()
+
+    const state = await page.evaluate(() => JSON.parse(localStorage.getItem('habit100_v1')!).state)
+    const sleepHabit = state.meta.habits.find((h: { id: string }) => h.id === 'sleep11')
+    expect(sleepHabit.target).toBe(22 * 60 + 30)
+  })
+
   test('Home: habit log autosaves (checkbox immediate, numeric on blur) without a submit button', async ({ page, context }) => {
     await freezeRandomAndSuppressPopups(page)
     await setupAuthenticatedPage(page, context, { morningQuoteShown: { [TODAY]: true }, morningTop3Shown: { [TODAY]: true } })

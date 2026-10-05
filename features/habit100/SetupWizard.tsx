@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useHabit100Store } from '@/store/habit100/habit100.store'
 import { defaultHabits, DEFAULT_DISCIPLINED_THRESHOLD_PCT } from '@/lib/habit100/defaults'
 import { uid } from '@/lib/engine/cutoff'
+import { minutesToTimeStr, timeStrToMinutes } from '@/lib/habit100/scoring'
 import type { HabitDef, HabitType, Comparison } from '@/store/habit100/types'
 
 const TYPE_LABELS: Record<HabitType, string> = { checkbox: 'Yes/No', numeric: 'Number', time: 'Time', text: 'Text' }
@@ -70,17 +71,32 @@ export function SetupWizard() {
             {(h.type === 'numeric' || h.type === 'time') && (
               <>
                 <select className="vx-field" style={{ width: 70 }} value={h.comparison ?? 'gte'} onChange={e => setComparison(h.id, e.target.value as Comparison)}>
-                  <option value="gte">≥</option>
-                  <option value="lte">≤</option>
+                  <option value="gte">{h.type === 'time' ? 'after' : '≥'}</option>
+                  <option value="lte">{h.type === 'time' ? 'before' : '≤'}</option>
                 </select>
-                <input
-                  type="number"
-                  className="vx-field"
-                  style={{ width: 70 }}
-                  value={h.target ?? 0}
-                  onChange={e => setTarget(h.id, Number(e.target.value))}
-                />
-                {h.unit && <span className="habit100-unit">{h.unit}</span>}
+                {h.type === 'time' ? (
+                  <input
+                    type="time"
+                    className="vx-field"
+                    style={{ width: 110 }}
+                    value={typeof h.target === 'number' ? minutesToTimeStr(h.target) : ''}
+                    onChange={e => {
+                      const mins = timeStrToMinutes(e.target.value)
+                      setTarget(h.id, mins === null ? undefined : mins)
+                    }}
+                  />
+                ) : (
+                  <>
+                    <input
+                      type="number"
+                      className="vx-field"
+                      style={{ width: 70 }}
+                      value={h.target ?? 0}
+                      onChange={e => setTarget(h.id, Number(e.target.value))}
+                    />
+                    {h.unit && <span className="habit100-unit">{h.unit}</span>}
+                  </>
+                )}
               </>
             )}
             <button type="button" onClick={() => removeHabit(h.id)} className="vx-btn vx-btn-ghost" style={{ padding: '4px 10px' }} aria-label={`Remove ${h.label}`}>✕</button>
