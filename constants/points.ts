@@ -57,15 +57,6 @@ export const STREAK_BROKEN_XP_PENALTY = 10 // per day, every day the streak stay
 export const SICK_ALLOWANCE_PER_MONTH = 2  // free "sick" mood days/month — no XP penalty
 export const SHOWED_UP_BONUS_PCT      = 0.05 // wallet-only bonus, 5% of the day's target, on first open
 
-// ─── Focus Time (Dashboard) ─────────────────────────────────────────────────
-// A completed, uninterrupted focus session credits both the reward wallet and
-// rank XP, scaled by the user-chosen session length (minutes). Rate is
-// calibrated off the old fixed 60min→10pts anchor; xp is always 2x pts.
-export function focusReward(minutes: number): { pts: number; xp: number } {
-  const pts = Math.max(1, Math.round(minutes / 6))
-  return { pts, xp: pts * 2 }
-}
-
 export const PIN_LENGTH           = 6               // digits
 /** Digit count used before the 5→6 digit PIN upgrade. Existing users with a
  *  PIN hashed at this length are asked to re-verify it once, then set a new

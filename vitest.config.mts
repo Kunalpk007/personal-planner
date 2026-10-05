@@ -13,6 +13,9 @@ export default defineConfig({
         'lib/engine/**/*.ts',
         'store/slices/**/*.ts',
         'store/userScope.ts',
+        'lib/habit100/scoring.ts',
+        'lib/habit100/defaults.ts',
+        'store/habit100/habit100.store.ts',
       ],
       exclude: ['**/*.d.ts', 'tests/**'],
       thresholds: {

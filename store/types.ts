@@ -105,17 +105,6 @@ export interface Reward {
 export type RewardApprovalGate  = 'cost' | 'habit'
 export type PendingApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
 
-/** A completed Dashboard Focus Time session (see constants/points.ts's
- *  focusReward) — logged so today's total focus time/reward can be shown
- *  and so a session can never be double-counted (see completeFocusSession). */
-export interface FocusSessionLog {
-  date:    string        // day-key the session was completed on
-  minutes: number
-  pts:     number
-  xp:      number
-  at:      string        // ISO completion timestamp
-}
-
 /** Local (offline-first) mirror of the owner's own pending reward-approval
  *  requests — see store/slices/rewardApprovals.slice.ts. The authoritative
  *  approve/reject action happens on the Notary's device via the Firestore
@@ -382,7 +371,6 @@ export interface AppStateData {
   bufferLog: Array<{ date: string; note: string; xp: string; type: string }>
   rewardRedemptions: Array<{ date: string; title: string; cost: number; at: string }>
   pendingRewardApprovals: PendingRewardApproval[]
-  focusSessions: FocusSessionLog[]
 
   badges:     Badge[]
   badgeDates: Record<string, string>
@@ -534,9 +522,6 @@ export interface AppActions {
   removeZone:   (id: string) => void
   setZoneWeight: (id: string, weight: number) => void
 
-  // Focus Time (Dashboard) — completing a full, uninterrupted session credits
-  // both the reward wallet and rank XP (see constants/points.ts FOCUS_REWARDS).
-  completeFocusSession: (today: string, minutes: number) => { pts: number; xp: number }
 
   // Goals (Section 3 of docs/PHASE2_SOCIAL_LIFE_OS.md) — definitions only;
   // progress is always derived, never stored (see lib/engine/goals.ts).

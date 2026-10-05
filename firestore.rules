@@ -29,6 +29,21 @@ rules_version = '2';
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
 
+      // ── Consistency Tracker ("habit100") — fully separate from planner/** ──
+      // One small doc per day/week (not nested under users/{uid}/habit100/**,
+      // since Firestore subcollections need a parent DOCUMENT, not a
+      // collection — see lib/firebase/habit100.ts's header comment), mirroring
+      // the journal subcollection pattern. Private to the owner only.
+      match /users/{userId}/habit100/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /users/{userId}/habit100days/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /users/{userId}/habit100weeks/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
       // ── Public profile (friends-readable name + rankXP) ───────────────────
       // Lets friend tiles show each other's XP without exposing the planner doc.
       match /users/{userId}/public/{document=**} {
