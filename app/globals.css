@@ -1244,11 +1244,16 @@ textarea.vx-field { resize: vertical; min-height: 64px; }
 .vx-milestone .vx-m-icon { width: 30px; height: 30px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; background: var(--vx-surface-tint); }
 .vx-milestone.vx-current .vx-m-icon { background: var(--vx-grad-hero); }
 
-/* ── Minute wheel (FocusTimeCard duration picker) ── */
-.vx-minute-wheel { position: relative; height: 180px; overflow-y: scroll; scroll-snap-type: y mandatory; text-align: center; -webkit-overflow-scrolling: touch; }
-.vx-minute-wheel-item { display: flex; align-items: center; justify-content: center; scroll-snap-align: center; font-size: 15px; color: var(--vx-fg-4); transition: color .15s, font-weight .15s; }
-.vx-minute-wheel-item[data-active="true"] { color: var(--vx-fg-1); font-weight: 800; font-size: 17px; }
-.vx-minute-wheel-highlight { position: absolute; left: 0; right: 0; top: 50%; height: 36px; transform: translateY(-50%); border-top: 1px solid var(--vx-border); border-bottom: 1px solid var(--vx-border); pointer-events: none; }
+/* ── Consistency Tracker ("habit100") ── */
+.habit100-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; background: var(--vx-card); border: 1px solid var(--vx-border); }
+.habit100-row-label { font-size: 12.5px; color: var(--vx-fg-2); }
+.habit100-unit { font-size: 10.5px; color: var(--vx-fg-4); min-width: 28px; }
+.habit100-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 4px; }
+.habit100-cell { aspect-ratio: 1; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; border: 1px solid var(--vx-border); background: var(--vx-card); color: var(--vx-fg-4); }
+.habit100-cell[data-status="disciplined"] { background: color-mix(in srgb, var(--vx-emerald) 22%, transparent); border-color: color-mix(in srgb, var(--vx-emerald) 40%, transparent); color: var(--vx-emerald); }
+.habit100-cell[data-status="partial"] { background: color-mix(in srgb, var(--vx-amber) 20%, transparent); border-color: color-mix(in srgb, var(--vx-amber) 40%, transparent); color: var(--vx-amber); }
+.habit100-cell[data-status="missed"] { background: color-mix(in srgb, var(--red) 16%, transparent); border-color: color-mix(in srgb, var(--red) 35%, transparent); color: var(--red); }
+.habit100-cell[data-status="today"] { border: 2px solid var(--vx-violet); color: var(--vx-fg-1); }
 
 /* ── Streak calendar chip (StreakHistoryModal) ── */
 .vx-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }

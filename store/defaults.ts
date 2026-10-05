@@ -32,7 +32,6 @@ export const INITIAL_STATE: AppStateData = {
   bufferLog: [],
   rewardRedemptions: [],
   pendingRewardApprovals: [],
-  focusSessions: [],
 
   badges:     [],
   badgeDates: {},

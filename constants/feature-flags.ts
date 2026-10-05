@@ -11,6 +11,10 @@ export const FLAGS = {
   AI_SUMMARY:     process.env.NEXT_PUBLIC_ENABLE_AI_SUMMARY     === 'true',
   PUSH_NOTIFS:    process.env.NEXT_PUBLIC_ENABLE_PUSH_NOTIFS    === 'true',
   ANALYTICS:      process.env.NEXT_PUBLIC_ANALYTICS_ENABLED     === 'true',
+  /** Consistency Tracker ("habit100") — defaults ON (unlike the other flags
+   *  above, which default off pending rollout); set NEXT_PUBLIC_ENABLE_HABIT100=false
+   *  to switch it off centrally if something's wrong post-ship. */
+  HABIT100:       process.env.NEXT_PUBLIC_ENABLE_HABIT100       !== 'false',
 } as const
 
 export type FeatureFlag = keyof typeof FLAGS

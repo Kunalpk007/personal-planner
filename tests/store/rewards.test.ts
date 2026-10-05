@@ -256,35 +256,3 @@ describe('addReward / removeReward', () => {
     expect(rewards.find(r => r.id === id)).toBeUndefined()
   })
 })
-
-describe('completeFocusSession', () => {
-  it('credits wallet + rankXP per the focusReward formula and logs the session', () => {
-    usePlannerStore.setState({ rewardWallet: 0, rankXP: 0, focusSessions: [] })
-
-    const reward = usePlannerStore.getState().completeFocusSession('2024-01-08', 25)
-
-    expect(reward).toEqual({ pts: 4, xp: 8 }) // round(25/6)=4, xp=2*pts
-    expect(usePlannerStore.getState().rewardWallet).toBe(4)
-    expect(usePlannerStore.getState().rankXP).toBe(8)
-    expect(usePlannerStore.getState().focusSessions).toHaveLength(1)
-    expect(usePlannerStore.getState().focusSessions[0]).toMatchObject({ date: '2024-01-08', minutes: 25, pts: 4, xp: 8 })
-  })
-
-  it('scales rewards up for longer sessions (any user-chosen minute value) and accumulates across sessions', () => {
-    usePlannerStore.setState({ rewardWallet: 0, rankXP: 0, focusSessions: [] })
-
-    usePlannerStore.getState().completeFocusSession('2024-01-08', 45) // round(45/6)=8 -> 8pts/16xp
-    usePlannerStore.getState().completeFocusSession('2024-01-08', 60) // round(60/6)=10 -> 10pts/20xp
-    usePlannerStore.getState().completeFocusSession('2024-01-08', 10) // round(10/6)=2 -> 2pts/4xp, arbitrary duration
-
-    expect(usePlannerStore.getState().rewardWallet).toBe(8 + 10 + 2)
-    expect(usePlannerStore.getState().rankXP).toBe(16 + 20 + 4)
-    expect(usePlannerStore.getState().focusSessions).toHaveLength(3)
-  })
-
-  it('never rewards zero points for a very short session', () => {
-    usePlannerStore.setState({ rewardWallet: 0, rankXP: 0, focusSessions: [] })
-    const reward = usePlannerStore.getState().completeFocusSession('2024-01-08', 1)
-    expect(reward).toEqual({ pts: 1, xp: 2 })
-  })
-})

@@ -202,22 +202,6 @@ test.describe('batch fix verification (2026-09-07 12-item batch)', () => {
     expect(state.frozenDays['2026-06-11']).toBeUndefined()
   })
 
-  test('7. focus time uses a scrollable minute picker instead of 3 fixed buttons', async ({ page, context }) => {
-    await setup(page)
-    await setupAuthenticatedPage(page, context, { ...noMorningPopups('2026-06-12') })
-    await page.goto('/dashboard')
-
-    await page.getByRole('button', { name: '🕐 Set Focus Time' }).click()
-    await expect(page.getByRole('dialog')).toContainText('Start focus session?')
-    await expect(page.locator('.vx-minute-wheel')).toBeVisible()
-    await expect(page.locator('.vx-minute-wheel-item[data-active="true"]')).toHaveText('25 min')
-
-    await page.getByRole('button', { name: 'Start Focus' }).click()
-    await expect(page.locator('.vx-focus-overlay')).toContainText('Focusing — 25 min session')
-    await page.getByRole('button', { name: 'Cancel session' }).click()
-    await expect(page.getByText('Focus session cancelled — no reward for an interrupted session.')).toBeVisible()
-  })
-
   test('8. Tomorrow\'s Top 3 gets a zone/priority picker, and cancel actually removes it', async ({ page, context }) => {
     await setup(page)
     await setupAuthenticatedPage(page, context, { morningQuoteShown: { '2026-06-12': true } })

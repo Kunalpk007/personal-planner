@@ -1,7 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState, Reward, Zone, PendingRewardApproval, PendingApprovalStatus } from '../types'
 import { uid } from '@/lib/engine/cutoff'
-import { focusReward } from '@/constants/points'
 
 export interface RewardsSlice {
   addReward:    (r: Omit<Reward, 'id'>) => void
@@ -10,7 +9,6 @@ export interface RewardsSlice {
   addZone:      (name: string, color: string) => void
   removeZone:   (id: string) => void
   setZoneWeight: (id: string, weight: number) => void
-  completeFocusSession: (today: string, minutes: number) => { pts: number; xp: number }
 
   requestRewardApproval:   (approval: Omit<PendingRewardApproval, 'status'>) => void
   resolvePendingApproval:  (id: string, status: PendingApprovalStatus) => void
@@ -109,18 +107,5 @@ export const createRewardsSlice: StateCreator<AppState, [], [], RewardsSlice> = 
 
   setZoneWeight(id, weight) {
     set(s => ({ zones: s.zones.map(z => z.id === id ? { ...z, weight } : z) }))
-  },
-
-  // Focus Time — called only once, when a session's countdown reaches zero
-  // uninterrupted (see features/dashboard/components/FocusTimeCard.tsx). No
-  // reward for a cancelled/abandoned session.
-  completeFocusSession(today, minutes) {
-    const reward = focusReward(minutes)
-    set(s => ({
-      rewardWallet: s.rewardWallet + reward.pts,
-      rankXP:       s.rankXP + reward.xp,
-      focusSessions: [...s.focusSessions, { date: today, minutes, pts: reward.pts, xp: reward.xp, at: new Date().toISOString() }],
-    }))
-    return reward
   },
 })

@@ -6,7 +6,6 @@ import { usePlannerStore } from '@/store'
 import { MoodBar }         from '@/features/dashboard/components/MoodBar'
 import { StatGrid }        from '@/features/dashboard/components/StatGrid'
 import { RankProgress }    from '@/features/dashboard/components/RankProgress'
-import { GradientRing }    from '@/ui/GradientRing'
 import { SubmitArea }      from '@/features/dashboard/components/SubmitArea'
 import { RetroFixPanel }   from '@/features/dashboard/components/RetroFixPanel'
 import { TomorrowTop3Card } from '@/features/dashboard/components/TomorrowTop3Card'
@@ -20,8 +19,8 @@ import { StreakHistoryModal } from '@/features/dashboard/components/StreakHistor
 import { MorningQuoteOverlay } from '@/features/dashboard/components/MorningQuoteOverlay'
 import { MorningTop3Prompt } from '@/features/dashboard/components/MorningTop3Prompt'
 import { LifeScoreModal }  from '@/features/dashboard/components/LifeScoreCard'
-import { FocusTimeCard }   from '@/features/dashboard/components/FocusTimeCard'
-import { WaterTrackerCard } from '@/features/dashboard/components/WaterTrackerCard'
+import { ConsistencyRow }  from '@/features/dashboard/components/ConsistencyRow'
+import { ConsistencyTrendPreview } from '@/features/dashboard/components/ConsistencyTrendPreview'
 import { CalmDownButton }  from '@/features/wellness/CalmDownButton'
 import { NotificationBell } from '@/ui/NotificationBell'
 import { FLAGS }           from '@/constants/feature-flags'
@@ -182,43 +181,18 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Day progress */}
-        <motion.div
-          className="vx-glass flex items-center gap-5"
-          initial={{ opacity: 0, y: 22, scale: 0.97, filter: 'blur(4px)' }}
-          animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.21 }}
-        >
-          <GradientRing pct={pct} />
-          <div className="flex-1 min-w-0">
-            {/* "Points today" and "Done today" were their own separate stat
-                tiles below (see StatGrid) even though this card already
-                showed the points progress — redundant. Task count now folds
-                into this same line instead of a standalone tile. Both this
-                line and the heading above it are +2px over their previous
-                size per explicit request. */}
-            <div className="text-[15.5px] font-semibold mb-1.5">Day progress</div>
-            <div className="text-[13.5px] text-[var(--text3)] leading-relaxed">
-              {pct >= 100
-                ? "Target hit — submit whenever you're ready."
-                : (
-                  <>
-                    {earned}/{target} pts &amp; {done.length}/{tasks.length} tasks so far.<br />
-                    Keep the streak alive.
-                  </>
-                )}
-            </div>
-          </div>
-        </motion.div>
+        {/* Day Progress / Track Consistency — split into two tiles side by
+            side, per explicit request (was one full-width Day Progress
+            card). See ConsistencyRow.tsx. */}
+        <ConsistencyRow today={today} earned={earned} target={target} done={done.length} total={tasks.length} />
+
+        {/* Compact trend preview, tap-to-expand into the tracker's full
+            charts on /habit100/progress — renders nothing until a tracker
+            exists. See ConsistencyTrendPreview.tsx. */}
+        <ConsistencyTrendPreview today={today} />
 
         <StatGrid today={today} onLifeScoreClick={() => setLifeScoreOpen(true)} />
         <RankProgress />
-
-        {/* Water Tracker now leads Focus Time — per explicit reordering
-            request. */}
-        <WaterTrackerCard today={today} />
-
-        <FocusTimeCard today={today} />
 
         {/* Calm Down floating button + breathing overlay — Dashboard only,
             fixed position (doesn't move on scroll). */}
