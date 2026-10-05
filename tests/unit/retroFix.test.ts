@@ -35,12 +35,13 @@ function makeState(overrides: Partial<FixableState> = {}): FixableState {
 }
 
 describe('getFixableDays', () => {
-  it('includes an auto-resolved rest day before its noon-next-day deadline', () => {
+  it('includes an auto-resolved rest day before its end-of-next-day deadline, even in the evening', () => {
     const state = makeState({
       history: [makeHistoryEntry('2024-01-09', { rxp: 20, rest: true, auto: true })],
       tasks: [makeTask({ date: '2024-01-09' })],
     })
-    expect(getFixableDays(state, '2024-01-10', new Date('2024-01-10T11:00:00'))).toEqual(['2024-01-09'])
+    // 8pm the next day — the real-world case the noon-only deadline used to miss
+    expect(getFixableDays(state, '2024-01-10', new Date('2024-01-10T20:00:00'))).toEqual(['2024-01-09'])
   })
 
   it('includes an auto-resolved plain miss (streak already broken) before its deadline', () => {
@@ -92,20 +93,20 @@ describe('getFixableDays', () => {
     expect(getFixableDays(state, '2024-01-10', new Date('2024-01-10T09:00:00'))).toEqual([])
   })
 
-  it('excludes a day once its noon-next-day deadline has passed (exactly at the deadline)', () => {
+  it('excludes a day once its end-of-next-day deadline has passed (the day after that)', () => {
     const state = makeState({
       history: [makeHistoryEntry('2024-01-09', { rxp: 20 })],
       tasks: [makeTask({ date: '2024-01-09' })],
     })
-    expect(getFixableDays(state, '2024-01-10', new Date('2024-01-10T12:00:00'))).toEqual([])
+    expect(getFixableDays(state, '2024-01-11', new Date('2024-01-11T00:00:00'))).toEqual([])
   })
 
-  it('includes a day right up until its deadline (11:59am the day after)', () => {
+  it('includes a day right up until its deadline (11:59pm the day after)', () => {
     const state = makeState({
       history: [makeHistoryEntry('2024-01-09', { rxp: 20 })],
       tasks: [makeTask({ date: '2024-01-09' })],
     })
-    expect(getFixableDays(state, '2024-01-10', new Date('2024-01-10T11:59:00'))).toEqual(['2024-01-09'])
+    expect(getFixableDays(state, '2024-01-10', new Date('2024-01-10T23:58:00'))).toEqual(['2024-01-09'])
   })
 
   it('excludes a day that already met minPts (already fully successful, nothing to fix)', () => {
@@ -136,10 +137,10 @@ describe('getFixableDays', () => {
 
   it('only ever surfaces the single most recent auto-resolved day, never a backlog', () => {
     // Two consecutive auto-resolved misses. By the time "today" is
-    // 2024-01-11, 2024-01-09's own deadline (2024-01-10T12:00) has already
-    // passed, even though 2024-01-10's deadline (2024-01-11T12:00) is still
-    // open — this is what the fixed noon-next-day rule guarantees on its
-    // own, without needing an explicit backlog cap.
+    // 2024-01-11, 2024-01-09's own deadline (2024-01-10T23:59:59) has
+    // already passed, even though 2024-01-10's deadline (2024-01-11T23:59:59)
+    // is still open — this is what the fixed end-of-next-day rule guarantees
+    // on its own, without needing an explicit backlog cap.
     const state = makeState({
       history: [
         makeHistoryEntry('2024-01-09', { rxp: 10 }),
@@ -161,11 +162,11 @@ describe('getFixableDays', () => {
 })
 
 describe('retroFixDeadline', () => {
-  it('returns noon the day after the given date', () => {
-    expect(retroFixDeadline('2024-01-09')).toEqual(new Date('2024-01-10T12:00:00'))
+  it('returns the end of the day after the given date', () => {
+    expect(retroFixDeadline('2024-01-09')).toEqual(new Date('2024-01-10T23:59:59'))
   })
 
   it('handles a month boundary', () => {
-    expect(retroFixDeadline('2024-01-31')).toEqual(new Date('2024-02-01T12:00:00'))
+    expect(retroFixDeadline('2024-01-31')).toEqual(new Date('2024-02-01T23:59:59'))
   })
 })

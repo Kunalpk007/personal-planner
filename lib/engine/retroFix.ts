@@ -1,11 +1,20 @@
 import type { AppState } from '@/store/types'
 import { getMinPts } from './scoring'
 
-/** The moment a given day's retro-fix window closes: 12:00 PM (noon) the
- *  day after. Fixed and non-configurable — see getFixableDays' doc comment
- *  for why this replaced the earlier Settings-configurable rolling window. */
+/** The moment a given day's retro-fix window closes: the END of the day
+ *  after (23:59:59), not just its morning. Fixed and non-configurable — see
+ *  getFixableDays' doc comment for why this replaced the earlier Settings-
+ *  configurable rolling window.
+ *
+ *  Was originally noon the day after — found to be a real bug, not just a
+ *  tight window: most people open the app in the evening (Submit My Day is
+ *  an evening ritual), so by the time anyone actually saw the "day N missed"
+ *  banner at a normal hour, the fix deadline from that same morning had
+ *  almost always already passed, making the fix panel silently never
+ *  appear. Extending to the full next day means it reliably works whenever
+ *  the app is opened at all on the day immediately following the miss. */
 export function retroFixDeadline(dateStr: string): Date {
-  const d = new Date(`${dateStr}T12:00:00`)
+  const d = new Date(`${dateStr}T23:59:59`)
   d.setDate(d.getDate() + 1)
   return d
 }
@@ -35,8 +44,8 @@ export function retroFixDeadline(dateStr: string): Date {
  * here), it still falls short of that day's target (nothing to fix once it
  * already succeeded),
  * it has real tasks recorded, it hasn't already been fixed, and it's still
- * before its fix deadline: a fixed, non-configurable 12:00 PM the day
- * after (was a Settings-configurable rolling window; simplified to one
+ * before its fix deadline: a fixed, non-configurable end of the day after
+ * (was a Settings-configurable rolling window; simplified to one
  * predictable rule per explicit request). Because the deadline for any day
  * older than yesterday has always already passed by the time "today"
  * exists, this can only ever return the single most recent auto-resolved
@@ -45,8 +54,8 @@ export function retroFixDeadline(dateStr: string): Date {
  * Always returns zero or one entry, guaranteed by construction rather than
  * just in practice: the only date that can ever pass the deadline check
  * relative to a `now` that falls on or after `today` is `today`'s own
- * previous day (any older date's deadline — that date plus one day at
- * noon — necessarily falls before `today`, so it's always already passed).
+ * previous day (any older date's deadline — that date plus one day, end of
+ * day — necessarily falls before `today`, so it's always already passed).
  * No sort/ordering is needed as a result.
  */
 export function getFixableDays(
