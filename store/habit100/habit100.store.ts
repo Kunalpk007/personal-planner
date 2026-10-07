@@ -1,7 +1,7 @@
 'use client'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Habit100Day, Habit100Meta, Habit100Value, Habit100Week, HabitDef } from './types'
+import type { Habit100Day, Habit100Goal, Habit100Meta, Habit100Value, Habit100Week, HabitDef } from './types'
 
 /** Consistency Tracker's own store — deliberately NOT merged into
  *  usePlannerStore and NOT using its sync pipeline (see lib/firebase/
@@ -15,20 +15,30 @@ import type { Habit100Day, Habit100Meta, Habit100Value, Habit100Week, HabitDef }
  *  fully-separate, newer feature has no need to replicate. */
 const STORAGE_KEY = 'habit100_v1'
 
+/** A completed/abandoned run, kept around purely so History can still show
+ *  it after a reset. Local-only (not synced to Firestore) — see
+ *  resetTracker's comment for why this is an accepted v1 limitation. */
+export interface ArchivedRun { meta: Habit100Meta; days: Habit100Day[] }
+
 export interface Habit100State {
   uid:    string | null
   loaded: boolean
   meta:   Habit100Meta | null
   days:   Record<string, Habit100Day>
   weeks:  Record<number, Habit100Week>
+  archivedRuns: ArchivedRun[]
 
   init:               (uid: string | null) => void
-  setupTracker:       (habits: HabitDef[], startDate: string, disciplinedThresholdPct: number, goals: string[], totalDays: number) => void
+  setupTracker:       (habits: HabitDef[], startDate: string, disciplinedThresholdPct: number, goals: Habit100Goal[], totalDays: number) => void
   setDayValue:        (date: string, habitId: string, value: Habit100Value | undefined) => void
   setDayExtra:        (date: string, field: 'mood' | 'energy' | 'stress' | 'anxiety' | 'sleepHours' | 'weight' | 'gratitude' | 'wrong', value: number | string | undefined) => void
   lockDay:            (date: string) => void
   saveWeeklyReview:   (weekIndex: number, worked: string, change: string) => void
   unlockMilestone:    (day: number) => void
+  /** Archives the current run (if any) into archivedRuns, then clears
+   *  meta/days/weeks — meta going null sends the user back through the
+   *  Setup Wizard, per explicit decision (reset redefines habits too, not
+   *  just the streak count). */
   resetTracker:       () => void
   /** Merges a Firestore snapshot into local state on load — last-write-wins
    *  per doc via `updatedAt`, mirroring the main app's cloud-vs-local merge
@@ -40,8 +50,8 @@ export interface Habit100State {
  *  session-derived, re-set by init() on every load. Named + exported so it
  *  can be unit-tested directly rather than relying on zustand persist's own
  *  internal write-scheduling to exercise it. */
-export function partializeHabit100(s: Habit100State): Pick<Habit100State, 'meta' | 'days' | 'weeks'> {
-  return { meta: s.meta, days: s.days, weeks: s.weeks }
+export function partializeHabit100(s: Habit100State): Pick<Habit100State, 'meta' | 'days' | 'weeks' | 'archivedRuns'> {
+  return { meta: s.meta, days: s.days, weeks: s.weeks, archivedRuns: s.archivedRuns }
 }
 
 function ensureDay(days: Record<string, Habit100Day>, date: string): Habit100Day {
@@ -56,6 +66,7 @@ export const useHabit100Store = create<Habit100State>()(
       meta: null,
       days: {},
       weeks: {},
+      archivedRuns: [],
 
       init(uid) {
         set({ uid, loaded: true })
@@ -115,7 +126,17 @@ export const useHabit100Store = create<Habit100State>()(
       },
 
       resetTracker() {
-        set({ meta: null, days: {}, weeks: {} })
+        // ponytail: archivedRuns is local-only (not part of mergeFromCloud/
+        // lib/habit100/sync.ts) — a reset done on one device won't carry its
+        // archived run to another. Upgrade path: sync archivedRuns the same
+        // diff-based way habit100days already syncs, if cross-device history
+        // after a reset turns out to matter.
+        set(s => ({
+          meta: null,
+          days: {},
+          weeks: {},
+          archivedRuns: s.meta ? [...s.archivedRuns, { meta: s.meta, days: Object.values(s.days) }] : s.archivedRuns,
+        }))
       },
 
       mergeFromCloud(cloudMeta, cloudDays, cloudWeeks) {

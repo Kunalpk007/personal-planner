@@ -51,6 +51,9 @@ export function HabitFieldInput({ habit, value, onChange, readOnly }: {
             onChange(mins === null ? undefined : mins)
           }}
         />
+        {!readOnly && timeStr && (
+          <button type="button" className="habit100-row-clear" aria-label={`Clear ${habit.label}`} onClick={() => onChange(undefined)}>✕</button>
+        )}
       </div>
     )
   }
