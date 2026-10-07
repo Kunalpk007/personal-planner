@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { usePlannerStore } from '@/store'
 import { useSocialStore } from '@/store/social/social.store'
+import { useHabit100Store } from '@/store/habit100/habit100.store'
 import { Accordion }       from '@/ui/Accordion'
 import { Modal }           from '@/ui/Modal'
 import { showToast }       from '@/ui/Toast'
@@ -93,6 +94,12 @@ export default function SettingsPage() {
   const [rrText,     setRrText]    = useState('')
   const [rrOpen,     setRrOpen]    = useState(false)
   const [rrPinOk,    setRrPinOk]   = useState(false)
+
+  const habit100Meta  = useHabit100Store(s => s.meta)
+  const resetHabit100  = useHabit100Store(s => s.resetTracker)
+  const [h100Text,    setH100Text]    = useState('')
+  const [h100Open,    setH100Open]    = useState(false)
+  const [h100PinOk,   setH100PinOk]   = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
 
@@ -532,6 +539,16 @@ export default function SettingsPage() {
           </div>
           <p className="text-xs" style={{ color: 'var(--vx-fg-4)' }}>Pause for off-grid trips. Reset rank if you want a fresh start.</p>
 
+          <SectionLabel>Consistency Tracker</SectionLabel>
+          <div className="flex gap-2.5 flex-wrap mb-2">
+            <button onClick={() => setH100Open(true)} className="vx-btn vx-btn-ghost text-xs" style={{ color: 'var(--red)' }} disabled={!habit100Meta}>
+              ↺ Reset Consistency Tracker
+            </button>
+          </div>
+          <p className="text-xs" style={{ color: 'var(--vx-fg-4)' }}>
+            {habit100Meta ? 'Wipes your current streak and habit list and sends you back through setup. Past days stay visible in Consistency Tracker → History.' : 'No active run — nothing to reset.'}
+          </p>
+
           <SectionLabel>Activity log</SectionLabel>
           <p className="text-xs" style={{ color: 'var(--vx-fg-4)' }}>
             Tasks deleted: <strong style={{ color: 'var(--vx-fg-1)' }}>{taskDeletions}</strong>
@@ -791,6 +808,33 @@ export default function SettingsPage() {
                 }}
                 className="vx-btn vx-btn-danger text-sm">
                 Reset Rank XP
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      <Modal open={h100Open} onClose={() => { setH100Open(false); setH100PinOk(false); setH100Text('') }} title="Reset Consistency Tracker" variant="vx">
+        <p className="text-sm text-[var(--text2)] mb-2">Clears your streak and habit list and sends you back through setup. Past days stay visible under Consistency Tracker → History. This cannot be undone.</p>
+        {journalPin && !h100PinOk ? (
+          <PinPad mode="verify" storedHash={journalPin} length={verifyPinLength} title="Enter App PIN to confirm" onSuccess={() => setH100PinOk(true)} onCancel={() => setH100Open(false)} />
+        ) : (
+          <>
+            {!journalPin && (
+              <>
+                <p className="text-sm text-[var(--text2)] mb-2">Type <strong>RESETCONSISTENCY</strong> to proceed.</p>
+                <input value={h100Text} onChange={e => setH100Text(e.target.value)} placeholder="Type RESETCONSISTENCY..."
+                  className="w-full vx-field mb-3" />
+              </>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setH100Open(false); setH100PinOk(false); setH100Text('') }} className="vx-btn vx-btn-ghost text-sm">Cancel</button>
+              <button onClick={() => {
+                  if (!journalPin && h100Text !== 'RESETCONSISTENCY') { showToast('Type RESETCONSISTENCY.'); return }
+                  resetHabit100(); setH100Text(''); setH100PinOk(false); setH100Open(false); showToast('Consistency Tracker reset.')
+                }}
+                className="vx-btn vx-btn-danger text-sm">
+                Reset Consistency Tracker
               </button>
             </div>
           </>

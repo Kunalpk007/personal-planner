@@ -7,13 +7,13 @@ function habit(overrides: Partial<HabitDef> = {}): HabitDef {
 }
 
 beforeEach(() => {
-  useHabit100Store.setState({ uid: null, loaded: false, meta: null, days: {}, weeks: {} })
+  useHabit100Store.setState({ uid: null, loaded: false, meta: null, days: {}, weeks: {}, archivedRuns: [] })
 })
 
 describe('partializeHabit100', () => {
-  it('persists only meta/days/weeks, not uid/loaded/actions', () => {
+  it('persists only meta/days/weeks/archivedRuns, not uid/loaded/actions', () => {
     const state = useHabit100Store.getState()
-    expect(partializeHabit100(state)).toEqual({ meta: null, days: {}, weeks: {} })
+    expect(partializeHabit100(state)).toEqual({ meta: null, days: {}, weeks: {}, archivedRuns: [] })
   })
 })
 
@@ -32,19 +32,20 @@ describe('init', () => {
 
 describe('setupTracker', () => {
   it('creates meta with the given habits/dates/threshold/goals/totalDays', () => {
-    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, ['Goal A'], 100)
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [{ text: 'Goal A', habitId: 'h1' }], 100)
     const meta = useHabit100Store.getState().meta!
     expect(meta.startDate).toBe('2026-01-01')
     expect(meta.totalDays).toBe(100)
     expect(meta.disciplinedThresholdPct).toBe(80)
     expect(meta.habits).toHaveLength(1)
-    expect(meta.goals).toEqual(['Goal A'])
+    expect(meta.goals).toEqual([{ text: 'Goal A', habitId: 'h1' }])
     expect(meta.badges).toEqual([])
   })
 
   it('caps goals at 3', () => {
-    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, ['A', 'B', 'C', 'D'], 100)
-    expect(useHabit100Store.getState().meta!.goals).toEqual(['A', 'B', 'C'])
+    const g = (text: string) => ({ text, habitId: 'h1' })
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [g('A'), g('B'), g('C'), g('D')], 100)
+    expect(useHabit100Store.getState().meta!.goals).toEqual([g('A'), g('B'), g('C')])
   })
 
   it('respects a custom totalDays (not hardcoded to 100)', () => {
@@ -157,6 +158,31 @@ describe('resetTracker', () => {
     expect(s.meta).toBeNull()
     expect(s.days).toEqual({})
     expect(s.weeks).toEqual({})
+  })
+
+  it('archives the prior run (meta + its days) so History can still show it', () => {
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [], 100)
+    useHabit100Store.getState().setDayValue('2026-01-01', 'h1', true)
+    const oldMeta = useHabit100Store.getState().meta!
+    useHabit100Store.getState().resetTracker()
+    const { archivedRuns } = useHabit100Store.getState()
+    expect(archivedRuns).toHaveLength(1)
+    expect(archivedRuns[0].meta).toEqual(oldMeta)
+    expect(archivedRuns[0].days).toEqual([{ date: '2026-01-01', values: { h1: true }, locked: false, updatedAt: expect.any(String) }])
+  })
+
+  it('is a no-op on archivedRuns when there was no tracker set up yet', () => {
+    useHabit100Store.getState().resetTracker()
+    expect(useHabit100Store.getState().archivedRuns).toEqual([])
+  })
+
+  it('accumulates multiple resets into separate archived runs', () => {
+    useHabit100Store.getState().setupTracker([habit()], '2026-01-01', 80, [], 100)
+    useHabit100Store.getState().resetTracker()
+    useHabit100Store.getState().setupTracker([habit()], '2026-02-01', 80, [], 100)
+    useHabit100Store.getState().resetTracker()
+    expect(useHabit100Store.getState().archivedRuns).toHaveLength(2)
+    expect(useHabit100Store.getState().archivedRuns.map(r => r.meta.startDate)).toEqual(['2026-01-01', '2026-02-01'])
   })
 })
 

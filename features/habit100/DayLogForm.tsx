@@ -144,7 +144,7 @@ function RatingRow({ label, value, onChange, readOnly }: {
     <div className="flex items-center gap-2">
       <span className="text-[11.5px]" style={{ width: 56, color: 'var(--vx-fg-3)' }}>{label}</span>
       <div className="flex gap-1" style={{ flex: 1 }}>
-        {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+        {Array.from({ length: 5 }, (_, i) => i + 1).map(n => (
           <button
             key={n}
             type="button"

@@ -16,8 +16,18 @@ async function freezeRandomAndSuppressPopups(page: Page, date = TODAY) {
  *  mirrors zustand persist's on-disk shape ({state, version}). Call before
  *  page.goto(); pairs with setupAuthenticatedPage for the main store/clock. */
 async function seedHabit100(page: Page, state: Record<string, unknown>) {
+  // addInitScript reruns on every navigation within the test (not just the
+  // first), so a test that navigates more than once after seeding (e.g.
+  // triggering an in-app reset, then goto()'ing to a second page) would
+  // otherwise have this script silently re-overwrite localStorage with the
+  // original seed on that second navigation, undoing whatever the app
+  // itself wrote in between. Only write if nothing's there yet.
   await page.addInitScript((s) => {
-    localStorage.setItem('habit100_v1', JSON.stringify({ state: s, version: 0 }))
+    try {
+      if (!localStorage.getItem('habit100_v1')) {
+        localStorage.setItem('habit100_v1', JSON.stringify({ state: s, version: 0 }))
+      }
+    } catch {}
   }, state)
 }
 
@@ -28,7 +38,7 @@ function habit(overrides: Record<string, unknown> = {}) {
 function meta(overrides: Record<string, unknown> = {}) {
   return {
     startDate: '2026-06-10', totalDays: 100, disciplinedThresholdPct: 80,
-    habits: [habit()], goals: ['Reach 74kg'], badges: [],
+    habits: [habit()], goals: [{ text: 'Reach 74kg', habitId: 'h1' }], badges: [],
     createdAt: '2026-06-10T00:00:00.000Z', updatedAt: '2026-06-10T00:00:00.000Z',
     ...overrides,
   }
@@ -212,5 +222,61 @@ test.describe('Consistency Tracker (habit100)', () => {
     await page.getByRole('button', { name: 'Add 250ml' }).click()
     const state = await page.evaluate(() => JSON.parse(localStorage.getItem('kunals_planner_v2:e2e-test-user-00000000-0000-0000-0000-000000000000')!).state)
     expect(state.waterMl[TODAY]).toBe(250)
+  })
+
+  test('Home: a time-type habit can be cleared back to "not logged" via the clear button', async ({ page, context }) => {
+    await freezeRandomAndSuppressPopups(page)
+    await setupAuthenticatedPage(page, context, { morningQuoteShown: { [TODAY]: true }, morningTop3Shown: { [TODAY]: true } })
+    await seedHabit100(page, { meta: meta({ startDate: TODAY, habits: [habit({ id: 'wake', type: 'time', target: 9 * 60, comparison: 'lte' })], goals: [] }), days: {}, weeks: {} })
+    await page.goto('/habit100')
+
+    const row = page.locator('.habit100-row').filter({ hasText: 'Drink water' })
+    await row.locator('input[type="time"]').fill('08:00')
+    await expect(row.locator('.habit100-row-clear')).toBeVisible()
+    await row.locator('.habit100-row-clear').click()
+
+    const state = await page.evaluate(() => JSON.parse(localStorage.getItem('habit100_v1')!).state)
+    expect(state.days[TODAY]?.values?.wake).toBeUndefined()
+    await expect(row.locator('.habit100-row-clear')).not.toBeVisible()
+  })
+
+  test('Setup wizard: a goal linked to a habit shows that habit\'s consistency % on Progress', async ({ page, context }) => {
+    await freezeRandomAndSuppressPopups(page)
+    await setupAuthenticatedPage(page, context, { morningQuoteShown: { [TODAY]: true }, morningTop3Shown: { [TODAY]: true } })
+    await seedHabit100(page, {
+      meta: meta({ startDate: '2026-06-11', habits: [habit({ id: 'water' })], goals: [{ text: 'Stay hydrated', habitId: 'water' }] }),
+      days: { '2026-06-11': { date: '2026-06-11', values: { water: true }, locked: true, updatedAt: 't' } },
+      weeks: {},
+    })
+    await page.goto('/habit100/progress')
+
+    await expect(page.getByText('Stay hydrated')).toBeVisible()
+    await expect(page.getByText('via Drink water')).toBeVisible()
+    await expect(page.getByText('100%').first()).toBeVisible()
+  })
+
+  test('Settings: resetting the Consistency Tracker archives the run and still shows it in History', async ({ page, context }) => {
+    await freezeRandomAndSuppressPopups(page)
+    await setupAuthenticatedPage(page, context, { morningQuoteShown: { [TODAY]: true }, morningTop3Shown: { [TODAY]: true } })
+    await seedHabit100(page, {
+      meta: meta({ startDate: '2026-06-10', habits: [habit({ id: 'water' })], goals: [] }),
+      days: { '2026-06-10': { date: '2026-06-10', values: { water: true }, locked: true, updatedAt: 't' } },
+      weeks: {},
+    })
+    await page.goto('/settings')
+    await page.getByRole('button', { name: 'Streak & Badges' }).click()
+
+    await page.getByRole('button', { name: '↺ Reset Consistency Tracker' }).click()
+    await page.getByPlaceholder('Type RESETCONSISTENCY...').fill('RESETCONSISTENCY')
+    await page.getByRole('button', { name: 'Reset Consistency Tracker', exact: true }).click()
+
+    const state = await page.evaluate(() => JSON.parse(localStorage.getItem('habit100_v1')!).state)
+    expect(state.meta).toBeNull()
+    expect(state.archivedRuns).toHaveLength(1)
+    expect(state.archivedRuns[0].days[0].date).toBe('2026-06-10')
+
+    await page.goto('/habit100/history')
+    await expect(page.getByText(/↺ Reset — previous run/)).toBeVisible()
+    await expect(page.getByText('Wed, 10 Jun', { exact: true })).toBeVisible()
   })
 })

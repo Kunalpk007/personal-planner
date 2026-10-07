@@ -4,7 +4,7 @@ import { useHabit100Store } from '@/store/habit100/habit100.store'
 import { defaultHabits, DEFAULT_DISCIPLINED_THRESHOLD_PCT, DEFAULT_TOTAL_DAYS } from '@/lib/habit100/defaults'
 import { uid } from '@/lib/engine/cutoff'
 import { minutesToTimeStr, timeStrToMinutes } from '@/lib/habit100/scoring'
-import type { HabitDef, HabitType, Comparison } from '@/store/habit100/types'
+import type { HabitDef, HabitType, Comparison, Habit100Goal } from '@/store/habit100/types'
 
 // 'book' deliberately excluded — it's a fixed seed-only entry (title/topic/
 // pages combined), not something offered when adding a new custom habit.
@@ -24,12 +24,15 @@ export function SetupWizard() {
   const [totalDays, setTotalDays] = useState(DEFAULT_TOTAL_DAYS)
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [threshold, setThreshold] = useState(DEFAULT_DISCIPLINED_THRESHOLD_PCT)
-  const [goals, setGoals] = useState<[string, string, string]>(['', '', ''])
+  const [goals, setGoals] = useState<Habit100Goal[]>([{ text: '', habitId: '' }, { text: '', habitId: '' }, { text: '', habitId: '' }])
   const [newLabel, setNewLabel] = useState('')
   const [newType, setNewType] = useState<Exclude<HabitType, 'book'>>('checkbox')
 
   function removeHabit(id: string) {
     setHabits(hs => hs.filter(h => h.id !== id))
+    // a goal pointing at a removed habit would otherwise save a dangling
+    // habitId with no way to show a progress bar for it
+    setGoals(g => g.map(x => x.habitId === id ? { ...x, habitId: '' } : x))
   }
   function setTarget(id: string, target: number | undefined) {
     setHabits(hs => hs.map(h => h.id === id ? { ...h, target } : h))
@@ -48,7 +51,10 @@ export function SetupWizard() {
   }
   function start() {
     if (habits.length === 0) return
-    setupTracker(habits, startDate, threshold, goals.map(g => g.trim()).filter(Boolean), totalDays)
+    const cleanGoals = goals
+      .map(g => ({ text: g.text.trim(), habitId: g.habitId }))
+      .filter(g => g.text && g.habitId)
+    setupTracker(habits, startDate, threshold, cleanGoals, totalDays)
   }
 
   return (
@@ -143,15 +149,27 @@ export function SetupWizard() {
 
       <div>
         <div className="vx-eyebrow mb-2">Pinned goals (optional, up to 3)</div>
+        <p className="text-[11px] mb-2" style={{ color: 'var(--vx-fg-4)' }}>Each goal is tied to one habit above — its progress bar is that habit's own consistency %.</p>
         <div className="flex flex-col gap-2">
           {[0, 1, 2].map(i => (
-            <input
-              key={i}
-              className="vx-field"
-              placeholder={`Goal ${i + 1}`}
-              value={goals[i]}
-              onChange={e => setGoals(g => { const next = [...g] as [string, string, string]; next[i] = e.target.value; return next })}
-            />
+            <div key={i} className="flex gap-2">
+              <input
+                className="vx-field"
+                style={{ flex: 1 }}
+                placeholder={`Goal ${i + 1}`}
+                value={goals[i].text}
+                onChange={e => setGoals(g => { const next = [...g]; next[i] = { ...next[i], text: e.target.value }; return next })}
+              />
+              <select
+                className="vx-field"
+                style={{ width: 130 }}
+                value={goals[i].habitId}
+                onChange={e => setGoals(g => { const next = [...g]; next[i] = { ...next[i], habitId: e.target.value }; return next })}
+              >
+                <option value="">Which habit?</option>
+                {habits.map(h => <option key={h.id} value={h.id}>{h.label}</option>)}
+              </select>
+            </div>
           ))}
         </div>
       </div>

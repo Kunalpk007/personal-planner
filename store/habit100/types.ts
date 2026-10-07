@@ -25,12 +25,20 @@ export interface HabitDef {
   category?:   string
 }
 
+/** A pinned goal, tied to one habit in the list — the % shown next to it is
+ *  that habit's own all-time consistency % (the same number as the Habit
+ *  breakdown section), not a separately tracked target. */
+export interface Habit100Goal {
+  text:    string
+  habitId: string
+}
+
 export interface Habit100Meta {
   startDate:                string   // yyyy-mm-dd
   totalDays:                number   // user-configurable at setup, default 100
   disciplinedThresholdPct:  number   // default 80
   habits:                   HabitDef[]
-  goals:                    string[] // up to 3 pinned goals
+  goals:                    Habit100Goal[] // up to 3 pinned goals, each linked to a habit
   /** Milestone day numbers already shown (derived from MILESTONE_PCTS ×
    *  totalDays at the time each was crossed) — prevents the banner from
    *  re-firing on every Home load once unlocked. */
@@ -50,10 +58,10 @@ export type Habit100Value = boolean | number | string | BookValue
 export interface Habit100Day {
   date:        string
   values:      Record<string, Habit100Value>
-  mood?:       number  // 1-10
-  energy?:     number  // 1-10
-  stress?:     number  // 1-10
-  anxiety?:    number  // 1-10
+  mood?:       number  // 1-5
+  energy?:     number  // 1-5
+  stress?:     number  // 1-5
+  anxiety?:    number  // 1-5
   sleepHours?: number
   weight?:     number
   gratitude?:  string
